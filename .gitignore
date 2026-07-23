@@ -71,6 +71,9 @@ data/
 
 # Backups
 backups/
+
+# Environment (secrets)
+.env
 coverage*
 cp_bt
 cp_risk
