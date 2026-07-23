@@ -1,0 +1,212 @@
+package backtest
+
+import (
+	"math"
+	"strconv"
+)
+
+type MetricFunc func(equityCurve []EquityPoint, trades []Trade) float64
+
+type MetricDef struct {
+	Name        string
+	Compute     MetricFunc
+	Formatter   func(float64) string
+	Group       string
+	Description string
+}
+
+var registeredMetrics = make(map[string]MetricDef)
+
+func init() {
+	RegisterMetric(MetricDef{
+		Name: "sharpe_ratio", Group: "Risk", Description: "Annualized Sharpe ratio",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeSharpe(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
+	})
+	RegisterMetric(MetricDef{
+		Name: "sortino_ratio", Group: "Risk", Description: "Annualized Sortino ratio",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeSortino(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
+	})
+	RegisterMetric(MetricDef{
+		Name: "max_drawdown_pct", Group: "Risk", Description: "Maximum peak-to-trough drawdown",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdown(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
+	})
+	RegisterMetric(MetricDef{
+		Name: "win_rate_pct", Group: "Performance", Description: "Percentage of winning trades",
+		Compute: func(_ []EquityPoint, trades []Trade) float64 { return computeWinRate(trades) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
+	})
+	RegisterMetric(MetricDef{
+		Name: "profit_factor", Group: "Performance", Description: "Gross profit / gross loss ratio",
+		Compute: func(_ []EquityPoint, trades []Trade) float64 { return computeProfitFactor(trades) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
+	})
+	RegisterMetric(MetricDef{
+		Name: "total_return_pct", Group: "Performance", Description: "Total return percentage",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeTotalReturn(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
+	})
+	RegisterMetric(MetricDef{
+		Name: "num_trades", Group: "Performance", Description: "Total number of trades",
+		Compute: func(_ []EquityPoint, trades []Trade) float64 { return float64(len(trades)) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },
+	})
+	RegisterMetric(MetricDef{
+		Name: "trading_volume", Group: "Performance", Description: "Total trading volume",
+		Compute: func(_ []EquityPoint, trades []Trade) float64 {
+			var vol float64
+			for _, t := range trades { vol += t.Quantity }
+			return vol
+		},
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },
+	})
+}
+
+func RegisterMetric(def MetricDef) {
+	registeredMetrics[def.Name] = def
+}
+
+func AllMetrics() map[string]MetricDef {
+	return registeredMetrics
+}
+
+func ComputeAllMetrics(equityCurve []EquityPoint, trades []Trade) map[string]float64 {
+	result := make(map[string]float64)
+	for name, def := range registeredMetrics {
+		result[name] = def.Compute(equityCurve, trades)
+	}
+	return result
+}
+
+func computeSharpe(equity []EquityPoint) float64 {
+	returns := equityToReturns(equity)
+	if len(returns) < 2 {
+		return 0
+	}
+	mean := mean(returns)
+	std := stdDev(returns)
+	if std == 0 {
+		return 0
+	}
+	return mean / std * math.Sqrt(252)
+}
+
+func computeSortino(equity []EquityPoint) float64 {
+	returns := equityToReturns(equity)
+	if len(returns) < 2 {
+		return 0
+	}
+	mean := mean(returns)
+	var sumSq float64
+	var count int
+	for _, r := range returns {
+		if r < 0 {
+			sumSq += r * r
+			count++
+		}
+	}
+	if count == 0 || sumSq == 0 {
+		return 0
+	}
+	downside := math.Sqrt(sumSq / float64(count))
+	return mean / downside * math.Sqrt(252)
+}
+
+func computeMaxDrawdown(equity []EquityPoint) float64 {
+	if len(equity) == 0 {
+		return 0
+	}
+	peak := equity[0].Value
+	maxDD := 0.0
+	for _, pt := range equity {
+		if pt.Value > peak {
+			peak = pt.Value
+		}
+		dd := (peak - pt.Value) / peak * 100.0
+		if dd > maxDD {
+			maxDD = dd
+		}
+	}
+	return maxDD
+}
+
+func computeWinRate(trades []Trade) float64 {
+	if len(trades) == 0 {
+		return 0
+	}
+	wins := 0
+	for _, t := range trades {
+		if t.PnL > 0 {
+			wins++
+		}
+	}
+	return float64(wins) / float64(len(trades)) * 100.0
+}
+
+func computeProfitFactor(trades []Trade) float64 {
+	var grossProfit, grossLoss float64
+	for _, t := range trades {
+		if t.PnL > 0 {
+			grossProfit += t.PnL
+		} else {
+			grossLoss += -t.PnL
+		}
+	}
+	if grossLoss == 0 {
+		if grossProfit > 0 {
+			return 999
+		}
+		return 0
+	}
+	return grossProfit / grossLoss
+}
+
+func computeTotalReturn(equity []EquityPoint) float64 {
+	if len(equity) < 2 {
+		return 0
+	}
+	initial := equity[0].Value
+	final := equity[len(equity)-1].Value
+	if initial == 0 {
+		return 0
+	}
+	return (final - initial) / initial * 100.0
+}
+
+func equityToReturns(equity []EquityPoint) []float64 {
+	if len(equity) < 2 {
+		return nil
+	}
+	returns := make([]float64, len(equity)-1)
+	for i := 1; i < len(equity); i++ {
+		if equity[i-1].Value > 0 {
+			returns[i-1] = (equity[i].Value - equity[i-1].Value) / equity[i-1].Value
+		}
+	}
+	return returns
+}
+
+func mean(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	var sum float64
+	for _, v := range values {
+		sum += v
+	}
+	return sum / float64(len(values))
+}
+
+func stdDev(values []float64) float64 {
+	if len(values) < 2 {
+		return 0
+	}
+	m := mean(values)
+	var sumSq float64
+	for _, v := range values {
+		sumSq += (v - m) * (v - m)
+	}
+	return math.Sqrt(sumSq / float64(len(values)-1))
+}

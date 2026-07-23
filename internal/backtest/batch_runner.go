@@ -1,0 +1,271 @@
+package backtest
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/lee-econ/orca-core/internal/risk"
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
+)
+
+type batchTuple struct {
+	Strategy  string
+	Symbol    string
+	Timeframe string
+}
+
+type BatchOptimizeConfig struct {
+	StrategyID      string
+	Symbols         []string
+	StartDate       time.Time
+	EndDate         time.Time
+	InitialCapital  float64
+	Params          []map[string]float64
+	MonoChunkLen    int
+	EnginePool      int
+	GateProfile     string
+	PropFirmEnabled bool
+	FixedSeed       int64
+	Timeframe       string
+}
+
+func cartesianProduct(strategies, symbols, timeframes []string) []batchTuple {
+	if len(timeframes) == 0 {
+		timeframes = []string{"1d"}
+	}
+	if len(strategies) == 0 {
+		strategies = []string{"intraday_mr"}
+	}
+	combos := make([]batchTuple, 0, len(strategies)*len(symbols)*len(timeframes))
+	for _, s := range strategies {
+		for _, sym := range symbols {
+			for _, tf := range timeframes {
+				combos = append(combos, batchTuple{Strategy: s, Symbol: sym, Timeframe: tf})
+			}
+		}
+	}
+	return combos
+}
+
+func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConfig) ([]ComboResult, error) {
+	if len(config.Params) == 0 {
+		return nil, nil
+	}
+	chunkLen := config.MonoChunkLen
+	if chunkLen <= 0 {
+		chunkLen = 1
+	}
+	enginePool := config.EnginePool
+	if enginePool <= 0 {
+		enginePool = runtime.NumCPU()
+		if enginePool > 8 {
+			enginePool = 8
+		}
+	}
+
+	results := make([]ComboResult, 0, len(config.Params))
+
+	for chunkStart := 0; chunkStart < len(config.Params); chunkStart += chunkLen {
+		chunkEnd := chunkStart + chunkLen
+		if chunkEnd > len(config.Params) {
+			chunkEnd = len(config.Params)
+		}
+		chunk := config.Params[chunkStart:chunkEnd]
+
+		chunkResults := make([]ComboResult, len(chunk))
+		var mu sync.Mutex
+		sem := semaphore.NewWeighted(int64(enginePool))
+		g, ctx := errgroup.WithContext(ctx)
+
+		for i, params := range chunk {
+			i, params := i, params
+			for _, sym := range config.Symbols {
+				sym := sym
+				if err := sem.Acquire(ctx, 1); err != nil {
+					break
+				}
+				g.Go(func() error {
+					defer sem.Release(1)
+					btConfig := BacktestConfig{
+						StrategyID:     config.StrategyID,
+						Symbols:        []string{sym},
+						StartDate:      config.StartDate,
+						EndDate:        config.EndDate,
+						InitialCapital: config.InitialCapital,
+						Timeframe:      config.Timeframe,
+						StrategyParams: params,
+						PropFirmEnabled: config.PropFirmEnabled,
+						GateProfile:    config.GateProfile,
+						FixedSeed:      config.FixedSeed,
+					}
+					engine := NewEngineWithFixedSeed(db, config.FixedSeed)
+					result, err := engine.Run(ctx, btConfig)
+					mu.Lock()
+					defer mu.Unlock()
+					if err != nil {
+						chunkResults[i] = ComboResult{
+							StrategyID: config.StrategyID,
+							Symbol:     sym,
+							Timeframe:  config.Timeframe,
+							Error:      err.Error(),
+						}
+						return nil
+					}
+					chunkResults[i] = ComboResult{
+						Symbol:       sym,
+						StrategyID:   config.StrategyID,
+						Timeframe:    config.Timeframe,
+						SharpeRatio:  result.SharpeRatio,
+						SortinoRatio: result.SortinoRatio,
+						MaxDrawdown:  result.MaxDrawdown,
+						TotalReturn:  result.TotalReturnPct,
+						WinRate:      result.WinRate,
+						ProfitFactor: result.ProfitFactor,
+						AvgTrade:     result.AvgTrade,
+						AvgWin:       result.AvgWin,
+						AvgLoss:      result.AvgLoss,
+						NumTrades:    result.NumTrades,
+						Warnings:     result.Warnings,
+						AdverseSelectRate: result.AdverseSelectionRate,
+					}
+					return nil
+				})
+			}
+		}
+		_ = g.Wait()
+		results = append(results, chunkResults...)
+	}
+
+	return results, nil
+}
+
+func RunMatrix(ctx context.Context, db Database, config MatrixBacktestConfig) (*MatrixResult, error) {
+	return RunMatrixConcurrent(ctx, db, config)
+}
+
+func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktestConfig) (*MatrixResult, error) {
+	combos := cartesianProduct(config.StrategyIDs, config.Symbols, config.Timeframes)
+
+	if len(combos) == 0 {
+		return &MatrixResult{RunID: uuid.New().String(), Combos: 0}, nil
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	maxWorkers := runtime.NumCPU()
+	if maxWorkers > 8 {
+		maxWorkers = 8
+	}
+	if maxWorkers < 2 {
+		maxWorkers = 2
+	}
+
+	sem := semaphore.NewWeighted(int64(maxWorkers))
+	g, ctx := errgroup.WithContext(ctx)
+
+	results := make([]ComboResult, len(combos))
+	var mu sync.Mutex
+
+	for i, combo := range combos {
+		i, combo := i, combo
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
+		}
+		if !risk.DefaultHeapAdmission.Allow() {
+			risk.DefaultHeapAdmission.ForceGC()
+			time.Sleep(100 * time.Millisecond)
+		}
+		g.Go(func() error {
+			defer sem.Release(1)
+			btConfig := BacktestConfig{
+				StrategyID:     combo.Strategy,
+				Symbols:        []string{combo.Symbol},
+				StartDate:      config.StartDate,
+				EndDate:        config.EndDate,
+				InitialCapital: config.InitialCapital,
+				Timeframe:      combo.Timeframe,
+				DataSource:     config.DataSource,
+			}
+			engine := NewEngine(db)
+			result, err := engine.Run(ctx, btConfig)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				results[i] = ComboResult{
+					StrategyID: combo.Strategy,
+					Symbol:     combo.Symbol,
+					Timeframe:  combo.Timeframe,
+					Error:      err.Error(),
+				}
+				return nil
+			}
+			results[i] = ComboResult{
+				Symbol:       combo.Symbol,
+				StrategyID:   combo.Strategy,
+				Timeframe:    combo.Timeframe,
+				SharpeRatio:  result.SharpeRatio,
+				SortinoRatio: result.SortinoRatio,
+				MaxDrawdown:  result.MaxDrawdown,
+				TotalReturn:  result.TotalReturnPct,
+				WinRate:      result.WinRate,
+				ProfitFactor: result.ProfitFactor,
+				AvgTrade:     result.AvgTrade,
+				AvgWin:       result.AvgWin,
+				AvgLoss:      result.AvgLoss,
+				NumTrades:    result.NumTrades,
+				Warnings:     result.Warnings,
+				GatePassed:   gateBool(result.MetricGateStatus),
+				AdverseSelectRate: result.AdverseSelectionRate,
+			}
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	runID := fmt.Sprintf("matrix-%s", time.Now().Format("20060102150405"))
+	return &MatrixResult{
+		RunID:   runID,
+		Combos:  len(combos),
+		Results: results,
+		Config:  config,
+	}, nil
+}
+
+type CachedContext struct {
+	RegimeLogs        []RegimeLog
+	UniverseSnapshots map[time.Time][]string
+	CandleCache       map[string][]Candle
+}
+
+func LoadCachedContext(ctx context.Context, db Database, config MatrixBacktestConfig) (*CachedContext, error) {
+	cc := &CachedContext{
+		CandleCache: make(map[string][]Candle),
+	}
+
+	if logs, err := db.LoadRegimeLogs(ctx, config.StartDate, config.EndDate); err == nil {
+		cc.RegimeLogs = logs
+	}
+
+	if snaps, err := db.LoadUniverseSnapshots(ctx, config.StartDate, config.EndDate); err == nil && len(snaps) > 0 {
+		cc.UniverseSnapshots = make(map[time.Time][]string)
+		for _, snap := range snaps {
+			cc.UniverseSnapshots[snap.Date.Truncate(24*time.Hour)] = snap.Symbols
+		}
+	}
+
+	return cc, nil
+}
+
+func gateBool(v *MultiMetricVerdict) *bool {
+	if v == nil {
+		return nil
+	}
+	b := v.Passed
+	return &b
+}
