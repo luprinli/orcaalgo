@@ -1,0 +1,30 @@
+{
+  "$id": "https://qst.dev/schemas/qst_execution_grant_0_4.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "approval_record_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "expires_at": {"type": "string"},
+    "implementation_ref_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "issued_for_run_id": {"type": "string"},
+    "profile": {"enum": ["research", "paper", "pretrade", "production_guarded"], "type": "string"},
+    "runtime_environment_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "schema_version": {"const": "qst-execution-grant/0.4"},
+    "token_pack_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "token_ref": {"type": "object"},
+    "token_spec_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "token_ref",
+    "token_spec_hash",
+    "token_pack_hash",
+    "implementation_ref_hash",
+    "runtime_environment_hash",
+    "approval_record_hash",
+    "profile",
+    "issued_for_run_id",
+    "expires_at"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,17 @@
+id: "e8"
+name: "E8 Funding"
+max_daily_loss_pct: 4.0
+max_drawdown_pct: 8.0
+drawdown_type: "trailing_hwm"
+max_position_pct: 2.0
+max_open_positions: 5
+max_trades_per_day: 10
+consistency_enabled: false
+consistency_threshold_pct: 0.0
+consistency_penalty: 1.0
+profit_target_pct_phase1: 8.0
+profit_target_pct_phase2: 5.0
+min_trading_days: 3
+weekend_holding_allowed: true
+news_trading_allowed: true
+regime_multipliers: [1.0, 0.85, 0.75, 0.5]

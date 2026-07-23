@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quant-strategy-tokenizer"
+version = "0.1.0"
+description = "Decompose quant trading strategies into reusable computation tokens"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{name = "Austin"}]
+dependencies = [
+    "pydantic>=2.5",
+    "pyyaml>=6.0",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "packaging>=23",
+    "typer>=0.9",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=14"]
+pandas = ["pandas>=2"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "hypothesis>=6.90",
+    "jsonschema>=4",
+    "pyarrow>=14",
+    "mypy>=1.7",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+qst = "qst.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["qst"]
+
+[tool.hatch.build]
+include = [
+    "qst/**/*.py",
+    "qst/**/*.json",
+    "qst/**/*.yaml",
+    "qst/py.typed",
+]
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["qst", "tests"]
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "A", "S", "PYI", "RUF", "UP"]
+ignore = ["A002", "E501", "S101", "S105", "S603", "S607"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "golden: token behavior_contract tests",
+    "e2e: end-to-end pipeline tests",
+]
+
+[tool.coverage.run]
+source = ["qst"]
+omit = [
+    "qst/cli.py",
+]

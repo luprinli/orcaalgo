@@ -1,0 +1,7 @@
+golden_task:
+  id: "07_topk_momentum_panel"
+  name: "Top-k momentum panel skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "supported"

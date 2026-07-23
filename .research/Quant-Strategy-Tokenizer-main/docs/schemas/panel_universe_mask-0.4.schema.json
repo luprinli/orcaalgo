@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_panel_universe_mask_0_4.schema.json",
+  "title": "QST Panel UniverseMask 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "representation",
+    "universe_ref",
+    "members",
+    "included",
+    "false_semantics"
+  ],
+  "properties": {
+    "schema_version": { "const": "qst-panel-universe-mask/0.4" },
+    "representation": { "const": "sparse_logical" },
+    "universe_ref": { "type": "string", "minLength": 1 },
+    "members": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "included": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "false_semantics": { "const": "out_of_universe_not_missing" }
+  }
+}

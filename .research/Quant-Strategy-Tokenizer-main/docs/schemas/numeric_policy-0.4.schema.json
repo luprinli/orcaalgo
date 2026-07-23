@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_numeric_policy_0_4.schema.json",
+  "title": "QST Numeric Policy 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "representation",
+    "deterministic_level",
+    "reduction_order",
+    "nan_policy",
+    "inf_policy"
+  ],
+  "properties": {
+    "schema_version": {"const": "qst-numeric-policy/0.4"},
+    "representation": {
+      "enum": ["float64", "float32", "decimal", "int64", "bool", "object", "unknown"]
+    },
+    "deterministic_level": {
+      "enum": ["semantic", "bit_exact", "engine_specific", "platform_dependent", "unknown"]
+    },
+    "reduction_order": {
+      "enum": ["fixed_input_order", "commutative", "engine_default", "parallel_nondeterministic", "unknown"]
+    },
+    "nan_policy": {"enum": ["propagate", "reject", "ignore", "coerce_null", "unknown"]},
+    "inf_policy": {"enum": ["reject", "propagate", "coerce_null", "unknown"]}
+  }
+}

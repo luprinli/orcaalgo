@@ -1,0 +1,7 @@
+golden_task:
+  id: "04_breakout_channel"
+  name: "Breakout channel skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "supported"

@@ -1,0 +1,65 @@
+{
+  "artifact_version": "qst-v04-custom-token-validation-trace/0.1",
+  "audit_chain_hash": "sha256:fa56621388b85e5b84ff45330302efd3faadf5ce95bcd4c037a4ef9342abaf0a",
+  "audit_records": [],
+  "authorization": {
+    "approval_record_hash": null,
+    "diagnostics": [
+      {
+        "code": "QST_V2_CUSTOM_TOKEN_PRETRADE_REQUIRES_APPROVAL",
+        "message": "Custom token execution is not authorized for profile pretrade.",
+        "node_id": null,
+        "phase": "profile",
+        "port": null,
+        "profile": null,
+        "remediation": null,
+        "severity": "error"
+      }
+    ],
+    "ok": false,
+    "profile": "pretrade",
+    "status": "requires_approval"
+  },
+  "case": "custom_token_kalman",
+  "expected_artifact_hash": "sha256:004ff5a1f00ee481a012e5d6a4c50266fe8695ab01f9ef009caf3ecba6cd8fe4",
+  "integrity": {
+    "audit_chain_hash": "sha256:fa56621388b85e5b84ff45330302efd3faadf5ce95bcd4c037a4ef9342abaf0a",
+    "diagnostics": [
+      {
+        "code": "QST_V2_RUNTIME_ENVIRONMENT_RECORDED_ONLY",
+        "message": "Runtime environment is recorded but not replayable.",
+        "node_id": null,
+        "phase": "package",
+        "port": null,
+        "profile": null,
+        "remediation": null,
+        "severity": "warning"
+      },
+      {
+        "code": "QST_V2_CUSTOM_TOKEN_RISK_VISIBLE",
+        "message": "Custom token risk=medium.",
+        "node_id": null,
+        "phase": "profile",
+        "port": null,
+        "profile": null,
+        "remediation": null,
+        "severity": "warning"
+      }
+    ],
+    "implementation_ref_hash": "sha256:1896b992d2824541f5ebdbd245631cf144c825515c1683d1b13c49090eddb762",
+    "ok": true,
+    "risk_level": "medium",
+    "runtime_environment_hash": "sha256:947077c621cec3e34124fb6175276f3fe7f574619e9e803267121785b1615dcd",
+    "token_pack_hash": "sha256:5089946f0ecb1bbdd84c5be462c4af0a4fcc9fefd85fb364b8a326a87852d464",
+    "token_ref": {
+      "behavior_version": 1,
+      "name": "kalman_ema",
+      "namespace": "my_pack",
+      "version": 1
+    },
+    "token_spec_hash": "sha256:51bb569c4050f0789213f1e4af6e05f6932b2ece94ae2d3bbeb4c7dd8754c485"
+  },
+  "output": null,
+  "profile": "pretrade",
+  "strategy": "custom_token_kalman"
+}

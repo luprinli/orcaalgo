@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/portfolio_snapshot.schema.json",
+  "title": "QST PortfolioSnapshot Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_version", "timestamp", "base_currency", "cash", "equity", "positions"],
+  "properties": {
+    "artifact_version": {"const": "qst-portfolio-snapshot/1"},
+    "artifact_id": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "provenance": {"$ref": "artifact_base.schema.json#/$defs/ProvenanceChain"},
+    "metadata": {"type": "object"},
+    "raw_payload_ref": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/POSIXRelativePath"}, {"type": "null"}]},
+    "raw_payload_hash": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "timestamp": {"type": "string"},
+    "base_currency": {"type": "string"},
+    "cash": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "equity": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["symbol", "quantity", "market_value"],
+        "properties": {
+          "symbol": {"type": "string"},
+          "quantity": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+          "market_value": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+          "average_price": {
+            "anyOf": [{"$ref": "artifact_base.schema.json#/$defs/DecimalString"}, {"type": "null"}]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "artifact_version": "qst-v04-state-fixture/0.1",
+  "case": "state_observe_period",
+  "events": [],
+  "params": {
+    "min_observations": 3
+  },
+  "values": [1, 1, 1, 1]
+}

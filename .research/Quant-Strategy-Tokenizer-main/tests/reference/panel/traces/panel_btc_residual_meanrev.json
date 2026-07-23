@@ -1,0 +1,235 @@
+{
+  "artifact_version": "qst-v04-panel-validation-trace/0.1",
+  "case": "panel_btc_residual_meanrev",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:c13ad9469f58bfd14769c77cfbdbb0ca58cc155945374267ff65fc90044c28b7",
+  "operator_traces": {
+    "panel.bottom_k": {
+      "actual_selected": {
+        "t1": 1,
+        "t2": 1,
+        "t3": 1
+      },
+      "eligible_count": {
+        "t1": 3,
+        "t2": 3,
+        "t3": 3
+      },
+      "operator_id": "panel.bottom_k",
+      "requested_k": 1,
+      "selection_size_policy": "allow_smaller",
+      "tie_policy": "stable_symbol_order"
+    },
+    "panel.residualize": {
+      "include_intercept": true,
+      "insufficient_observations_policy": "unknown",
+      "insufficient_symbols": [],
+      "min_observations": 3,
+      "missing_policy": null,
+      "operator_id": "panel.residualize",
+      "symbol_count_by_timestamp": {
+        "t1": 3,
+        "t2": 3,
+        "t3": 3
+      }
+    },
+    "panel.zscore": {
+      "ddof": 0,
+      "missing_policy": null,
+      "operator_id": "panel.zscore",
+      "symbol_count_by_timestamp": {
+        "t1": 3,
+        "t2": 3,
+        "t3": 3
+      },
+      "zero_variance_policy": "output_zero"
+    },
+    "selection.to_weights": {
+      "method": "equal_long",
+      "normalized": false,
+      "operator_id": "selection.to_weights",
+      "weight_kind": "raw"
+    },
+    "weight.normalize_gross": {
+      "gross_after": {
+        "t1": "1",
+        "t2": "1",
+        "t3": "1"
+      },
+      "gross_before": {
+        "t1": "1",
+        "t2": "1",
+        "t3": "1"
+      },
+      "net_after": {
+        "t1": "1",
+        "t2": "1",
+        "t3": "1"
+      },
+      "net_before": {
+        "t1": "1",
+        "t2": "1",
+        "t3": "1"
+      },
+      "operator_id": "weight.normalize_gross",
+      "target_gross": "1",
+      "zero_gross_policy": "keep_zero",
+      "zero_gross_policy_applied": {
+        "t1": false,
+        "t2": false,
+        "t3": false
+      }
+    }
+  },
+  "outputs": {
+    "final_exposure": {
+      "gross": "3",
+      "net": "3"
+    },
+    "final_weights": {
+      "normalized": true,
+      "rows": [
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t1",
+          "weight": "1"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t2",
+          "weight": "1"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t3",
+          "weight": "1"
+        }
+      ],
+      "weight_kind": "normalized"
+    },
+    "residual_panel": {
+      "rows": [
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t1",
+          "value": "0.16666666666666696"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t1",
+          "value": "-0.33333333333333326"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t1",
+          "value": "0.16666666666666674"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t2",
+          "value": "-0.33333333333333304"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t2",
+          "value": "0.6666666666666667"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t2",
+          "value": "-0.33333333333333326"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t3",
+          "value": "0.16666666666666696"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t3",
+          "value": "-0.33333333333333326"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t3",
+          "value": "0.16666666666666674"
+        }
+      ]
+    },
+    "selected_symbols": [
+      "ETH/USDT",
+      "SOL/USDT"
+    ],
+    "zscore_panel": {
+      "rows": [
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t1",
+          "value": "0.7071067811865479"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t1",
+          "value": "-1.414213562373095"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t1",
+          "value": "0.707106781186547"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t2",
+          "value": "-0.7071067811865472"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t2",
+          "value": "1.414213562373095"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t2",
+          "value": "-0.7071067811865477"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t3",
+          "value": "0.7071067811865479"
+        },
+        {
+          "in_universe": true,
+          "symbol": "ETH/USDT",
+          "timestamp": "t3",
+          "value": "-1.414213562373095"
+        },
+        {
+          "in_universe": true,
+          "symbol": "SOL/USDT",
+          "timestamp": "t3",
+          "value": "0.707106781186547"
+        }
+      ]
+    }
+  },
+  "strategy": "panel_btc_residual_meanrev"
+}

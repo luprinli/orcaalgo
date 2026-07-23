@@ -1,0 +1,18 @@
+{
+  "artifact_version": "qst-v04-temporal-expected-diagnostics/0.1",
+  "diagnostics": [
+    {
+      "code": "QST_V2_TEMPORAL_UNSAFE_FUTURE",
+      "message": "Output declares unsafe future data.",
+      "node_id": "shift_future",
+      "phase": "temporal",
+      "port": "value",
+      "profile": "research",
+      "remediation": "Adjust port_temporal, temporal_rule, or profile.",
+      "severity": "warning"
+    }
+  ],
+  "expected_artifact_hash": "sha256:5ef9f26f8898f8c3f75199c1c2d8b600935326847bf0ee4d13d452a83a1dbc7a",
+  "profile": "research",
+  "strategy": "pv_c_temporal_shift_future"
+}

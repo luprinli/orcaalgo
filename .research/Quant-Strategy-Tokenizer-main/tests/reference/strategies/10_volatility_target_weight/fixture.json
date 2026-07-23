@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "stage3b_demo_acceptance_fixture",
+  "case": "10_volatility_target_weight",
+  "diagnostics_path": "tests/reference/strategies/10_volatility_target_weight/diagnostics.json",
+  "hashes_path": "tests/reference/strategies/10_volatility_target_weight/hashes.json",
+  "readme_path": "examples/strategies/10_volatility_target_weight/README.md",
+  "strategy_path": "examples/strategies/10_volatility_target_weight/strategy.gkr.yaml",
+  "trace_path": null
+}

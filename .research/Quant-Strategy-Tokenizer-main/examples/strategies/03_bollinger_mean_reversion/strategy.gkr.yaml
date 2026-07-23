@@ -1,0 +1,30 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 03_bollinger_mean_reversion
+  version: 1
+  nodes:
+  - id: bands
+    token_ref: {namespace: core, name: indicator.bollinger, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {window: 20, width: 2}
+    signature:
+      outputs:
+        middle: {type: "TimeSeries[float]"}
+        upper: {type: "TimeSeries[float]"}
+        lower: {type: "TimeSeries[float]"}
+  - id: below_lower
+    token_ref: {namespace: core, name: compare.lt, version: 1, behavior_version: 1}
+    inputs: {a: $externals.market.close, b: bands.lower}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: below_lower.value}
+    params: {accept_reason: lower_band_reversion, reject_reason: no_band_signal}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: decision.decision}
+metadata: {}
+

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_decision_fold_policy_0_4.schema.json",
+  "title": "QST Decision Fold Policy v0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "base_monoid", "final_unknown"],
+  "properties": {
+    "schema_version": { "const": "qst-decision-fold-policy/0.4" },
+    "policy_id": {
+      "enum": [
+        "decision.strict_and",
+        "decision.permissive_and",
+        "decision.unknown_propagating_and",
+        "decision.any_accept"
+      ]
+    },
+    "base_monoid": {
+      "enum": ["decision.unknown_propagating_and", "decision.any_accept"]
+    },
+    "final_unknown": { "enum": ["accept", "reject", "unknown"] },
+    "score_policy": {
+      "anyOf": [{ "enum": ["max_annotation"] }, { "type": "null" }]
+    }
+  }
+}

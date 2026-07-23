@@ -1,0 +1,55 @@
+{
+  "description": "Critical file paths — deletion or degradation of these files BLOCKS commits.",
+  "paths": {
+    "preflight": {
+      "files": ["orca/preflight/checklist.py"],
+      "min_checks": 12,
+      "check_command": "python -c \"from orca.preflight.checklist import run_preflight_checks; assert len(run_preflight_checks()) >= 12, f'Expected >=12 checks, got {len(run_preflight_checks())}'\""
+    },
+    "kill_switch": {
+      "files": ["internal/risk/kill_switch.go"],
+      "required_patterns": ["_isLocked", "_killSwitchInFlight"],
+      "test_command": "go test -run TestKillSwitch ./internal/risk/"
+    },
+    "registry": {
+      "files": ["internal/strategy/registry.go"],
+      "required_patterns": ["factories", "Create(", "RegisterFactory("],
+      "test_command": "go test -run TestAllStrategies ./internal/strategy/"
+    },
+    "position_sizer": {
+      "files": ["internal/risk/position_sizer.go"],
+      "required_patterns": ["ComputeSizeUncapped"],
+      "test_command": "go test -run TestPositionSizer ./internal/risk/"
+    },
+    "gkr_configs": {
+      "files": ["configs/strategies/"],
+      "min_count": 6,
+      "validate_command": "orca validate configs/strategies/"
+    },
+    "engine_ml": {
+      "files": ["internal/backtest/engine.go"],
+      "required_patterns": ["metaLabeler", "regimeEnhancer", "exitOrch", "SizingPercent"],
+      "test_command": "go test ./internal/backtest/"
+    },
+    "ml_killswitch": {
+      "files": ["internal/backtest/ml_killswitch.go"],
+      "required_patterns": ["RegisterMLWithKillSwitch"],
+      "test_command": "go build ./internal/backtest/"
+    },
+    "simulation": {
+      "files": ["orca/simulation/__init__.py"],
+      "required_patterns": ["generate_regime_aware", "calibrate_all"],
+      "check_command": "python -c \"from orca.simulation import generate_regime_aware, calibrate_all\""
+    },
+    "models": {
+      "files": ["orca/models/strategy.py"],
+      "required_patterns": ["RiskProfile", "risk_profile"],
+      "check_command": "python -c \"from orca.models.strategy import RiskProfile, StrategyIRV04; assert hasattr(StrategyIRV04, '__fields__')\""
+    },
+    "cli": {
+      "files": ["orca/cli.py"],
+      "required_patterns": ["simulate_app", "ir_compile"],
+      "check_command": "python -c \"from orca.cli import app; import typer; assert hasattr(app, 'registered_commands')\""
+    }
+  }
+}

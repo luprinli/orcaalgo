@@ -1,0 +1,17 @@
+id: "tft"
+name: "The Funded Trader"
+max_daily_loss_pct: 3.0
+max_drawdown_pct: 6.0
+drawdown_type: "static_hwm"
+max_position_pct: 2.0
+max_open_positions: 3
+max_trades_per_day: 10
+consistency_enabled: false
+consistency_threshold_pct: 0.0
+consistency_penalty: 1.0
+profit_target_pct_phase1: 8.0
+profit_target_pct_phase2: 5.0
+min_trading_days: 5
+weekend_holding_allowed: false
+news_trading_allowed: false
+regime_multipliers: [1.0, 0.85, 0.75, 0.5]

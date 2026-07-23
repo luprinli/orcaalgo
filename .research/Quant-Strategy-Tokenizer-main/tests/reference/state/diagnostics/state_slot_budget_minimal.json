@@ -1,0 +1,1 @@
+{"artifact_version":"qst-v04-state-expected-diagnostics/0.1","case":"state_slot_budget_minimal","diagnostics":[],"expected_artifact_hash":"sha256:ec22f456fe236ef4dc22236b5644e3379f114800fc737efcf408dc92b2f686a4","strategy":"state_slot_budget_minimal"}

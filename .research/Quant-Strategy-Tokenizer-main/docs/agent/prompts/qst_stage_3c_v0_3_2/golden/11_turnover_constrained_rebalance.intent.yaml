@@ -1,0 +1,7 @@
+golden_task:
+  id: "11_turnover_constrained_rebalance"
+  name: "Turnover constrained rebalance skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "partially_supported"

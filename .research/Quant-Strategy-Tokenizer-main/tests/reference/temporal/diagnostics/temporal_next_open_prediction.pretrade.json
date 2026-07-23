@@ -1,0 +1,7 @@
+{
+  "artifact_version": "qst-v04-temporal-expected-diagnostics/0.1",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:a91629b411d08de94b7bc512136aad5f7c2c96d71d575366db9b034864da7f1f",
+  "profile": "pretrade",
+  "strategy": "pv_c_temporal_next_open_prediction"
+}

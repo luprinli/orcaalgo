@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_panel_selection_weight_0_4.schema.json",
+  "title": "QST Panel SelectionPanel and WeightPanel 0.4",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "selection_kind",
+        "selected",
+        "side",
+        "score_ref"
+      ],
+      "properties": {
+        "schema_version": { "const": "qst-panel-selection-weight/0.4" },
+        "kind": { "const": "selection_panel" },
+        "selection_kind": {
+          "enum": ["long_only", "short_only", "long_short", "ranked"]
+        },
+        "selected": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["universe_mask_ref", "universe_mask_hash"],
+          "properties": {
+            "universe_mask_ref": { "type": "string", "minLength": 1 },
+            "universe_mask_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        },
+        "side": {
+          "anyOf": [
+            { "enum": ["long", "short", "both"] },
+            { "type": "null" }
+          ]
+        },
+        "score_ref": {
+          "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "weight_kind",
+        "weights_ref",
+        "weights_hash",
+        "gross_exposure",
+        "net_exposure",
+        "weight_constraints"
+      ],
+      "properties": {
+        "schema_version": { "const": "qst-panel-selection-weight/0.4" },
+        "kind": { "const": "weight_panel" },
+        "weight_kind": { "enum": ["raw", "normalized"] },
+        "weights_ref": { "type": "string", "minLength": 1 },
+        "weights_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "gross_exposure": {
+          "anyOf": [
+            { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+            { "type": "null" }
+          ]
+        },
+        "net_exposure": {
+          "anyOf": [
+            { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+            { "type": "null" }
+          ]
+        },
+        "weight_constraints": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "max_abs_weight_per_symbol",
+            "gross_target",
+            "net_target"
+          ],
+          "properties": {
+            "max_abs_weight_per_symbol": {
+              "anyOf": [
+                { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+                { "type": "null" }
+              ]
+            },
+            "gross_target": {
+              "anyOf": [
+                { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+                { "type": "null" }
+              ]
+            },
+            "net_target": {
+              "anyOf": [
+                { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

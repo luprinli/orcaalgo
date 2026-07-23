@@ -1,0 +1,30 @@
+golden_task:
+  id: "12_custom_token_kalman_signal"
+  name: "Kalman custom token routing"
+  target_profile: "research"
+  intent:
+    description: "Use Kalman-style smoothing that is not a built-in token."
+    custom_logic:
+      required: true
+      description: "Kalman filtering belongs behind the custom-token boundary."
+  expected:
+    classification: "custom_token_required"
+    required_token_families: ["custom_runtime", "decision"]
+    expected_missing_tokens: ["kalman_filter"]
+    expected_missing_types: []
+    validation_outcome: "not_applicable"
+    hash_required: false
+    custom_token_route_required: true
+    reserved_rejection_required: false
+    non_goal_rejection_required: false
+  forbidden_behavior:
+    - "invent_builtin_kalman_token"
+    - "execute_custom_token"
+    - "auto_approve_custom_token"
+    - "claim_verify_is_safe_execution"
+  acceptance:
+    no_nonexistent_tokens: true
+    no_reserved_executable_tokens: true
+    validate_command_required: false
+    hash_command_required_if_valid: false
+    residual_risk_report_required: true

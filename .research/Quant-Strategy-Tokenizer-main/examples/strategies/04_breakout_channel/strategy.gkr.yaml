@@ -1,0 +1,21 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 04_breakout_channel
+  version: 1
+  nodes:
+  - id: breakout
+    token_ref: {namespace: core, name: indicator.channel_breakout, version: 1, behavior_version: 1}
+    inputs: {high: $externals.market.high, low: $externals.market.low, close: $externals.market.close}
+    params: {window: 20}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: breakout.value}
+    params: {accept_reason: channel_breakout, reject_reason: no_breakout}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: decision.decision}
+metadata: {}
+

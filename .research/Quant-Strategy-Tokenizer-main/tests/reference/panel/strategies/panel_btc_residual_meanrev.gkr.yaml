@@ -1,0 +1,175 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+  - panel_type
+  - panel_ops
+  - panel_weights
+strategy:
+  id: panel_btc_residual_meanrev
+  version: 1
+  nodes:
+    - id: asset_returns
+      signature:
+        outputs:
+          panel:
+            type: Panel[float]
+      metadata:
+        panel_type_by_output:
+          panel:
+            kind: panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+    - id: residual
+      token_ref:
+        namespace: core
+        name: panel.residualize
+        version: 1
+        behavior_version: 1
+      inputs:
+        panel: asset_returns.panel
+        factor: fixture.btc_factor
+      params:
+        include_intercept: true
+        min_observations: 3
+      signature:
+        inputs:
+          panel:
+            type: Panel[float]
+          factor:
+            type: TimeSeries[float]
+        outputs:
+          panel:
+            type: Panel[float]
+      metadata:
+        panel_type_by_output:
+          panel:
+            kind: panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+    - id: residual_zscore
+      token_ref:
+        namespace: core
+        name: panel.zscore
+        version: 1
+        behavior_version: 1
+      inputs:
+        panel: residual.panel
+      signature:
+        inputs:
+          panel:
+            type: Panel[float]
+        outputs:
+          panel:
+            type: Panel[float]
+      metadata:
+        panel_type_by_output:
+          panel:
+            kind: panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+    - id: meanrev_long
+      token_ref:
+        namespace: core
+        name: panel.bottom_k
+        version: 1
+        behavior_version: 1
+      inputs:
+        panel: residual_zscore.panel
+      params:
+        k: 1
+      signature:
+        inputs:
+          panel:
+            type: Panel[float]
+        outputs:
+          selection:
+            type: Panel[bool]
+      metadata:
+        panel_type_by_output:
+          selection:
+            kind: selection_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+            selection_panel:
+              selection_kind: long_only
+              side: long
+              selected:
+                universe_mask_ref: tests/reference/panel/fixtures/btc_residual_selection.json
+                universe_mask_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    - id: raw_weights
+      token_ref:
+        namespace: core
+        name: selection.to_weights
+        version: 1
+        behavior_version: 1
+      inputs:
+        selection: meanrev_long.selection
+      params:
+        method: equal_long
+      signature:
+        inputs:
+          selection:
+            type: Panel[bool]
+        outputs:
+          weights:
+            type: Panel[decimal]
+      metadata:
+        panel_type_by_output:
+          weights:
+            kind: weight_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+            weight_panel:
+              weight_kind: raw
+              weights_ref: tests/reference/panel/traces/panel_btc_residual_meanrev.json
+              weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    - id: normalized_weights
+      token_ref:
+        namespace: core
+        name: weight.normalize_gross
+        version: 1
+        behavior_version: 1
+      inputs:
+        weights: raw_weights.weights
+      params:
+        target_gross: "1"
+      signature:
+        inputs:
+          weights:
+            type: Panel[decimal]
+        outputs:
+          weights:
+            type: Panel[decimal]
+      metadata:
+        panel_type_by_output:
+          weights:
+            kind: weight_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/btc_residual_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+              included: [ADA/USDT, ETH/USDT, SOL/USDT]
+            weight_panel:
+              weight_kind: normalized
+              weights_ref: tests/reference/panel/traces/panel_btc_residual_meanrev.json
+              weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+              gross_exposure: "1"
+              weight_constraints:
+                gross_target: "1"
+  outputs:
+    weights: normalized_weights.weights
+metadata:
+  reference_validation: panel-reference
+  reference_case: panel_btc_residual_meanrev
+  fixture: tests/reference/panel/fixtures/panel_btc_residual_meanrev.json

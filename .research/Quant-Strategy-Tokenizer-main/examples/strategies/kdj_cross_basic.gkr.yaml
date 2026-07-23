@@ -1,0 +1,717 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+- core
+strategy:
+  id: kdj_cross_basic
+  version: 1
+  nodes:
+  - id: n0
+    token: window.max
+    version: 1
+    token_ref:
+      namespace: core
+      name: window.max
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: $externals.market.high
+    params:
+      window: 9
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n1
+    token: window.min
+    version: 1
+    token_ref:
+      namespace: core
+      name: window.min
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: $externals.market.low
+    params:
+      window: 9
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n2
+    token: norm.range_position
+    version: 1
+    token_ref:
+      namespace: core
+      name: norm.range_position
+      version: 1
+      behavior_version: 1
+    inputs:
+      high: n0.value
+      low: n1.value
+      value: $externals.market.close
+    params:
+      scale: 100
+      zero_range_policy: unknown
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        high:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+        low:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n3
+    token: smooth.linear_recursive
+    version: 1
+    token_ref:
+      namespace: core
+      name: smooth.linear_recursive
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: n2.value
+    params:
+      alpha: 0.3333333
+      init: 50
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n4
+    token: data.shift
+    version: 1
+    token_ref:
+      namespace: core
+      name: data.shift
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: n3.value
+    params:
+      periods: 1
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n5
+    token: smooth.linear_recursive
+    version: 1
+    token_ref:
+      namespace: core
+      name: smooth.linear_recursive
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: n3.value
+    params:
+      alpha: 0.3333333
+      init: 50
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n6
+    token: compare.gt
+    version: 1
+    token_ref:
+      namespace: core
+      name: compare.gt
+      version: 1
+      behavior_version: 1
+    inputs:
+      a: n3.value
+      b: n5.value
+    params: {}
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        a:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+        b:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n7
+    token: data.shift
+    version: 1
+    token_ref:
+      namespace: core
+      name: data.shift
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: n5.value
+    params:
+      periods: 1
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n8
+    token: compare.le
+    version: 1
+    token_ref:
+      namespace: core
+      name: compare.le
+      version: 1
+      behavior_version: 1
+    inputs:
+      a: n4.value
+      b: n7.value
+    params: {}
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        a:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+        b:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: float
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n9
+    token: logic.and
+    version: 1
+    token_ref:
+      namespace: core
+      name: logic.and
+      version: 1
+      behavior_version: 1
+    inputs:
+      a: n6.value
+      b: n8.value
+    params: {}
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        a:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+        b:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        value:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n10
+    token: decision.lift_bool
+    version: 1
+    token_ref:
+      namespace: core
+      name: decision.lift_bool
+      version: 1
+      behavior_version: 1
+    inputs:
+      series: n9.value
+    params:
+      accept_reason: kdj_cross_up
+      at: now
+      reject_reason: no_cross
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        series:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: TimeSeries
+            value_type: bool
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        decision:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: Decision
+            value_type: null
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n11
+    token: decision.strict_and
+    version: 1
+    token_ref:
+      namespace: core
+      name: decision.strict_and
+      version: 1
+      behavior_version: 1
+    inputs:
+      decisions:
+      - n10.decision
+    params: {}
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        decisions:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: EventStream
+            value_type: object
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        decision:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: Decision
+            value_type: null
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  - id: n12
+    token: plan.noop
+    version: 1
+    token_ref:
+      namespace: core
+      name: plan.noop
+      version: 1
+      behavior_version: 1
+    inputs:
+      decision: n11.decision
+    params: {}
+    signature:
+      schema_version: qst-portspec/0.4
+      inputs:
+        decision:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: Decision
+            value_type: null
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          temporal_requirement: null
+      outputs:
+        plan:
+          schema_version: qst-portspec/0.4
+          type:
+            schema_version: qst-typespec/0.4
+            kind: Plan
+            value_type: null
+            intrinsic_temporal: null
+            axes: null
+            universe: null
+            missing_policy: null
+            group_spec_ref: null
+            selection_kind: null
+            weight_constraints: null
+            panel_capability_required: null
+          port_temporal: null
+          temporal_rule: null
+    metadata: {}
+  outputs:
+    plan: n12.plan
+metadata: {}

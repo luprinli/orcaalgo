@@ -1,0 +1,16 @@
+{
+  "artifact_version": "qst-v04-temporal-validation-trace/0.1",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:1f0a8a96ade553f0448dc89ba31fc0f2e66e0fa014ba58f308e706c6818b67c9",
+  "profile": "pretrade",
+  "resolved_outputs": {
+    "predict_next_open.score": {
+      "available_at": "next_bar_open",
+      "latency_bars": 0,
+      "min_history_bars": 0,
+      "schema_version": "qst-port-temporal/0.4",
+      "unsafe_future": false
+    }
+  },
+  "strategy": "pv_c_temporal_next_open_prediction"
+}

@@ -1,0 +1,65 @@
+# Quality Gate Thresholds
+
+# Central configuration for all CI/CD quality gates.
+# Used by CI workflows, pre-commit hooks, and Kilo commands.
+
+gates:
+  python:
+    ruff:
+      max_warnings: 0
+    mypy:
+      strict: true
+    coverage_min_pct: 80
+    mutation_kill_rate_min_pct: 85
+
+  go:
+    golangci_lint:
+      timeout: 5m
+      max_issues: 0
+    go_vet:
+      required: true
+    coverage_min_pct: 60
+    race_detector:
+      required: true
+      on: [push, pull_request]
+
+  odin:
+    compilation:
+      required: true
+    vet:
+      required: false  # Advisory until Odin test suite exists
+
+  web:
+    tsc:
+      max_errors: 0
+    eslint:
+      max_warnings: 0
+    build:
+      required: true
+
+  gkr:
+    validate:
+      required: true
+      strict: true
+
+  anti_pattern:
+    scan:
+      required: true
+      max_violations: 0
+
+  preflight:
+    min_critical_pass_rate_pct: 100
+    min_warning_pass_rate_pct: 80
+
+  guardian:
+    min_pass_rate_pct: 100
+
+  e2e:
+    min_pass_rate_pct: 100
+
+  security:
+    gitleaks:
+      required: true
+    dependency_audit:
+      max_high_vulns: 0
+      max_critical_vulns: 0

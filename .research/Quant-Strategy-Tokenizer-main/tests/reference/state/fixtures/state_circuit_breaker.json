@@ -1,0 +1,9 @@
+{
+  "artifact_version": "qst-v04-state-fixture/0.1",
+  "case": "state_circuit_breaker",
+  "events": [],
+  "params": {
+    "threshold": 2
+  },
+  "values": [false, true, true, false, true]
+}

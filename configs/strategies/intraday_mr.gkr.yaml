@@ -1,0 +1,56 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-intraday-mr-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "bar_agg"
+      token_ref:
+        token_id: "data.bar_aggregator"
+        version: ">=1.0"
+      params:
+        timeframe: "5m"
+    - id: "zscore_calc"
+      token_ref:
+        token_id: "math.zscore"
+        version: ">=1.0"
+      inputs:
+        series: "bar_agg.close"
+      params:
+        lookback: 14
+    - id: "signal_gen"
+      token_ref:
+        token_id: "signal.threshold"
+        version: ">=1.0"
+      inputs:
+        zscore: "zscore_calc.z"
+      params:
+        entry_threshold: 2.0
+        exit_threshold: 0.5
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "signal_gen.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "signal_gen.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "signal_gen.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core

@@ -1,0 +1,20 @@
+{
+  "$id": "https://qst.dev/schemas/qst_custom_token_audit_0_4.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {"enum": ["verify_integrity", "check_authorization", "approve", "execute"], "type": "string"},
+    "diagnostics": {"items": {"type": "object"}, "type": "array"},
+    "hashes": {
+      "additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+      "type": "object"
+    },
+    "outcome": {"type": "string"},
+    "profile": {"type": "string"},
+    "recorded_at": {"type": ["string", "null"]},
+    "schema_version": {"const": "qst-custom-token-audit/0.4"},
+    "token_ref": {"type": "object"}
+  },
+  "required": ["schema_version", "action", "token_ref", "profile", "outcome"],
+  "type": "object"
+}

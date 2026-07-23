@@ -1,0 +1,7 @@
+# OrcaAlgo Change Audit Thresholds
+# Block destructive commits by file delta magnitude.
+# Override with --bypass-guard flag (audit logged to reports/change_audit_*.json).
+
+max_changed_files: 50       # Max files changed in a single commit
+max_deletion_pct: 30        # Max percentage of changed lines that can be deletions
+test_file_guard: true       # Block commits that delete test files without replacement

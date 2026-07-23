@@ -1,0 +1,14 @@
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.csv text eol=lf
+*.sh text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+LICENSE text eol=lf
+quant_strategy_tokenizer/py.typed text eol=lf
+*.png binary

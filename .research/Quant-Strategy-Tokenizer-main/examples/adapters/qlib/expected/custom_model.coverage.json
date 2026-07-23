@@ -1,0 +1,68 @@
+{
+  "adapter": "qlib",
+  "backtest": null,
+  "classification": "partially_supported",
+  "dataset": {
+    "class_name": "DatasetH",
+    "handler_class": "Alpha158",
+    "handler_kwargs": {
+      "end_time": "2020-12-31",
+      "instruments": "csi300",
+      "start_time": "2017-01-01"
+    },
+    "handler_module_path": "qlib.contrib.data.handler",
+    "module_path": "qlib.data.dataset",
+    "segments": {
+      "test": [
+        "2020-01-01",
+        "2020-12-31"
+      ],
+      "train": [
+        "2017-01-01",
+        "2018-12-31"
+      ],
+      "valid": [
+        "2019-01-01",
+        "2019-12-31"
+      ]
+    },
+    "support": "known"
+  },
+  "model": {
+    "class_name": "LocalTransformerAlphaModel",
+    "kwargs": {
+      "hidden_size": 64,
+      "horizon": 5
+    },
+    "module_path": "local_research.models",
+    "support": "custom_required"
+  },
+  "records": [
+    {
+      "class_name": "SignalRecord",
+      "kwargs": {},
+      "module_path": "qlib.workflow.record_temp",
+      "support": "known"
+    }
+  ],
+  "source": "examples/adapters/qlib/workflow_config_custom_model.yaml",
+  "strategy": null,
+  "tokenized_components": [
+    "data.qlib_dataset_record",
+    "feature.alpha158_record",
+    "model.forecast_model_record",
+    "record.signal_record"
+  ],
+  "unsupported_components": [
+    {
+      "kind": "custom_model",
+      "name": "LocalTransformerAlphaModel",
+      "reason": "Custom Qlib model is recorded as metadata and requires external runtime to execute."
+    }
+  ],
+  "warnings": [
+    "Qlib workflows are research/runtime configs.",
+    "This adapter imports record-layer structure only.",
+    "It does not train models, run qrun, run inference, or execute backtests."
+  ]
+}

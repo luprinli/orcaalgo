@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "stage3b_demo_acceptance_fixture",
+  "case": "01_ema_cross",
+  "diagnostics_path": "tests/reference/strategies/01_ema_cross/diagnostics.json",
+  "hashes_path": "tests/reference/strategies/01_ema_cross/hashes.json",
+  "readme_path": "examples/strategies/01_ema_cross/README.md",
+  "strategy_path": "examples/strategies/01_ema_cross/strategy.gkr.yaml",
+  "trace_path": "tests/reference/strategies/01_ema_cross/trace.json"
+}

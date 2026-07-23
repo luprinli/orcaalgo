@@ -1,0 +1,158 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+  - panel_type
+  - panel_ops
+  - panel_weights
+strategy:
+  id: panel_top_bottom_market_neutral
+  version: 1
+  nodes:
+    - id: universe_scores
+      signature:
+        outputs:
+          panel:
+            type: Panel[float]
+      metadata:
+        panel_type_by_output:
+          panel:
+            kind: panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/top_bottom_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT]
+              included: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+    - id: top_long
+      token_ref:
+        namespace: core
+        name: panel.top_k
+        version: 1
+        behavior_version: 1
+      inputs:
+        panel: universe_scores.panel
+      params:
+        k: 1
+      signature:
+        inputs:
+          panel:
+            type: Panel[float]
+        outputs:
+          selection:
+            type: Panel[bool]
+      metadata:
+        panel_type_by_output:
+          selection:
+            kind: selection_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/top_bottom_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT]
+              included: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+            selection_panel:
+              selection_kind: long_only
+              side: long
+              selected:
+                universe_mask_ref: tests/reference/panel/fixtures/top_bottom_long_selection.json
+                universe_mask_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    - id: bottom_short
+      token_ref:
+        namespace: core
+        name: panel.bottom_k
+        version: 1
+        behavior_version: 1
+      inputs:
+        panel: universe_scores.panel
+      params:
+        k: 1
+      signature:
+        inputs:
+          panel:
+            type: Panel[float]
+        outputs:
+          selection:
+            type: Panel[bool]
+      metadata:
+        panel_type_by_output:
+          selection:
+            kind: selection_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/top_bottom_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT]
+              included: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+            selection_panel:
+              selection_kind: short_only
+              side: short
+              selected:
+                universe_mask_ref: tests/reference/panel/fixtures/top_bottom_short_selection.json
+                universe_mask_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    - id: raw_weights
+      token_ref:
+        namespace: core
+        name: selection.to_weights
+        version: 1
+        behavior_version: 1
+      inputs:
+        selection: fixture.long_short_selection
+      params:
+        method: equal_long_short
+      signature:
+        inputs:
+          selection:
+            type: Panel[bool]
+        outputs:
+          weights:
+            type: Panel[decimal]
+      metadata:
+        panel_type_by_output:
+          weights:
+            kind: weight_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/top_bottom_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT]
+              included: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+            weight_panel:
+              weight_kind: raw
+              weights_ref: tests/reference/panel/traces/panel_top_bottom_market_neutral.json
+              weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    - id: neutral_weights
+      token_ref:
+        namespace: core
+        name: weight.market_neutral
+        version: 1
+        behavior_version: 1
+      inputs:
+        weights: raw_weights.weights
+      params:
+        target_net: "0"
+        target_gross: "1"
+        neutralization_method: demean_then_gross_normalize
+      signature:
+        inputs:
+          weights:
+            type: Panel[decimal]
+        outputs:
+          weights:
+            type: Panel[decimal]
+      metadata:
+        panel_type_by_output:
+          weights:
+            kind: weight_panel
+            universe_mask:
+              universe_ref: tests/reference/panel/fixtures/top_bottom_universe.json
+              members: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT, XRP/USDT]
+              included: [ADA/USDT, BTC/USDT, ETH/USDT, SOL/USDT]
+            weight_panel:
+              weight_kind: normalized
+              weights_ref: tests/reference/panel/traces/panel_top_bottom_market_neutral.json
+              weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+              gross_exposure: "1"
+              net_exposure: "0"
+              weight_constraints:
+                gross_target: "1"
+                net_target: "0"
+  outputs:
+    weights: neutral_weights.weights
+metadata:
+  reference_validation: panel-reference
+  reference_case: panel_top_bottom_market_neutral
+  fixture: tests/reference/panel/fixtures/panel_top_bottom_market_neutral.json

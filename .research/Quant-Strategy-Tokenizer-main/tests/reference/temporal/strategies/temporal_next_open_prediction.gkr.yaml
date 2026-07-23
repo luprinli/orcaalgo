@@ -1,0 +1,22 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: pv_c_temporal_next_open_prediction
+  version: 1
+  nodes:
+    - id: predict_next_open
+      signature:
+        outputs:
+          score:
+            type: TimeSeries[float]
+            temporal_rule:
+              kind: constant
+              value:
+                available_at: next_bar_open
+  outputs:
+    score: predict_next_open.score
+metadata:
+  reference_validation: temporal-reference

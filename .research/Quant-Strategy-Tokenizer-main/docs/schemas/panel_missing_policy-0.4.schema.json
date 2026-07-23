@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_panel_missing_policy_0_4.schema.json",
+  "title": "QST Panel MissingPolicy 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "applies_when"],
+  "properties": {
+    "schema_version": { "const": "qst-panel-missing-policy/0.4" },
+    "kind": {
+      "enum": ["error_on_missing", "drop_missing"],
+      "default": "error_on_missing"
+    },
+    "applies_when": { "const": "universe_mask_true_value_missing" },
+    "nullable_decimal_string": { "const": false }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_port_temporal_rule_0_4.schema.json",
+  "title": "QST Port Temporal Rule 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind"],
+  "properties": {
+    "schema_version": {"const": "qst-port-temporal/0.4"},
+    "kind": {
+      "enum": [
+        "constant",
+        "inherit_from_input",
+        "param_value",
+        "param_max_floor",
+        "param_plus_constant",
+        "max_inputs",
+        "param_predicate",
+        "window_min_history",
+        "centered_window_unsafe"
+      ]
+    },
+    "value": {"$ref": "#/$defs/port_temporal"},
+    "input": {"type": "string"},
+    "inputs": {"type": "array", "items": {"type": "string"}},
+    "param": {"type": "string"},
+    "field": {
+      "enum": ["available_at", "latency_bars", "min_history_bars", "unsafe_future"]
+    },
+    "floor": {"type": "integer"},
+    "constant": {"type": "integer"},
+    "equals": {},
+    "when_true": {"$ref": "#/$defs/port_temporal"},
+    "when_false": {"$ref": "#/$defs/port_temporal"}
+  },
+  "$defs": {
+    "available_at": {
+      "enum": ["bar_open", "bar_close", "next_bar_open", "event_time", "unknown"]
+    },
+    "port_temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "available_at": {"$ref": "#/$defs/available_at"},
+        "latency_bars": {"type": "integer", "minimum": 0},
+        "min_history_bars": {"type": "integer", "minimum": 0},
+        "unsafe_future": {"type": "boolean"}
+      }
+    }
+  }
+}

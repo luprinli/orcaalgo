@@ -1,0 +1,29 @@
+market: &market csi300
+
+model:
+  class: LocalTransformerAlphaModel
+  module_path: local_research.models
+  kwargs:
+    horizon: 5
+    hidden_size: 64
+
+dataset:
+  class: DatasetH
+  module_path: qlib.data.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: qlib.contrib.data.handler
+      kwargs:
+        start_time: 2017-01-01
+        end_time: 2020-12-31
+        instruments: *market
+    segments:
+      train: [2017-01-01, 2018-12-31]
+      valid: [2019-01-01, 2019-12-31]
+      test: [2020-01-01, 2020-12-31]
+
+record:
+  - class: SignalRecord
+    module_path: qlib.workflow.record_temp
+    kwargs: {}

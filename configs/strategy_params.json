@@ -1,0 +1,44 @@
+{
+  "strategies": [
+    {
+      "id": "orca-intraday-mr-v1",
+      "kind": "mean_reversion",
+      "params": {
+        "period_seconds": 60,
+        "lookback": 20,
+        "entry_z": 2.0,
+        "exit_z": 0.5,
+        "kelly_multiplier": 0.25,
+        "per_trade_cap_pct": 0.02,
+        "total_exposure_cap_pct": 0.3,
+        "max_daily_dd_pct": 5.0,
+        "max_absolute_dd": 1000.0,
+        "max_open_positions": 5
+      }
+    },
+    {
+      "id": "orca-opening-range-breakout-v1",
+      "kind": "opening_range_breakout",
+      "params": {
+        "kelly_multiplier": 0.25,
+        "per_trade_cap_pct": 0.02,
+        "total_exposure_cap_pct": 0.3,
+        "max_daily_dd_pct": 5.0,
+        "max_absolute_dd": 1000.0,
+        "max_open_positions": 5
+      }
+    },
+    {
+      "id": "orca-trend-following-v1",
+      "kind": "trend_following",
+      "params": {
+        "kelly_multiplier": 0.25,
+        "per_trade_cap_pct": 0.02,
+        "total_exposure_cap_pct": 0.3,
+        "max_daily_dd_pct": 5.0,
+        "max_absolute_dd": 1000.0,
+        "max_open_positions": 5
+      }
+    }
+  ]
+}

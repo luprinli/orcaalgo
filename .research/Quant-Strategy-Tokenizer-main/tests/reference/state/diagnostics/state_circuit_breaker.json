@@ -1,0 +1,1 @@
+{"artifact_version":"qst-v04-state-expected-diagnostics/0.1","case":"state_circuit_breaker","diagnostics":[],"expected_artifact_hash":"sha256:a1dc8d0dddd1e7865994e1f1b432a29e4eb8b1400749305a983bedec171882ae","strategy":"state_circuit_breaker"}

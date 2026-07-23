@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "stage3b_demo_acceptance_fixture",
+  "case": "08_market_neutral_rank",
+  "diagnostics_path": "tests/reference/strategies/08_market_neutral_rank/diagnostics.json",
+  "hashes_path": "tests/reference/strategies/08_market_neutral_rank/hashes.json",
+  "readme_path": "examples/strategies/08_market_neutral_rank/README.md",
+  "strategy_path": "examples/strategies/08_market_neutral_rank/strategy.gkr.yaml",
+  "trace_path": "tests/reference/strategies/08_market_neutral_rank/trace.json"
+}

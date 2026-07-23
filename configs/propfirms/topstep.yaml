@@ -1,0 +1,17 @@
+id: "topstep"
+name: "TopStep"
+max_daily_loss_pct: 2.0
+max_drawdown_pct: 2.0
+drawdown_type: "trailing"
+max_position_pct: 3.0
+max_open_positions: 5
+max_trades_per_day: 10
+consistency_enabled: true
+consistency_threshold_pct: 40.0
+consistency_penalty: 0.5
+profit_target_pct_phase1: 6.0
+profit_target_pct_phase2: 0.0
+min_trading_days: 2
+weekend_holding_allowed: false
+news_trading_allowed: false
+regime_multipliers: [1.0, 0.85, 0.75, 0.5]

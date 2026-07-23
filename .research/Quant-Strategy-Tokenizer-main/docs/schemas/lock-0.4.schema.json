@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_lock_0_4.schema.json",
+  "title": "QST Lock 0.4 Minimal Hash Snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "lock_version",
+    "qst_version",
+    "qst_version_policy",
+    "ir_version",
+    "canonical_version",
+    "strategy",
+    "strategy_version",
+    "hashes"
+  ],
+  "properties": {
+    "lock_version": {
+      "const": "qst-lock/0.4"
+    },
+    "qst_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "qst_version_policy": {
+      "enum": ["strict", "same_minor"]
+    },
+    "ir_version": {
+      "const": "qst-ir/0.4"
+    },
+    "canonical_version": {
+      "const": "qst-canonical/0.4"
+    },
+    "strategy": {
+      "type": "string",
+      "minLength": 1
+    },
+    "strategy_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "graph_hash",
+        "param_hash",
+        "instance_hash",
+        "signature_hash",
+        "behavior_hash",
+        "token_spec_hash",
+        "token_pack_hash",
+        "implementation_ref_hash",
+        "audit_chain_hash",
+        "runtime_environment_hash",
+        "expected_artifact_hash"
+      ],
+      "properties": {
+        "graph_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "param_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "instance_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "signature_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "behavior_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "token_spec_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "token_pack_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "implementation_ref_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "audit_chain_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "runtime_environment_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "expected_artifact_hash": {
+          "$ref": "#/$defs/hash"
+        }
+      }
+    },
+    "tokens": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tokenLockEntry"
+      }
+    },
+    "token_pack_dependencies": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tokenPackDependency"
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "tokenRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "version", "behavior_version"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "behavior_version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "tokenLockEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token_ref",
+        "token_spec_hash",
+        "token_pack_hash",
+        "implementation_ref_hash",
+        "runtime_environment_hash",
+        "origin_tier",
+        "attestation_kind",
+        "risk_level"
+      ],
+      "properties": {
+        "token_ref": {"$ref": "#/$defs/tokenRef"},
+        "token_spec_hash": {"$ref": "#/$defs/hash"},
+        "token_pack_hash": {"$ref": "#/$defs/hash"},
+        "implementation_ref_hash": {"$ref": "#/$defs/hash"},
+        "runtime_environment_hash": {"$ref": "#/$defs/hash"},
+        "origin_tier": {
+          "enum": [
+            "core",
+            "verified_pack",
+            "community_pack",
+            "user_local",
+            "experimental",
+            "unsafe"
+          ]
+        },
+        "attestation_kind": {
+          "enum": ["none", "local_tests_passed", "qst_verified", "signed_pack"]
+        },
+        "risk_level": {
+          "enum": ["low", "medium", "high", "unknown"]
+        }
+      }
+    },
+    "tokenPackDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pack_id", "version", "token_pack_hash"],
+      "properties": {
+        "pack_id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "token_pack_hash": {"$ref": "#/$defs/hash"}
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 06_circuit_breaker_mean_reversion
+  version: 1
+  nodes:
+  - id: rsi
+    token_ref: {namespace: core, name: indicator.rsi, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {window: 14}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: signal
+    token_ref: {namespace: core, name: compare.lt, version: 1, behavior_version: 1}
+    inputs: {a: rsi.value, b: $externals.thresholds.rsi_oversold}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: signal.value}
+    params: {accept_reason: mean_reversion, reject_reason: no_signal}
+    signature: {outputs: {decision: {type: Decision}}}
+  - id: breaker
+    token_ref: {namespace: core, name: gate.circuit_breaker, version: 1, behavior_version: 1}
+    inputs: {decision: decision.decision}
+    params: {max_breaches: 3}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: breaker.decision}
+metadata: {}
+

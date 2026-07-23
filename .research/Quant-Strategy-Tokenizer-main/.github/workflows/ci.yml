@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: python -m qst.lint.stateless qst/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: mypy qst/
+
+  prompt-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: python -m py_compile tools/validate_prompt_set.py
+      - run: python -m py_compile tests/agent_prompts/test_validate_prompt_set.py
+      - run: python tools/validate_prompt_set.py docs/agent/prompts/qst_stage_3c_v0_3_2
+      - run: python tools/verify_prompt_remote_artifacts.py docs/agent/prompts/qst_stage_3c_v0_3_2
+      - run: python -m pytest tests/agent_prompts -q
+
+  coverage-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -e ".[dev]"
+      - run: python -m py_compile tools/validate_strategy_coverage_matrix.py
+      - run: python -m py_compile tools/report_strategy_coverage.py
+      - run: python tools/validate_strategy_coverage_matrix.py docs/reports/strategy_coverage_matrix.yaml
+      - run: python tools/report_strategy_coverage.py docs/reports/strategy_coverage_matrix.yaml --check
+      - run: python tools/report_strategy_coverage.py docs/reports/strategy_coverage_matrix.yaml --json
+      - run: python -m pytest tests/coverage_cases -q
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e ".[dev]"
+      - run: python -m compileall qst
+      - run: python -m qst.cli --help
+      - run: python -m qst.cli vocabulary --check
+      - run: python -m pytest tests -q
+      - run: python -m pytest --cov=qst --cov-fail-under=85 -q
+      - run: python -m qst.cli hash examples/strategies/kdj_cross_basic.gkr.yaml
+      - run: python -m qst.cli hash examples/strategies/kdj_with_ema_filter.gkr.yaml

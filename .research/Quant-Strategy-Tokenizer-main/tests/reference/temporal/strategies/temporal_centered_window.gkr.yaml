@@ -1,0 +1,23 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: pv_c_temporal_centered_window
+  version: 1
+  nodes:
+    - id: centered_window
+      params:
+        window: 5
+      signature:
+        outputs:
+          value:
+            type: TimeSeries[float]
+            temporal_rule:
+              kind: centered_window_unsafe
+              param: window
+  outputs:
+    value: centered_window.value
+metadata:
+  reference_validation: temporal-reference

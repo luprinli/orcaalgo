@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/adapter_manifest.schema.json",
+  "title": "QST Adapter Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["adapter_id", "adapter_version", "qst_core_compatible", "implements_ports"],
+  "properties": {
+    "adapter_id": {"type": "string"},
+    "adapter_version": {"type": "string"},
+    "qst_core_compatible": {"type": "string"},
+    "implements_ports": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "supported_engines": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "capabilities": {"type": "object"},
+    "known_limitations": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

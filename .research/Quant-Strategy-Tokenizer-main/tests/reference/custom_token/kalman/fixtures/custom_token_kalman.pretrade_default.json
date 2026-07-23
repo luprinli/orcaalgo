@@ -1,0 +1,22 @@
+{
+  "approve": false,
+  "artifact_version": "qst-v04-custom-token-fixture/0.1",
+  "case": "custom_token_kalman",
+  "inputs": {
+    "alpha": 0.5,
+    "series": [
+      1.0,
+      2.0,
+      3.0,
+      2.0
+    ]
+  },
+  "profile": "pretrade",
+  "token_pack_path": "examples/custom_token/kalman",
+  "token_ref": {
+    "behavior_version": 1,
+    "name": "kalman_ema",
+    "namespace": "my_pack",
+    "version": 1
+  }
+}

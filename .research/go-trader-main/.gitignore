@@ -1,0 +1,14 @@
+/.env
+rust-trader/target/
+web-ui/node_modules/
+web-ui/dist/
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb/go-trader
+/go-trader
+/go-trader.exe
+.codetether-agent/
+.codetether/
+claude-share-download/

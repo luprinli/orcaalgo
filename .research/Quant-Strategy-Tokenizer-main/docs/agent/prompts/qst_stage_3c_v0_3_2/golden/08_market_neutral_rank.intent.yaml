@@ -1,0 +1,7 @@
+golden_task:
+  id: "08_market_neutral_rank"
+  name: "Market neutral rank skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "supported"

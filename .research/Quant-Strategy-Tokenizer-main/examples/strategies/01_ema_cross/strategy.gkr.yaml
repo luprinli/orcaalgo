@@ -1,0 +1,31 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 01_ema_cross
+  version: 1
+  nodes:
+  - id: fast_ema
+    token_ref: {namespace: core, name: indicator.ema, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {span: 12}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: slow_ema
+    token_ref: {namespace: core, name: indicator.ema, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {span: 26}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: cross
+    token_ref: {namespace: core, name: signal.cross_above, version: 1, behavior_version: 1}
+    inputs: {a: fast_ema.value, b: slow_ema.value}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: cross.value}
+    params: {accept_reason: ema_cross_up, reject_reason: no_cross}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: decision.decision}
+metadata: {}
+

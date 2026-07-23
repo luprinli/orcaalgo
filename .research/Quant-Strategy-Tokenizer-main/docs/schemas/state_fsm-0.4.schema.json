@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_state_fsm_0_4.schema.json",
+  "title": "QST State FSM 0.4",
+  "oneOf": [
+    {"$ref": "#/$defs/fsm_definition"},
+    {"$ref": "#/$defs/fsm_execution_trace"}
+  ],
+  "$defs": {
+    "fsm_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "states",
+        "events",
+        "initial_state",
+        "transitions",
+        "failure_policy",
+        "unknown_state",
+        "metadata"
+      ],
+      "properties": {
+        "schema_version": {"const": "qst-state-fsm/0.4"},
+        "states": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "events": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "initial_state": {"type": "string", "minLength": 1},
+        "transitions": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/fsm_transition"}
+        },
+        "failure_policy": {
+          "enum": ["stay", "transition_to_unknown", "raise"],
+          "description": "`raise` emits an error diagnostic in WP6b reference semantics; it does not raise a Python exception."
+        },
+        "unknown_state": {"type": "string"},
+        "metadata": {"type": "object"}
+      }
+    },
+    "fsm_transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_state", "event", "to_state"],
+      "properties": {
+        "from_state": {"type": "string", "minLength": 1},
+        "event": {"type": "string", "minLength": 1},
+        "to_state": {"type": "string", "minLength": 1}
+      }
+    },
+    "fsm_execution_trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token_id", "events"],
+      "properties": {
+        "token_id": {"const": "core.state.fsm"},
+        "events": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/fsm_trace_event"}
+        }
+      }
+    },
+    "fsm_trace_event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "event",
+        "state_before",
+        "state_after",
+        "reset",
+        "transition_found",
+        "failure_policy_applied",
+        "diagnostic_code"
+      ],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "event": {},
+        "state_before": {"type": "string"},
+        "state_after": {"type": "string"},
+        "reset": {"type": "boolean"},
+        "transition_found": {"type": "boolean"},
+        "failure_policy_applied": {
+          "oneOf": [
+            {
+              "enum": ["stay", "transition_to_unknown", "raise"],
+              "description": "`raise` records an error diagnostic rather than throwing."
+            },
+            {"type": "null"}
+          ]
+        },
+        "diagnostic_code": {
+          "oneOf": [
+            {"type": "string", "minLength": 1},
+            {"type": "null"}
+          ]
+        }
+      }
+    }
+  }
+}

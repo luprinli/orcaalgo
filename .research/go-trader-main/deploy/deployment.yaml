@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-trader
+  namespace: rileyseaburg
+  labels:
+    app.kubernetes.io/name: go-trader
+    app.kubernetes.io/part-of: rileyseaburg
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: go-trader
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: go-trader
+        app.kubernetes.io/part-of: rileyseaburg
+    spec:
+      imagePullSecrets:
+        - name: gcp-artifact-registry
+      # distroless `nonroot` is UID 65532 — pod-level securityContext
+      # provides the numeric ID kubelet needs to verify runAsNonRoot.
+      # The Rust image keeps the same UID/GID for compatibility.
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: trader
+          # Image tag is patched at deploy time — see deploy/build-and-push.sh.
+          image: us-central1-docker.pkg.dev/spotlessbinco/spotlessbinco/go-trader:placeholder
+          imagePullPolicy: IfNotPresent
+          args: ["--port", "8080", "--auto-trade", "--symbols", "AAPL,MSFT,TSLA,CBRS", "--db-path", "/app/data/go-trader.sqlite3"]
+          env:
+            # Software low-latency mode: stream-first event evaluation with
+            # millisecond gates while staying inside Alpaca API/broker constraints.
+            # This is still paper/API trading, not FPGA/direct-market-access execution.
+            - name: GO_TRADER_LOW_LATENCY_MODE
+              value: "true"
+            - name: GO_TRADER_AUTO_TRADE_INTERVAL_SECS
+              value: "15"
+            - name: GO_TRADER_MARKET_DATA_INTERVAL_SECS
+              value: "1"
+            - name: GO_TRADER_MARKET_DATA_INTERVAL_MS
+              value: "250"
+            - name: GO_TRADER_MARKET_DATA_STREAM_ENABLED
+              value: "true"
+            - name: GO_TRADER_SEED_BAR_COUNT
+              value: "220"
+            - name: GO_TRADER_SEED_BAR_DELAY_MS
+              value: "1000"
+            - name: GO_TRADER_SEED_BAR_MAX_RETRIES
+              value: "5"
+            - name: GO_TRADER_EVENT_DRIVEN_AUTO_TRADE
+              value: "true"
+            - name: GO_TRADER_EVENT_EVAL_INTERVAL_SECS
+              value: "1"
+            - name: GO_TRADER_EVENT_EVAL_INTERVAL_MS
+              value: "250"
+            - name: GO_TRADER_EVENT_ORDER_COOLDOWN_SECS
+              value: "15"
+            - name: GO_TRADER_EVENT_ORDER_COOLDOWN_MS
+              value: "1000"
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - secretRef:
+                name: go-trader-secrets
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /api/cartography
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/cartography
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - name: audit-data
+              mountPath: /app/data
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: audit-data
+          persistentVolumeClaim:
+            claimName: go-trader-audit-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: go-trader-audit-data
+  namespace: rileyseaburg
+  labels:
+    app.kubernetes.io/name: go-trader
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-trader
+  namespace: rileyseaburg
+  labels:
+    app.kubernetes.io/name: go-trader
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: go-trader
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

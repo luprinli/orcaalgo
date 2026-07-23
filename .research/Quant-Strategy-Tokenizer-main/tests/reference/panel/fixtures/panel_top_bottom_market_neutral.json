@@ -1,0 +1,51 @@
+{
+  "artifact_version": "qst-v04-panel-fixture/0.1",
+  "case": "panel_top_bottom_market_neutral",
+  "long_short_selection": {
+    "long_symbols": ["BTC/USDT"],
+    "selection_kind": "long_short",
+    "short_symbols": ["ADA/USDT"],
+    "source": {
+      "long_from": "panel.top_k",
+      "short_from": "panel.bottom_k"
+    },
+    "universe_ref": "tests/reference/panel/fixtures/top_bottom_universe.json"
+  },
+  "panel": {
+    "rows": [
+      {
+        "in_universe": true,
+        "symbol": "ADA/USDT",
+        "timestamp": "t1",
+        "value": "0"
+      },
+      {
+        "in_universe": true,
+        "symbol": "BTC/USDT",
+        "timestamp": "t1",
+        "value": "3"
+      },
+      {
+        "in_universe": true,
+        "symbol": "ETH/USDT",
+        "timestamp": "t1",
+        "value": "2"
+      },
+      {
+        "in_universe": true,
+        "symbol": "SOL/USDT",
+        "timestamp": "t1",
+        "value": "1"
+      },
+      {
+        "in_universe": false,
+        "symbol": "XRP/USDT",
+        "timestamp": "t1",
+        "value": null
+      }
+    ]
+  },
+  "params": {
+    "k": 1
+  }
+}

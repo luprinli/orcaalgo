@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_decision_0_4.schema.json",
+  "title": "QST Decision v0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "reasons"],
+  "properties": {
+    "schema_version": { "const": "qst-decision/0.4" },
+    "kind": { "enum": ["accept", "reject", "unknown", "block"] },
+    "reasons": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "score": {
+      "anyOf": [
+        { "type": "string", "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]*[1-9])?$" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

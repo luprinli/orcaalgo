@@ -1,0 +1,60 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-grid-trading-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "grid_setup"
+      token_ref:
+        token_id: "data.grid_levels"
+        version: ">=1.0"
+      params:
+        grid_levels: 5
+        grid_spacing_pct: 1.0
+    - id: "grid_signal"
+      token_ref:
+        token_id: "signal.grid_cross"
+        version: ">=1.0"
+      inputs:
+        levels: "grid_setup.levels"
+      params:
+        take_profit_pct: 0.5
+        max_open: 10
+        position_scale: 1.0
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "grid_signal.signal"
+      params:
+        blocked_states: [3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 10
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware
+  - sentiment_gated

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GOT Book : {{.symbol}}</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/book.css">
+    <script>
+        var symbol ={{.symbol}}
+    </script>
+    <script language="JavaScript" src="/assets/js/book.js"></script>
+</head>
+<body onload="connect()">
+Order Book : <b>{{.symbol}}</b><br><hr>
+<div id="book" class="book"></div>
+</body>
+</html>

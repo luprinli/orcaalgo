@@ -1,0 +1,7 @@
+golden_task:
+  id: "03_bollinger_mean_reversion"
+  name: "Bollinger mean reversion skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "supported"

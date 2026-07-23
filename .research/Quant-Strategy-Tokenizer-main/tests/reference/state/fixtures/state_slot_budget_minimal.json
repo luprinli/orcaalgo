@@ -1,0 +1,9 @@
+{
+  "artifact_version": "qst-v04-state-fixture/0.1",
+  "case": "state_slot_budget_minimal",
+  "events": [],
+  "params": {
+    "budget": 2
+  },
+  "values": [1, 1, 1, 1]
+}

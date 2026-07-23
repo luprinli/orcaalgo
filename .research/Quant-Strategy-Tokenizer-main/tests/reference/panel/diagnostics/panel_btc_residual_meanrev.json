@@ -1,0 +1,7 @@
+{
+  "artifact_version": "qst-v04-panel-expected-diagnostics/0.1",
+  "case": "panel_btc_residual_meanrev",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:5467583cc3d044a5c0394463385c37cf72e462e9a3d84fb0c3013b66566e3a70",
+  "strategy": "panel_btc_residual_meanrev"
+}

@@ -1,0 +1,34 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core, panel_type, panel_weights]
+strategy:
+  id: 10_volatility_target_weight
+  version: 1
+  nodes:
+  - id: vol_target
+    token_ref: {namespace: core, name: risk.volatility_target, version: 1, behavior_version: 1}
+    inputs: {weights: $externals.weights.raw, volatility: $externals.panel.volatility}
+    params: {target_volatility: "0.15"}
+    signature:
+      inputs:
+        weights: {type: "Panel[decimal]"}
+        volatility: {type: "Panel[float]"}
+      outputs:
+        weights: {type: "Panel[decimal]"}
+    metadata:
+      panel_type_by_output:
+        weights:
+          kind: weight_panel
+          universe_mask:
+            universe_ref: examples/universe/vol_target.json
+            members: [BTC/USDT, ETH/USDT, SOL/USDT]
+            included: [BTC/USDT, ETH/USDT, SOL/USDT]
+          missing_policy: {kind: error_on_missing}
+          weight_panel:
+            weight_kind: raw
+            weights_ref: examples/weights/vol_target.json
+            weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  outputs: {weights: vol_target.weights}
+metadata: {}
+

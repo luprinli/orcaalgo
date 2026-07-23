@@ -1,0 +1,47 @@
+version: 1
+profile_id: default
+asset_class_filters:
+  equity:
+    min_notional_volume: 50000000
+    min_price: 5.0
+    max_price: 5000.0
+    min_market_cap: 500000000000
+    min_atr_percent: 0.5
+    max_atr_percent: 5.0
+    min_rsi: 25
+    max_rsi: 75
+  forex:
+    min_notional_volume: 100000000
+    min_atr_percent: 0.3
+    max_atr_percent: 3.0
+    min_rsi: 20
+    max_rsi: 80
+  crypto:
+    min_notional_volume: 10000000
+    min_price: 1.0
+    max_price: 100000.0
+    min_atr_percent: 1.0
+    max_atr_percent: 8.0
+    min_rsi: 20
+    max_rsi: 80
+  index:
+    min_notional_volume: 1000000000
+    min_price: 100.0
+    min_atr_percent: 0.3
+    max_atr_percent: 4.0
+    min_rsi: 25
+    max_rsi: 75
+  commodity:
+    min_notional_volume: 50000000
+    min_price: 10.0
+    min_atr_percent: 0.5
+    max_atr_percent: 5.0
+    min_rsi: 20
+    max_rsi: 80
+dynamic_triggers:
+  volume_spike_multiplier: 2.5
+  volatility_multiplier: 2.0
+  news_sentiment_abs_min: 0.7
+  min_lookback_days: 20
+  cooldown_hours_after_add: 48
+  cooldown_hours_after_remove: 24

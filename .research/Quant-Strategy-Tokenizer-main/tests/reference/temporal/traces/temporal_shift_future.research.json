@@ -1,0 +1,34 @@
+{
+  "artifact_version": "qst-v04-temporal-validation-trace/0.1",
+  "diagnostics": [
+    {
+      "code": "QST_V2_TEMPORAL_UNSAFE_FUTURE",
+      "message": "Output declares unsafe future data.",
+      "node_id": "shift_future",
+      "phase": "temporal",
+      "port": "value",
+      "profile": "research",
+      "remediation": "Adjust port_temporal, temporal_rule, or profile.",
+      "severity": "warning"
+    }
+  ],
+  "expected_artifact_hash": "sha256:de782e9fe73579e0383b3c61b3f0ca0437cdf1a39cbd33612f246bdcf4c0bd15",
+  "profile": "research",
+  "resolved_outputs": {
+    "shift_future.value": {
+      "available_at": "bar_close",
+      "latency_bars": 0,
+      "min_history_bars": 0,
+      "schema_version": "qst-port-temporal/0.4",
+      "unsafe_future": true
+    },
+    "source.close": {
+      "available_at": "bar_close",
+      "latency_bars": 0,
+      "min_history_bars": 0,
+      "schema_version": "qst-port-temporal/0.4",
+      "unsafe_future": false
+    }
+  },
+  "strategy": "pv_c_temporal_shift_future"
+}

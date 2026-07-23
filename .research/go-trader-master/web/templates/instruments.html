@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GOT Exchange Web Interface</title>
+    <link rel="stylesheet" type="text/css" href="/assets/css/common.css">
+</head>
+<body>
+Welcome to the GOT web interface...<br>
+<table><th>Symbol</th><th>Bid Qty</th><th>Bid Price</th><th>Ask Price</th><th>Ask Qty</th><th>Volume</th><th>Low</th><th>High</th>
+{{range .Stats}}
+        <tr>
+            <td>
+                <a href="" onclick="showBook('{{.Symbol}}')">{{.Symbol}}</a><br>
+            </td>
+            <td>
+                {{if .BidQty.IsZero}}{{else}}{{.BidQty}}{{end}}
+            </td>
+            <td>
+                {{if .BidQty.IsZero}}{{else}}{{.BidPrice}}{{end}}
+            </td>
+            <td>
+                {{if .AskQty.IsZero}}{{else}}{{.AskPrice}}{{end}}
+            </td>
+            <td>
+                {{if .AskQty.IsZero}}{{else}}{{.AskQty}}{{end}}
+            </td>
+            <td>
+                {{.Volume}}
+            </td>
+            <td>
+                {{if .HasHighLow}}{{.Low}}{{end}}
+            </td>
+            <td>
+                {{if .HasHighLow}}{{.High}}{{end}}
+            </td>
+        </tr>
+{{end}}
+</table>
+</body>
+<script>
+    function showBook(symbol) {
+        window.open("/book?symbol="+symbol,symbol,"height=400,width=300");
+    }
+</script>
+</html>

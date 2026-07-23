@@ -1,0 +1,40 @@
+version: 1
+symbols:
+  - ticker: EURUSD
+    asset_class: forex
+  - ticker: GBPUSD
+    asset_class: forex
+  - ticker: USDJPY
+    asset_class: forex
+  - ticker: USDCHF
+    asset_class: forex
+  - ticker: AUDUSD
+    asset_class: forex
+  - ticker: USDCAD
+    asset_class: forex
+  - ticker: NZDUSD
+    asset_class: forex
+  - ticker: US30
+    asset_class: index
+  - ticker: SPX500
+    asset_class: index
+  - ticker: NAS100
+    asset_class: index
+  - ticker: UK100
+    asset_class: index
+  - ticker: GER40
+    asset_class: index
+  - ticker: JPN225
+    asset_class: index
+  - ticker: XAUUSD
+    asset_class: commodity
+  - ticker: XAGUSD
+    asset_class: commodity
+  - ticker: USOIL
+    asset_class: commodity
+  - ticker: UKOIL
+    asset_class: commodity
+  - ticker: BTCUSD
+    asset_class: crypto
+  - ticker: ETHUSD
+    asset_class: crypto

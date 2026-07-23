@@ -1,0 +1,27 @@
+{
+  "artifact_version": "qst-v04-temporal-validation-trace/0.1",
+  "diagnostics": [
+    {
+      "code": "QST_V2_TEMPORAL_UNSAFE_FUTURE",
+      "message": "Output declares unsafe future data.",
+      "node_id": "centered_window",
+      "phase": "temporal",
+      "port": "value",
+      "profile": "pretrade",
+      "remediation": "Adjust port_temporal, temporal_rule, or profile.",
+      "severity": "error"
+    }
+  ],
+  "expected_artifact_hash": "sha256:66c16f00dbeab0470e063b30ef5e3bb59b72ab6addc0e37e19adfd27c275221b",
+  "profile": "pretrade",
+  "resolved_outputs": {
+    "centered_window.value": {
+      "available_at": "bar_close",
+      "latency_bars": 0,
+      "min_history_bars": 5,
+      "schema_version": "qst-port-temporal/0.4",
+      "unsafe_future": true
+    }
+  },
+  "strategy": "pv_c_temporal_centered_window"
+}

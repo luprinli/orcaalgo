@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/execution_report.schema.json",
+  "title": "QST ExecutionReport Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifact_version",
+    "event_type",
+    "state",
+    "qty_intended",
+    "qty_last",
+    "qty_filled",
+    "qty_remaining",
+    "source_protocol",
+    "venue"
+  ],
+  "properties": {
+    "artifact_version": {"const": "qst-execution-report/1"},
+    "artifact_id": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "provenance": {"$ref": "artifact_base.schema.json#/$defs/ProvenanceChain"},
+    "metadata": {"type": "object"},
+    "raw_payload_ref": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/POSIXRelativePath"}, {"type": "null"}]},
+    "raw_payload_hash": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "event_type": {"enum": ["new", "trade", "cancel", "replace", "reject", "expire"]},
+    "state": {
+      "enum": [
+        "pending_new",
+        "acknowledged",
+        "partially_filled",
+        "filled",
+        "cancelled",
+        "rejected",
+        "expired"
+      ]
+    },
+    "qty_intended": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "qty_last": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "qty_filled": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "qty_remaining": {"$ref": "artifact_base.schema.json#/$defs/DecimalString"},
+    "last_fill_price": {
+      "anyOf": [{"$ref": "artifact_base.schema.json#/$defs/DecimalString"}, {"type": "null"}]
+    },
+    "avg_fill_price": {
+      "anyOf": [{"$ref": "artifact_base.schema.json#/$defs/DecimalString"}, {"type": "null"}]
+    },
+    "time_in_force": {"enum": ["gtc", "ioc", "fok", "day", "post_only", null]},
+    "reject_reason": {"type": ["string", "null"]},
+    "cancel_reason": {"type": ["string", "null"]},
+    "liquidity_side": {"enum": ["maker", "taker", "unknown", null]},
+    "source_protocol": {"type": "string"},
+    "source_system": {"type": ["string", "null"]},
+    "venue": {"type": "string"}
+  }
+}

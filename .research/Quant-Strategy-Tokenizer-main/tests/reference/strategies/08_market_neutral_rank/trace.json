@@ -1,0 +1,11 @@
+{
+  "artifact_version": "qst-stage3a-demo-trace/0.1",
+  "case": "08_market_neutral_rank",
+  "trace_kind": "panel_weight_token_surface",
+  "token_path": [
+    "core.panel.rank",
+    "core.panel.top_k",
+    "core.selection.to_weights",
+    "core.weight.market_neutral"
+  ]
+}

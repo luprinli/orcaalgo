@@ -1,0 +1,31 @@
+golden_task:
+  id: "01_ema_cross"
+  name: "EMA cross supported strategy"
+  target_profile: "research"
+  intent:
+    description: "Build a simple EMA cross signal with validation and hash evidence."
+    signal:
+      required_indicators: ["indicator.ema"]
+      required_transforms: ["signal.cross_above", "signal.cross_below"]
+    decision:
+      kind: "accepted_decision_bridge"
+  expected:
+    classification: "supported"
+    required_token_families: ["indicator", "signal", "decision"]
+    expected_missing_tokens: []
+    expected_missing_types: []
+    validation_outcome: "valid_gkr"
+    hash_required: true
+    custom_token_route_required: false
+    reserved_rejection_required: false
+    non_goal_rejection_required: false
+  forbidden_behavior:
+    - "invent_ema_token"
+    - "skip_validation"
+    - "claim_runtime_execution"
+  acceptance:
+    no_nonexistent_tokens: true
+    no_reserved_executable_tokens: true
+    validate_command_required: true
+    hash_command_required_if_valid: true
+    residual_risk_report_required: true

@@ -1,0 +1,11 @@
+{
+  "artifact_version": "qst-stage3a-demo-trace/0.1",
+  "case": "12_custom_token_kalman_signal",
+  "trace_kind": "custom_token_surface",
+  "token_path": [
+    "my_pack.kalman_ema",
+    "core.data.shift",
+    "core.compare.gt",
+    "core.decision.lift_bool"
+  ]
+}

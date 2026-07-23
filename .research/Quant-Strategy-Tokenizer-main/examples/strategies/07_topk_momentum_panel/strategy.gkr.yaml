@@ -1,0 +1,31 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core, panel_type, panel_ops]
+strategy:
+  id: 07_topk_momentum_panel
+  version: 1
+  nodes:
+  - id: momentum_rank
+    token_ref: {namespace: core, name: panel.rank, version: 1, behavior_version: 1}
+    inputs: {panel: $externals.panel.momentum}
+    params: {order: descending}
+    signature: {outputs: {ranked: {type: "Panel[int]"}}}
+    metadata:
+      panel_type_by_output:
+        ranked: &panel_type
+          kind: panel
+          universe_mask:
+            universe_ref: examples/universe/topk.json
+            members: [BTC/USDT, ETH/USDT, SOL/USDT]
+            included: [BTC/USDT, ETH/USDT, SOL/USDT]
+          missing_policy: {kind: error_on_missing}
+  - id: select_top
+    token_ref: {namespace: core, name: panel.top_k, version: 1, behavior_version: 1}
+    inputs: {panel: momentum_rank.ranked}
+    params: {k: 2}
+    signature: {outputs: {selection: {type: "Panel[bool]"}}}
+    metadata: {panel_type_by_output: {selection: *panel_type}}
+  outputs: {selection: select_top.selection}
+metadata: {}
+

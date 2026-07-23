@@ -1,0 +1,29 @@
+{
+  "artifact_version": "qst-v04-custom-token-expected-diagnostics/0.1",
+  "case": "custom_token_kalman",
+  "diagnostics": [
+    {
+      "code": "QST_V2_RUNTIME_ENVIRONMENT_RECORDED_ONLY",
+      "message": "Runtime environment is recorded but not replayable.",
+      "node_id": null,
+      "phase": "package",
+      "port": null,
+      "profile": null,
+      "remediation": null,
+      "severity": "warning"
+    },
+    {
+      "code": "QST_V2_CUSTOM_TOKEN_RISK_VISIBLE",
+      "message": "Custom token risk=medium.",
+      "node_id": null,
+      "phase": "profile",
+      "port": null,
+      "profile": null,
+      "remediation": null,
+      "severity": "warning"
+    }
+  ],
+  "expected_artifact_hash": "sha256:dc385a46756586ed9ee06127b7fd6a253a0effd8ec5fdd3b0d62e97717550fa0",
+  "profile": "pretrade",
+  "strategy": "custom_token_kalman"
+}

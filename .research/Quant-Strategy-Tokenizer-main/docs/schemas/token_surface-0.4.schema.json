@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_token_surface_0_4.schema.json",
+  "title": "QST Token Surface 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "family",
+    "category",
+    "layer",
+    "maturity",
+    "execution_support",
+    "contract",
+    "capabilities",
+    "agent_metadata"
+  ],
+  "properties": {
+    "schema_version": {"const": "qst-token-surface/0.4"},
+    "family": {
+      "enum": [
+        "math", "bool", "compare", "data", "time", "align", "window", "signal",
+        "indicator", "factor", "decision", "gate", "state", "panel", "weight", "risk",
+        "optimizer", "execution", "event", "distribution", "continuous_score"
+      ]
+    },
+    "category": {"type": "string", "minLength": 1},
+    "layer": {"enum": ["primitive", "derived", "recipe", "custom", "external"]},
+    "maturity": {
+      "enum": ["accepted", "experimental", "reserved_design", "frozen", "deprecated"]
+    },
+    "execution_support": {
+      "enum": ["metadata_only", "reference_helper", "runtime_executor", "external_only"]
+    },
+    "contract": {"$ref": "#/$defs/contract"},
+    "capabilities": {"$ref": "#/$defs/capabilities"},
+    "agent_metadata": {"$ref": "#/$defs/agent_metadata"}
+  },
+  "$defs": {
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope", "temporal", "numeric", "missing_data", "failure_mode",
+        "state", "panel", "solver", "supported_profiles"
+      ],
+      "properties": {
+        "scope": {"enum": ["validation_only", "reference_semantics", "execution_semantics"]},
+        "temporal": {"type": "string", "minLength": 1},
+        "numeric": {"type": "string", "minLength": 1},
+        "missing_data": {"type": "string", "minLength": 1},
+        "failure_mode": {"type": "string", "minLength": 1},
+        "state": {"type": ["string", "null"]},
+        "panel": {"type": ["string", "null"]},
+        "solver": {"oneOf": [{"$ref": "#/$defs/solver"}, {"type": "null"}]},
+        "supported_profiles": {
+          "type": "array",
+          "items": {"enum": ["research", "paper", "pretrade", "production_guarded"]}
+        }
+      }
+    },
+    "solver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["solver_required", "deterministic_contract", "bit_exact_claim"],
+      "properties": {
+        "solver_required": {"type": "boolean"},
+        "deterministic_contract": {"type": "string"},
+        "bit_exact_claim": {"type": "boolean"}
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stateful", "panel_aware", "solver_backed", "external_code",
+        "reserved_only", "deterministic_level"
+      ],
+      "properties": {
+        "stateful": {"type": "boolean"},
+        "panel_aware": {"type": "boolean"},
+        "solver_backed": {"type": "boolean"},
+        "external_code": {"type": "boolean"},
+        "reserved_only": {"type": "boolean"},
+        "deterministic_level": {
+          "enum": [
+            "reference_exact", "semantic_float64", "annotation_only",
+            "external", "reserved"
+          ]
+        }
+      }
+    },
+    "agent_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["examples", "common_mistakes", "usage_notes", "profile_caveats"],
+      "properties": {
+        "examples": {"type": "array", "items": {"type": "string"}},
+        "common_mistakes": {"type": "array", "items": {"type": "string"}},
+        "usage_notes": {"type": "array", "items": {"type": "string"}},
+        "profile_caveats": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

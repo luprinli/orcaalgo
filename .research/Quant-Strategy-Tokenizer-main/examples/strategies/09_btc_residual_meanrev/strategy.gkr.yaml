@@ -1,0 +1,63 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core, panel_type, panel_ops, panel_weights]
+strategy:
+  id: 09_btc_residual_meanrev
+  version: 1
+  nodes:
+  - id: residual
+    token_ref: {namespace: core, name: panel.residualize, version: 1, behavior_version: 1}
+    inputs: {panel: $externals.panel.returns, factor: $externals.factor.btc}
+    params: {min_observations: 3}
+    signature: {outputs: {panel: {type: "Panel[float]"}}}
+    metadata:
+      panel_type_by_output:
+        panel: &panel_type
+          kind: panel
+          universe_mask:
+            universe_ref: examples/universe/residual.json
+            members: [ETH/USDT, SOL/USDT, BNB/USDT]
+            included: [ETH/USDT, SOL/USDT, BNB/USDT]
+          missing_policy: {kind: error_on_missing}
+  - id: zscore
+    token_ref: {namespace: core, name: panel.zscore, version: 1, behavior_version: 1}
+    inputs: {panel: residual.panel}
+    params: {}
+    signature: {outputs: {panel: {type: "Panel[float]"}}}
+    metadata: {panel_type_by_output: {panel: *panel_type}}
+  - id: bottom
+    token_ref: {namespace: core, name: panel.bottom_k, version: 1, behavior_version: 1}
+    inputs: {panel: zscore.panel}
+    params: {k: 2}
+    signature: {outputs: {selection: {type: "Panel[bool]"}}}
+    metadata: {panel_type_by_output: {selection: *panel_type}}
+  - id: weights
+    token_ref: {namespace: core, name: selection.to_weights, version: 1, behavior_version: 1}
+    inputs: {selection: bottom.selection}
+    params: {method: equal_long}
+    signature: {outputs: {weights: {type: "Panel[decimal]"}}}
+    metadata:
+      panel_type_by_output:
+        weights: &weight_type
+          kind: weight_panel
+          universe_mask:
+            universe_ref: examples/universe/residual.json
+            members: [ETH/USDT, SOL/USDT, BNB/USDT]
+            included: [ETH/USDT, SOL/USDT, BNB/USDT]
+          missing_policy: {kind: error_on_missing}
+          weight_panel:
+            weight_kind: raw
+            weights_ref: examples/weights/residual_raw.json
+            weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  - id: normalized
+    token_ref: {namespace: core, name: weight.normalize_gross, version: 1, behavior_version: 1}
+    inputs: {weights: weights.weights}
+    params: {target_gross: "1"}
+    signature:
+      inputs: {weights: {type: "Panel[decimal]"}}
+      outputs: {weights: {type: "Panel[decimal]"}}
+    metadata: {panel_type_by_output: {weights: *weight_type}}
+  outputs: {weights: normalized.weights}
+metadata: {}
+

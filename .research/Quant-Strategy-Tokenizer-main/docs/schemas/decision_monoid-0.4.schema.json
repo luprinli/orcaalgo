@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_decision_monoid_0_4.schema.json",
+  "title": "QST Decision Monoid v0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "monoid_id", "identity", "priority"],
+  "properties": {
+    "schema_version": { "const": "qst-decision-monoid/0.4" },
+    "monoid_id": {
+      "enum": ["decision.unknown_propagating_and", "decision.any_accept"]
+    },
+    "identity": { "enum": ["accept", "reject", "unknown", "block"] },
+    "priority": {
+      "type": "array",
+      "items": { "enum": ["accept", "reject", "unknown", "block"] },
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true
+    },
+    "score_policy": {
+      "anyOf": [{ "enum": ["max_annotation"] }, { "type": "null" }]
+    }
+  }
+}

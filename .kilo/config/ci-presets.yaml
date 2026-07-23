@@ -1,0 +1,41 @@
+# CI Presets — Pre-configured CI run modes
+
+presets:
+  quick:  # < 2 min, for rapid iteration before commit
+    - lint-python
+    - lint-go
+    - lint-web
+
+  standard:  # < 10 min, for pull request validation
+    - lint-python
+    - lint-go
+    - lint-web
+    - test-python
+    - test-go
+    - test-related
+    - anti-pattern-scan
+    - gkr-validate
+
+  full:  # < 30 min, for merges to main branch
+    - lint-python
+    - lint-go
+    - lint-odin
+    - lint-web
+    - test-python
+    - test-go
+    - test-odin
+    - build-web
+    - e2e
+    - gkr-validate
+    - anti-pattern-scan
+    - guardian
+    - coverage-gate
+    - security
+
+  pre-deploy:  # < 15 min, before production deployment
+    - preflight
+    - calibrate
+    - kill-switch-e2e
+    - config-hash-verify
+    - balance-reconcile
+    - dependency-audit

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_token_evolution_policy_0_4.schema.json",
+  "title": "QST Token Evolution Policy 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "behavior_version_never_silent",
+    "output_changing_bugfix_bumps_behavior_version",
+    "old_behavior_version_remains_verifiable",
+    "known_bug_emits_audit_warning",
+    "deprecated_emits_audit_warning",
+    "new_recipes_may_default_to_deprecated",
+    "blocked_token_hard_error_profiles"
+  ],
+  "properties": {
+    "schema_version": {"const": "qst-token-evolution-policy/0.4"},
+    "behavior_version_never_silent": {"type": "boolean"},
+    "output_changing_bugfix_bumps_behavior_version": {"type": "boolean"},
+    "old_behavior_version_remains_verifiable": {"type": "boolean"},
+    "known_bug_emits_audit_warning": {"type": "boolean"},
+    "deprecated_emits_audit_warning": {"type": "boolean"},
+    "new_recipes_may_default_to_deprecated": {"type": "boolean"},
+    "blocked_token_hard_error_profiles": {
+      "type": "array",
+      "items": {"enum": ["research", "paper", "pretrade", "production_guarded"]}
+    }
+  }
+}

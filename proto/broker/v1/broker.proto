@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package broker.v1;
+
+option go_package = "github.com/lee-econ/orca-core/proto/broker/v1;brokerv1";
+
+service BrokerService {
+    rpc PlaceOrder(PlaceOrderRequest) returns (PlaceOrderResponse);
+    rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse);
+    rpc GetPositions(GetPositionsRequest) returns (GetPositionsResponse);
+    rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+    rpc StreamMarketData(StreamRequest) returns (stream Tick);
+}
+
+message PlaceOrderRequest {
+    string symbol = 1;
+    string side = 2;
+    string order_type = 3;
+    double quantity = 4;
+    uint64 limit_price = 5;
+    uint64 stop_price = 6;
+    string time_in_force = 7;
+}
+
+message PlaceOrderResponse {
+    string order_id = 1;
+    string status = 2;
+    uint64 filled_price = 3;
+    double filled_quantity = 4;
+    string error = 5;
+}
+
+message CancelOrderRequest {
+    string order_id = 1;
+    string symbol = 2;
+}
+
+message CancelOrderResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+message GetPositionsRequest {}
+
+message GetPositionsResponse {
+    repeated Position positions = 1;
+}
+
+message Position {
+    string symbol = 1;
+    double quantity = 2;
+    uint64 average_entry_price = 3;
+    uint64 mark_price = 4;
+    double unrealized_pnl = 5;
+    double realized_pnl = 6;
+}
+
+message GetAccountRequest {}
+
+message GetAccountResponse {
+    double balance = 1;
+    double equity = 2;
+    double buying_power = 3;
+    double daily_pnl = 4;
+}
+
+message StreamRequest {
+    repeated string symbols = 1;
+}
+
+message Tick {
+    string symbol = 1;
+    int64 timestamp_ns = 2;
+    uint64 price_raw = 3;
+    uint64 volume_raw = 4;
+}

@@ -1,0 +1,38 @@
+market: &market csi500
+
+model:
+  class: LGBModel
+  module_path: qlib.contrib.model.gbdt
+  kwargs:
+    loss: mse
+    learning_rate: 0.05
+
+dataset:
+  class: DatasetH
+  module_path: qlib.data.dataset
+  kwargs:
+    handler:
+      class: Alpha158
+      module_path: qlib.contrib.data.handler
+      kwargs:
+        start_time: 2016-01-01
+        end_time: 2020-12-31
+        instruments: *market
+        learn_processors:
+          - class: LocalOutlierClipper
+            module_path: local_research.processors
+            kwargs:
+              zmax: 6.0
+        infer_processors:
+          - class: Fillna
+            module_path: qlib.data.dataset.processor
+            kwargs: {}
+    segments:
+      train: [2016-01-01, 2018-12-31]
+      valid: [2019-01-01, 2019-12-31]
+      test: [2020-01-01, 2020-12-31]
+
+record:
+  - class: SignalRecord
+    module_path: qlib.workflow.record_temp
+    kwargs: {}

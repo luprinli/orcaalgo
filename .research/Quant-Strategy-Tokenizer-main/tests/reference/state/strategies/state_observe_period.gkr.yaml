@@ -1,0 +1,47 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: state_observe_period
+  version: 1
+  nodes:
+    - id: observed_count
+      token_ref:
+        namespace: core
+        name: state.accumulate
+        version: 1
+        behavior_version: 1
+      params:
+        reducer: count
+      signature:
+        inputs:
+          x:
+            type: TimeSeries[object]
+        outputs:
+          y:
+            type: TimeSeries[int]
+    - id: observe_fsm
+      token_ref:
+        namespace: core
+        name: state.fsm
+        version: 1
+        behavior_version: 1
+      inputs:
+        event: observed_count.y
+      params:
+        recipe: observe_period
+      signature:
+        inputs:
+          event:
+            type: EventStream[string]
+        outputs:
+          state:
+            type: State[string]
+  outputs:
+    state: observe_fsm.state
+metadata:
+  reference_validation: state-reference
+  reference_case: state_observe_period
+  fixture: tests/reference/state/fixtures/state_observe_period.json

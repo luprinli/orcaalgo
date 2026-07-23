@@ -1,0 +1,135 @@
+{
+  "attestation_kind": "local_tests_passed",
+  "contains_executable_code": true,
+  "embedded_token_policy": "spec_and_source",
+  "embeds_source": true,
+  "namespaces": [
+    "my_pack"
+  ],
+  "origin_tier": "user_local",
+  "pack_id": "qst-tokenpack-kalman",
+  "schema_version": "qst-token-pack/0.4",
+  "tokens": [
+    {
+      "attestation_kind": "local_tests_passed",
+      "behavior_version": 1,
+      "implementation_ref": {
+        "expected_hash": "sha256:1896b992d2824541f5ebdbd245631cf144c825515c1683d1b13c49090eddb762",
+        "kind": "source_tree",
+        "path": "src",
+        "python_entrypoint": "kalman_token:run",
+        "schema_version": "qst-implementation-ref/0.4"
+      },
+      "inputs": {
+        "series": {
+          "type": "TimeSeries[float]"
+        }
+      },
+      "lifecycle": {
+        "lifecycle": "active",
+        "schema_version": "qst-token-lifecycle/0.4"
+      },
+      "numeric_policy": {
+        "deterministic_level": "semantic",
+        "inf_policy": "reject",
+        "nan_policy": "reject",
+        "reduction_order": "fixed_input_order",
+        "representation": "float64",
+        "schema_version": "qst-numeric-policy/0.4"
+      },
+      "origin_tier": "user_local",
+      "outputs": {
+        "filtered": {
+          "type": "TimeSeries[float]"
+        }
+      },
+      "params_schema": {
+        "alpha": {
+          "default": 0.5,
+          "type": "number"
+        }
+      },
+      "purity": "pure",
+      "risk": {
+        "reasons": [
+          "executes local Python source_tree through python_entrypoint"
+        ],
+        "requires_approval": true,
+        "risk_level": "medium"
+      },
+      "surface": {
+        "agent_metadata": {
+          "common_mistakes": [
+            "Approval is local security state and is not portable with the token pack."
+          ],
+          "examples": [
+            "my_pack.kalman_ema/v1/bv1"
+          ],
+          "profile_caveats": [
+            "pretrade requires explicit approval and risk acknowledgement"
+          ],
+          "usage_notes": [
+            "External Python entrypoint execution is controlled by the custom runtime service."
+          ]
+        },
+        "capabilities": {
+          "deterministic_level": "external",
+          "external_code": true,
+          "panel_aware": false,
+          "reserved_only": false,
+          "solver_backed": false,
+          "stateful": true
+        },
+        "category": "custom_signal",
+        "contract": {
+          "failure_mode": "runtime_diagnostic",
+          "missing_data": "reject_or_declared_by_token",
+          "numeric": "semantic_float64",
+          "panel": null,
+          "scope": "execution_semantics",
+          "solver": null,
+          "state": "custom entrypoint internal state is not QST state.fsm",
+          "supported_profiles": [
+            "research",
+            "paper",
+            "pretrade",
+            "production_guarded"
+          ],
+          "temporal": "declared_by_ports"
+        },
+        "execution_support": "external_only",
+        "family": "signal",
+        "layer": "custom",
+        "maturity": "accepted",
+        "schema_version": "qst-token-surface/0.4"
+      },
+      "runtime_environment_ref": {
+        "dependency_token_pack_hashes": {},
+        "distribution_hashes": {},
+        "package_manager": {
+          "kind": "python"
+        },
+        "platform_marker": "any",
+        "python_version": "3",
+        "reproducibility_level": "environment_recorded",
+        "schema_version": "qst-runtime-environment-ref/0.4"
+      },
+      "schema_version": "qst-token-spec/0.4",
+      "tests": [
+        {
+          "case": "pv_d_kalman",
+          "fixture": "tests/reference/custom_token/kalman/fixtures/custom_token_kalman.research.json"
+        }
+      ],
+      "token_id": "my_pack.kalman_ema",
+      "token_ref": {
+        "behavior_version": 1,
+        "name": "kalman_ema",
+        "namespace": "my_pack",
+        "version": 1
+      },
+      "version": 1
+    }
+  ],
+  "version": "0.1.0"
+}

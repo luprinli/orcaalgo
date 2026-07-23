@@ -1,0 +1,10 @@
+{
+  "artifact_version": "qst-stage3a-demo-trace/0.1",
+  "case": "01_ema_cross",
+  "trace_kind": "scalar_time_series_token_surface",
+  "token_path": [
+    "core.indicator.ema",
+    "core.signal.cross_above",
+    "core.decision.lift_bool"
+  ]
+}

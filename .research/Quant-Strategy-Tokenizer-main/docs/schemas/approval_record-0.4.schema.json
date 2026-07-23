@@ -1,0 +1,35 @@
+{
+  "$id": "https://qst.dev/schemas/qst_approval_record_0_4.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "ack_risk": {"type": "boolean"},
+    "allow_token": {"type": "boolean"},
+    "approval_id": {"type": "string"},
+    "approved_by": {"type": "string"},
+    "approved_capabilities": {"items": {"type": "string"}, "type": "array"},
+    "approved_risk_level": {"type": "string"},
+    "implementation_ref_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "profile": {"enum": ["research", "paper", "pretrade", "production_guarded"], "type": "string"},
+    "runtime_environment_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "schema_version": {"const": "qst-approval-record/0.4"},
+    "scope": {"enum": ["project", "user"], "type": "string"},
+    "token_pack_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "token_ref": {"type": "object"},
+    "token_spec_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"}
+  },
+  "required": [
+    "schema_version",
+    "approval_id",
+    "token_ref",
+    "profile",
+    "approved_by",
+    "allow_token",
+    "ack_risk",
+    "token_spec_hash",
+    "token_pack_hash",
+    "implementation_ref_hash",
+    "runtime_environment_hash"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,19 @@
+{
+  "$id": "https://qst.dev/schemas/qst_implementation_ref_0_4.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "editable": {"type": "boolean"},
+    "distribution": {"type": "string"},
+    "expected_hash": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+    "kind": {
+      "enum": ["spec_only", "source_tree", "wheel", "sdist", "installed_distribution"],
+      "type": "string"
+    },
+    "path": {"type": "string"},
+    "python_entrypoint": {"type": "string"},
+    "schema_version": {"const": "qst-implementation-ref/0.4"}
+  },
+  "required": ["schema_version", "kind"],
+  "type": "object"
+}

@@ -1,0 +1,7 @@
+{
+  "artifact_version": "qst-v04-state-fixture/0.1",
+  "case": "state_cooldown",
+  "events": ["signal", "fill", "signal", "cooldown_expired", "signal"],
+  "params": {},
+  "values": []
+}

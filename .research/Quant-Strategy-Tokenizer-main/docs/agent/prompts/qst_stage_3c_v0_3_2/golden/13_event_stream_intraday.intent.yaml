@@ -1,0 +1,31 @@
+golden_task:
+  id: "13_event_stream_intraday"
+  name: "Intraday event-stream reaction strategy"
+  target_profile: "research"
+  intent:
+    description: "React to streaming order-book events and same-bar execution feedback."
+    external_requirements:
+      event_stream: true
+      hft_runtime: true
+      live_execution: false
+  expected:
+    classification: "reserved"
+    required_token_families: ["event", "state", "decision"]
+    expected_missing_tokens: ["event_stream_replay", "order_book_imbalance"]
+    expected_missing_types: ["EventStream"]
+    validation_outcome: "not_applicable"
+    hash_required: false
+    custom_token_route_required: false
+    reserved_rejection_required: true
+    non_goal_rejection_required: false
+  forbidden_behavior:
+    - "fake_eventstream_with_timeseries"
+    - "use_reserved_design_as_executable"
+    - "implement_hft_runtime"
+    - "claim_supported"
+  acceptance:
+    no_nonexistent_tokens: true
+    no_reserved_executable_tokens: true
+    validate_command_required: false
+    hash_command_required_if_valid: false
+    residual_risk_report_required: true

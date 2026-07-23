@@ -1,0 +1,57 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core, panel_type, panel_ops, panel_weights]
+strategy:
+  id: 08_market_neutral_rank
+  version: 1
+  nodes:
+  - id: rank
+    token_ref: {namespace: core, name: panel.rank, version: 1, behavior_version: 1}
+    inputs: {panel: $externals.panel.score}
+    params: {order: descending}
+    signature: {outputs: {ranked: {type: "Panel[int]"}}}
+    metadata:
+      panel_type_by_output:
+        ranked: &panel_type
+          kind: panel
+          universe_mask:
+            universe_ref: examples/universe/market_neutral.json
+            members: [BTC/USDT, ETH/USDT, SOL/USDT]
+            included: [BTC/USDT, ETH/USDT, SOL/USDT]
+          missing_policy: {kind: error_on_missing}
+  - id: top
+    token_ref: {namespace: core, name: panel.top_k, version: 1, behavior_version: 1}
+    inputs: {panel: rank.ranked}
+    params: {k: 1}
+    signature: {outputs: {selection: {type: "Panel[bool]"}}}
+    metadata: {panel_type_by_output: {selection: *panel_type}}
+  - id: weights
+    token_ref: {namespace: core, name: selection.to_weights, version: 1, behavior_version: 1}
+    inputs: {selection: top.selection}
+    params: {method: equal_long}
+    signature: {outputs: {weights: {type: "Panel[decimal]"}}}
+    metadata:
+      panel_type_by_output:
+        weights: &weight_type
+          kind: weight_panel
+          universe_mask:
+            universe_ref: examples/universe/market_neutral.json
+            members: [BTC/USDT, ETH/USDT, SOL/USDT]
+            included: [BTC/USDT, ETH/USDT, SOL/USDT]
+          missing_policy: {kind: error_on_missing}
+          weight_panel:
+            weight_kind: raw
+            weights_ref: examples/weights/raw.json
+            weights_hash: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  - id: neutral
+    token_ref: {namespace: core, name: weight.market_neutral, version: 1, behavior_version: 1}
+    inputs: {weights: weights.weights}
+    params: {target_gross: "1"}
+    signature:
+      inputs: {weights: {type: "Panel[decimal]"}}
+      outputs: {weights: {type: "Panel[decimal]"}}
+    metadata: {panel_type_by_output: {weights: *weight_type}}
+  outputs: {weights: neutral.weights}
+metadata: {}
+

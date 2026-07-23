@@ -1,0 +1,57 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-trend-following-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "ma_crossover"
+      token_ref:
+        token_id: "math.ema_crossover"
+        version: ">=1.0"
+      params:
+        fast_period: 20
+        slow_period: 50
+    - id: "atr_filter"
+      token_ref:
+        token_id: "indicator.atr"
+        version: ">=1.0"
+      inputs:
+        series: "ma_crossover.price"
+      params:
+        period: 14
+    - id: "trend_signal"
+      token_ref:
+        token_id: "signal.trend"
+        version: ">=1.0"
+      inputs:
+        crossover: "ma_crossover.signal"
+        atr: "atr_filter.atr"
+      params:
+        atr_multiplier: 2.0
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "trend_signal.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "trend_signal.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "trend_signal.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core

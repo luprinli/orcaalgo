@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/backtest_evidence.schema.json",
+  "title": "QST BacktestEvidence Artifact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["artifact_version", "strategy_instance_hash", "stats"],
+  "properties": {
+    "artifact_version": {"const": "qst-backtest-evidence/1"},
+    "artifact_id": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "provenance": {"$ref": "artifact_base.schema.json#/$defs/ProvenanceChain"},
+    "metadata": {"type": "object"},
+    "raw_payload_ref": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/POSIXRelativePath"}, {"type": "null"}]},
+    "raw_payload_hash": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "strategy_instance_hash": {"$ref": "artifact_base.schema.json#/$defs/Sha256"},
+    "market_frame_hash": {"anyOf": [{"$ref": "artifact_base.schema.json#/$defs/Sha256"}, {"type": "null"}]},
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_return", "num_trades"],
+      "properties": {
+        "total_return": {"type": "number"},
+        "num_trades": {"type": "integer", "minimum": 0},
+        "annual_return": {"type": ["number", "null"]},
+        "annual_volatility": {"type": ["number", "null"]},
+        "sharpe_ratio": {"type": ["number", "null"]},
+        "sortino_ratio": {"type": ["number", "null"]},
+        "max_drawdown": {"type": ["number", "null"]},
+        "calmar_ratio": {"type": ["number", "null"]},
+        "win_rate": {"type": ["number", "null"]},
+        "profit_factor": {"type": ["number", "null"]}
+      }
+    },
+    "equity_curve": {
+      "anyOf": [{"$ref": "artifact_base.schema.json#/$defs/ArtifactRef"}, {"type": "null"}]
+    },
+    "execution_reports": {
+      "type": "array",
+      "items": {"$ref": "artifact_base.schema.json#/$defs/ArtifactRef"}
+    },
+    "portfolio_snapshots": {
+      "type": "array",
+      "items": {"$ref": "artifact_base.schema.json#/$defs/ArtifactRef"}
+    }
+  }
+}

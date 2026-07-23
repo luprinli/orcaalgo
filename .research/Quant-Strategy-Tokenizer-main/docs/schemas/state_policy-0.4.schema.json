@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_state_policy_0_4.schema.json",
+  "title": "QST State Policy 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "warmup_policy",
+    "reset_policy",
+    "missing_event_policy",
+    "metadata"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "qst-state-policy/0.4"
+    },
+    "warmup_policy": {
+      "enum": ["emit_null", "emit_initial", "error"]
+    },
+    "reset_policy": {
+      "enum": ["never", "on_event"]
+    },
+    "missing_event_policy": {
+      "enum": ["error", "skip", "emit_null"]
+    },
+    "metadata": {
+      "type": "object"
+    }
+  }
+}

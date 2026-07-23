@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_ir_0_4.schema.json",
+  "title": "QST IR 0.4 Shell",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "ir_version", "canonical_version", "capabilities", "strategy", "metadata"],
+  "properties": {
+    "schema_version": {"const": "qst-ir-schema/0.4"},
+    "ir_version": {"const": "qst-ir/0.4"},
+    "canonical_version": {"const": "qst-canonical/0.4"},
+    "capabilities": {
+      "type": "array",
+      "contains": {"const": "core"},
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "core",
+          "panel_type",
+          "panel_ops",
+          "panel_weights",
+          "panel_recipes",
+          "custom_token_runtime"
+        ]
+      }
+    },
+    "strategy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "nodes", "outputs"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "nodes": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/node"}
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": {"type": "string"}
+        }
+      }
+    },
+    "metadata": {"type": "object"}
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputs", "params", "signature", "metadata"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "token": {"type": ["string", "null"]},
+        "version": {"type": ["integer", "null"], "minimum": 1},
+        "token_ref": {"oneOf": [{"$ref": "#/$defs/token_ref"}, {"type": "null"}]},
+        "inputs": {"type": "object"},
+        "params": {"type": "object"},
+        "signature": {"$ref": "#/$defs/port_signature"},
+        "metadata": {"type": "object"}
+      }
+    },
+    "token_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "version", "behavior_version"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "behavior_version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "type_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind"],
+      "properties": {
+        "schema_version": {"const": "qst-typespec/0.4"},
+        "kind": {
+          "enum": ["Scalar", "TimeSeries", "Panel", "Decision", "Plan", "State", "Event", "EventStream"]
+        },
+        "value_type": {
+          "enum": ["bool", "int", "float", "decimal", "string", "datetime", "json", "object"]
+        },
+        "intrinsic_temporal": {"$ref": "#/$defs/intrinsic_temporal"},
+        "axes": {"type": "array", "items": {"type": "string"}},
+        "universe": {"type": "object"},
+        "missing_policy": {"enum": ["unknown", "dense", "sparse"]},
+        "group_spec_ref": {"type": "string"},
+        "selection_kind": {"enum": ["none", "static", "dynamic", "weighted"]},
+        "weight_constraints": {"type": "object"},
+        "panel_capability_required": {"type": "boolean"}
+      }
+    },
+    "intrinsic_temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "default_available_at", "default_clock"],
+      "properties": {
+        "schema_version": {"const": "qst-typespec/0.4"},
+        "default_available_at": {"$ref": "#/$defs/available_at"},
+        "default_clock": {"enum": ["bar", "event", "none", "unknown"]}
+      }
+    },
+    "available_at": {
+      "enum": ["bar_open", "bar_close", "next_bar_open", "event_time", "unknown"]
+    },
+    "temporal_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "max_available_at", "allow_unsafe_future"],
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "max_available_at": {"$ref": "#/$defs/available_at"},
+        "allow_unsafe_future": {"type": "boolean"}
+      }
+    },
+    "port_temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "available_at", "latency_bars", "min_history_bars", "unsafe_future"],
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "available_at": {"$ref": "#/$defs/available_at"},
+        "latency_bars": {"type": "integer", "minimum": 0},
+        "min_history_bars": {"type": "integer", "minimum": 0},
+        "unsafe_future": {"type": "boolean"}
+      }
+    },
+    "input_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type"],
+      "properties": {
+        "schema_version": {"const": "qst-portspec/0.4"},
+        "type": {"$ref": "#/$defs/type_spec"},
+        "temporal_requirement": {"$ref": "#/$defs/temporal_requirement"}
+      }
+    },
+    "output_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type"],
+      "properties": {
+        "schema_version": {"const": "qst-portspec/0.4"},
+        "type": {"$ref": "#/$defs/type_spec"},
+        "port_temporal": {"$ref": "#/$defs/port_temporal"},
+        "temporal_rule": {"$ref": "#/$defs/temporal_rule"}
+      }
+    },
+    "temporal_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "kind"],
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "kind": {
+          "enum": [
+            "constant",
+            "inherit_from_input",
+            "param_value",
+            "param_max_floor",
+            "param_plus_constant",
+            "max_inputs",
+            "param_predicate",
+            "window_min_history",
+            "centered_window_unsafe"
+          ]
+        },
+        "value": {"$ref": "#/$defs/port_temporal"},
+        "input": {"type": "string"},
+        "inputs": {"type": "array", "items": {"type": "string"}},
+        "param": {"type": "string"},
+        "field": {
+          "enum": ["available_at", "latency_bars", "min_history_bars", "unsafe_future"]
+        },
+        "floor": {"type": "integer"},
+        "constant": {"type": "integer"},
+        "equals": {},
+        "when_true": {"$ref": "#/$defs/port_temporal"},
+        "when_false": {"$ref": "#/$defs/port_temporal"}
+      }
+    },
+    "port_signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "inputs", "outputs"],
+      "properties": {
+        "schema_version": {"const": "qst-portspec/0.4"},
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/input_spec"}
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/output_spec"}
+        }
+      }
+    }
+  }
+}

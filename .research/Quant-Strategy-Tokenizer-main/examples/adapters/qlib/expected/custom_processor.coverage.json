@@ -1,0 +1,84 @@
+{
+  "adapter": "qlib",
+  "backtest": null,
+  "classification": "partially_supported",
+  "dataset": {
+    "class_name": "DatasetH",
+    "handler_class": "Alpha158",
+    "handler_kwargs": {
+      "end_time": "2020-12-31",
+      "infer_processors": [
+        {
+          "class": "Fillna",
+          "kwargs": {},
+          "module_path": "qlib.data.dataset.processor"
+        }
+      ],
+      "instruments": "csi500",
+      "learn_processors": [
+        {
+          "class": "LocalOutlierClipper",
+          "kwargs": {
+            "zmax": 6.0
+          },
+          "module_path": "local_research.processors"
+        }
+      ],
+      "start_time": "2016-01-01"
+    },
+    "handler_module_path": "qlib.contrib.data.handler",
+    "module_path": "qlib.data.dataset",
+    "segments": {
+      "test": [
+        "2020-01-01",
+        "2020-12-31"
+      ],
+      "train": [
+        "2016-01-01",
+        "2018-12-31"
+      ],
+      "valid": [
+        "2019-01-01",
+        "2019-12-31"
+      ]
+    },
+    "support": "known"
+  },
+  "model": {
+    "class_name": "LGBModel",
+    "kwargs": {
+      "learning_rate": 0.05,
+      "loss": "mse"
+    },
+    "module_path": "qlib.contrib.model.gbdt",
+    "support": "known"
+  },
+  "records": [
+    {
+      "class_name": "SignalRecord",
+      "kwargs": {},
+      "module_path": "qlib.workflow.record_temp",
+      "support": "known"
+    }
+  ],
+  "source": "examples/adapters/qlib/workflow_config_custom_processor.yaml",
+  "strategy": null,
+  "tokenized_components": [
+    "data.qlib_dataset_record",
+    "feature.alpha158_record",
+    "model.forecast_model_record",
+    "record.signal_record"
+  ],
+  "unsupported_components": [
+    {
+      "kind": "custom_processor",
+      "name": "LocalOutlierClipper",
+      "reason": "Custom Qlib processor in learn_processors is recorded as opaque metadata."
+    }
+  ],
+  "warnings": [
+    "Qlib workflows are research/runtime configs.",
+    "This adapter imports record-layer structure only.",
+    "It does not train models, run qrun, run inference, or execute backtests."
+  ]
+}

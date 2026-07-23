@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_profile_policy_0_4.schema.json",
+  "title": "QST Profile Policy 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile",
+    "allow_unsafe_future",
+    "allow_external_read",
+    "allow_external_write",
+    "allow_unknown_numeric",
+    "allowed_capabilities"
+  ],
+  "properties": {
+    "schema_version": {"const": "qst-profile-policy/0.4"},
+    "profile": {"enum": ["research", "paper", "pretrade", "production_guarded"]},
+    "allow_unsafe_future": {"type": "boolean"},
+    "allow_external_read": {"type": "boolean"},
+    "allow_external_write": {"type": "boolean"},
+    "allow_unknown_numeric": {"type": "boolean"},
+    "allowed_capabilities": {
+      "type": "array",
+      "items": {"enum": ["core", "panel", "custom_token_runtime"]}
+    }
+  }
+}

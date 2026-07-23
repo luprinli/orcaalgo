@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_decision_aggregator_0_4.schema.json",
+  "title": "QST Decision Aggregator v0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "aggregator_id"],
+  "properties": {
+    "schema_version": { "const": "qst-decision-aggregator/0.4" },
+    "aggregator_id": {
+      "enum": ["decision.majority", "decision.weighted_vote", "decision.quorum"]
+    },
+    "score_policy": {
+      "enum": ["ignore", "weight_only", "score_times_weight"]
+    },
+    "unknown_policy": { "enum": ["abstain"] },
+    "missing_score_policy": { "enum": ["error", "abstain", "use_default"] },
+    "missing_weight_policy": { "enum": ["error", "use_one"] }
+  }
+}

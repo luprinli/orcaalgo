@@ -1,0 +1,39 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: pv_c_temporal_shift_future
+  version: 1
+  nodes:
+    - id: source
+      signature:
+        outputs:
+          close:
+            type: TimeSeries[float]
+            port_temporal:
+              available_at: bar_close
+    - id: shift_future
+      inputs:
+        series: source.close
+      params:
+        periods: -1
+      signature:
+        inputs:
+          series:
+            type: TimeSeries[float]
+        outputs:
+          value:
+            type: TimeSeries[float]
+            temporal_rule:
+              kind: param_predicate
+              param: periods
+              equals: -1
+              when_true:
+                unsafe_future: true
+              when_false: {}
+  outputs:
+    signal: shift_future.value
+metadata:
+  reference_validation: temporal-reference

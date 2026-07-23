@@ -1,0 +1,33 @@
+{
+  "description": "Environment guard configuration — controls which operations can run against live accounts.",
+  "protected_operations": [
+    "kill_switch_e2e",
+    "balance_reconciliation",
+    "place_order",
+    "cancel_all_orders",
+    "preflight_strict",
+    "deploy_gate",
+    "orca_calibrate",
+    "orca_simulate"
+  ],
+  "allowed_environments": {
+    "paper": {
+      "PAPER_TRADING": "true",
+      "description": "Paper trading — all operations allowed"
+    },
+    "staging": {
+      "ORCA_ENV": "staging",
+      "PAPER_TRADING": "true",
+      "description": "Staging environment — paper trading required"
+    },
+    "production": {
+      "ORCA_ENV": "production",
+      "description": "Production — requires ALLOW_LIVE_GUARD=explicit + --allow-live flag"
+    }
+  },
+  "warnings": [
+    "Never set ALLOW_LIVE_GUARD=explicit in shell profiles or .env files",
+    "Always verify account balance before and after live operations",
+    "The kill_switch_e2e operation will cancel ALL open orders — ensure paper trading mode"
+  ]
+}

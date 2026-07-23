@@ -1,0 +1,90 @@
+{
+  "artifact_version": "qst-v04-panel-fixture/0.1",
+  "case": "panel_btc_residual_meanrev",
+  "factor": {
+    "t1": "1",
+    "t2": "2",
+    "t3": "3"
+  },
+  "factor_symbol": "BTC/USDT",
+  "factor_symbol_tradable": false,
+  "panel": {
+    "rows": [
+      {
+        "in_universe": true,
+        "symbol": "ADA/USDT",
+        "timestamp": "t1",
+        "value": "2"
+      },
+      {
+        "in_universe": false,
+        "symbol": "BTC/USDT",
+        "timestamp": "t1",
+        "value": null
+      },
+      {
+        "in_universe": true,
+        "symbol": "ETH/USDT",
+        "timestamp": "t1",
+        "value": "1"
+      },
+      {
+        "in_universe": true,
+        "symbol": "SOL/USDT",
+        "timestamp": "t1",
+        "value": "1"
+      },
+      {
+        "in_universe": true,
+        "symbol": "ADA/USDT",
+        "timestamp": "t2",
+        "value": "1"
+      },
+      {
+        "in_universe": false,
+        "symbol": "BTC/USDT",
+        "timestamp": "t2",
+        "value": null
+      },
+      {
+        "in_universe": true,
+        "symbol": "ETH/USDT",
+        "timestamp": "t2",
+        "value": "2"
+      },
+      {
+        "in_universe": true,
+        "symbol": "SOL/USDT",
+        "timestamp": "t2",
+        "value": "1"
+      },
+      {
+        "in_universe": true,
+        "symbol": "ADA/USDT",
+        "timestamp": "t3",
+        "value": "1"
+      },
+      {
+        "in_universe": false,
+        "symbol": "BTC/USDT",
+        "timestamp": "t3",
+        "value": null
+      },
+      {
+        "in_universe": true,
+        "symbol": "ETH/USDT",
+        "timestamp": "t3",
+        "value": "1"
+      },
+      {
+        "in_universe": true,
+        "symbol": "SOL/USDT",
+        "timestamp": "t3",
+        "value": "2"
+      }
+    ]
+  },
+  "params": {
+    "k": 1
+  }
+}

@@ -1,0 +1,26 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 02_rsi_reversal
+  version: 1
+  nodes:
+  - id: rsi
+    token_ref: {namespace: core, name: indicator.rsi, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {window: 14}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: oversold
+    token_ref: {namespace: core, name: compare.lt, version: 1, behavior_version: 1}
+    inputs: {a: rsi.value, b: $externals.thresholds.rsi_oversold}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: oversold.value}
+    params: {accept_reason: rsi_oversold_reversal, reject_reason: no_reversal}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: decision.decision}
+metadata: {}
+

@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_token_spec_0_4.schema.json",
+  "title": "QST TokenSpec 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "token_id",
+    "token_ref",
+    "version",
+    "behavior_version",
+    "origin_tier",
+    "attestation_kind",
+    "inputs",
+    "outputs",
+    "params_schema",
+    "purity",
+    "state",
+    "numeric_policy",
+    "implementation_ref",
+    "runtime_environment_ref",
+    "lifecycle",
+    "risk",
+    "surface",
+    "tests",
+    "dependencies"
+  ],
+  "properties": {
+    "schema_version": {"const": "qst-token-spec/0.4"},
+    "token_id": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_.]*$"},
+    "token_ref": {"$ref": "#/$defs/token_ref"},
+    "version": {"type": "integer", "minimum": 1},
+    "behavior_version": {"type": "integer", "minimum": 1},
+    "origin_tier": {"$ref": "#/$defs/origin_tier"},
+    "attestation_kind": {"$ref": "#/$defs/attestation_kind"},
+    "inputs": {"type": "object"},
+    "outputs": {"type": "object"},
+    "params_schema": {"type": "object"},
+    "purity": {
+      "enum": ["pure", "contextual_read", "external_read", "external_write", "forbidden"]
+    },
+    "state": {"type": "object"},
+    "numeric_policy": {"$ref": "qst_numeric_policy_0_4.schema.json"},
+    "implementation_ref": {"oneOf": [{"type": "object"}, {"type": "null"}]},
+    "runtime_environment_ref": {"oneOf": [{"type": "object"}, {"type": "null"}]},
+    "lifecycle": {"$ref": "#/$defs/lifecycle"},
+    "risk": {"$ref": "#/$defs/risk"},
+    "surface": {"$ref": "token_surface-0.4.schema.json"},
+    "tests": {"type": "array", "items": {"type": "object"}},
+    "dependencies": {"type": "array", "items": {"$ref": "#/$defs/token_ref"}}
+  },
+  "$defs": {
+    "token_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "name", "version", "behavior_version"],
+      "properties": {
+        "namespace": {"type": "string", "minLength": 1},
+        "name": {"type": "string", "minLength": 1},
+        "version": {"type": "integer", "minimum": 1},
+        "behavior_version": {"type": "integer", "minimum": 1}
+      }
+    },
+    "origin_tier": {
+      "enum": ["core", "verified_pack", "community_pack", "user_local", "experimental", "unsafe"]
+    },
+    "attestation_kind": {"enum": ["none", "local_tests_passed", "qst_verified", "signed_pack"]},
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_level", "reasons", "requires_approval"],
+      "properties": {
+        "risk_level": {"enum": ["low", "medium", "high", "unknown"]},
+        "reasons": {"type": "array", "items": {"type": "string"}},
+        "requires_approval": {"type": "boolean"}
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "lifecycle", "reason", "replacement_token_ref"],
+      "properties": {
+        "schema_version": {"const": "qst-token-lifecycle/0.4"},
+        "lifecycle": {"enum": ["active", "deprecated", "known_bug", "blocked"]},
+        "reason": {"type": ["string", "null"]},
+        "replacement_token_ref": {"oneOf": [{"$ref": "#/$defs/token_ref"}, {"type": "null"}]}
+      }
+    }
+  }
+}

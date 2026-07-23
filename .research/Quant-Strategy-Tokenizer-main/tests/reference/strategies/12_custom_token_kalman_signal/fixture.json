@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "stage3b_demo_acceptance_fixture",
+  "case": "12_custom_token_kalman_signal",
+  "diagnostics_path": "tests/reference/strategies/12_custom_token_kalman_signal/diagnostics.json",
+  "hashes_path": "tests/reference/strategies/12_custom_token_kalman_signal/hashes.json",
+  "readme_path": "examples/strategies/12_custom_token_kalman_signal/README.md",
+  "strategy_path": "examples/strategies/12_custom_token_kalman_signal/strategy.gkr.yaml",
+  "trace_path": "tests/reference/strategies/12_custom_token_kalman_signal/trace.json"
+}

@@ -1,0 +1,7 @@
+golden_task:
+  id: "06_circuit_breaker_mean_reversion"
+  name: "Circuit breaker mean reversion skeleton"
+  status: "skeleton"
+  target_profile: "research"
+  expected:
+    classification: "supported"

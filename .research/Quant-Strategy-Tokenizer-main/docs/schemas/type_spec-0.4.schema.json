@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_typespec_0_4.schema.json",
+  "title": "QST TypeSpec 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind"],
+  "properties": {
+    "schema_version": {"const": "qst-typespec/0.4"},
+    "kind": {
+      "enum": ["Scalar", "TimeSeries", "Panel", "Decision", "Plan", "State", "Event", "EventStream"]
+    },
+    "value_type": {
+      "enum": ["bool", "int", "float", "decimal", "string", "datetime", "json", "object"]
+    },
+    "intrinsic_temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "default_available_at", "default_clock"],
+      "properties": {
+        "schema_version": {"const": "qst-typespec/0.4"},
+        "default_available_at": {"enum": ["bar_open", "bar_close", "next_bar_open", "event_time", "unknown"]},
+        "default_clock": {"enum": ["bar", "event", "none", "unknown"]}
+      }
+    },
+    "axes": {"type": "array", "items": {"type": "string"}},
+    "universe": {"type": "object"},
+    "missing_policy": {"enum": ["unknown", "dense", "sparse"]},
+    "group_spec_ref": {"type": "string"},
+    "selection_kind": {"enum": ["none", "static", "dynamic", "weighted"]},
+    "weight_constraints": {"type": "object"},
+    "panel_capability_required": {"type": "boolean"}
+  }
+}

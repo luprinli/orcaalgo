@@ -1,0 +1,74 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-session-scalp-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "session_detect"
+      token_ref:
+        token_id: "data.session_range"
+        version: ">=1.0"
+      params:
+        session_start: "09:30"
+        session_end: "11:00"
+        range_minutes: 5
+    - id: "volume_filter"
+      token_ref:
+        token_id: "indicator.volume_confirm"
+        version: ">=1.0"
+      inputs:
+        range: "session_detect.range"
+      params:
+        volume_multiplier: 1.5
+        atr_period: 14
+    - id: "scalp_signal"
+      token_ref:
+        token_id: "signal.scalp_breakout"
+        version: ">=1.0"
+      inputs:
+        high: "session_detect.high"
+        low: "session_detect.low"
+        confirmed: "volume_filter.confirmed"
+      params:
+        entry_buffer_pct: 0.1
+        take_profit_atr_mult: 1.5
+        stop_loss_atr_mult: 0.75
+        time_exit_minutes: 90
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "scalp_signal.signal"
+      params:
+        blocked_states: [3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "scalp_signal.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware
+  - time_gated
+  - volume_confirmed

@@ -1,0 +1,16 @@
+# allow anyone to connect
+[DEFAULT]
+ReconnectInterval=60
+SenderCompID=GOX
+SocketAcceptPort=5001
+ConnectionType=acceptor
+UseDataDictionary=false
+BeginString=FIX.4.4
+ResetOnLogout=Y
+ResetOnDisconnect=Y
+PersistMessages=N
+Logging=N
+DynamicSessions=Y
+
+[SESSION]
+TargetCompID=*

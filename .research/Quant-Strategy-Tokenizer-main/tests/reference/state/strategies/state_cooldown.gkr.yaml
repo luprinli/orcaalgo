@@ -1,0 +1,30 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: state_cooldown
+  version: 1
+  nodes:
+    - id: cooldown_fsm
+      token_ref:
+        namespace: core
+        name: state.fsm
+        version: 1
+        behavior_version: 1
+      params:
+        recipe: cooldown
+      signature:
+        inputs:
+          event:
+            type: EventStream[string]
+        outputs:
+          state:
+            type: State[string]
+  outputs:
+    state: cooldown_fsm.state
+metadata:
+  reference_validation: state-reference
+  reference_case: state_cooldown
+  fixture: tests/reference/state/fixtures/state_cooldown.json

@@ -1,0 +1,31 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core, custom_token_runtime]
+strategy:
+  id: 12_custom_token_kalman_signal
+  version: 1
+  nodes:
+  - id: kalman
+    token_ref: {namespace: my_pack, name: kalman_ema, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {alpha: 0.5}
+    signature: {outputs: {filtered: {type: "TimeSeries[float]"}}}
+  - id: shifted
+    token_ref: {namespace: core, name: data.shift, version: 1, behavior_version: 1}
+    inputs: {series: kalman.filtered}
+    params: {periods: 1}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: rising
+    token_ref: {namespace: core, name: compare.gt, version: 1, behavior_version: 1}
+    inputs: {a: kalman.filtered, b: shifted.value}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: rising.value}
+    params: {accept_reason: kalman_signal_rising, reject_reason: kalman_signal_flat}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: decision.decision}
+metadata: {}
+

@@ -1,0 +1,136 @@
+{
+  "artifact_version": "qst-v04-panel-validation-trace/0.1",
+  "case": "panel_top_bottom_market_neutral",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:4b125a300468e65ad6c82c3d72063b213d0a76cfb1cf2eb2299adc546586a0a3",
+  "operator_traces": {
+    "panel.bottom_k": {
+      "actual_selected": {
+        "t1": 1
+      },
+      "eligible_count": {
+        "t1": 4
+      },
+      "operator_id": "panel.bottom_k",
+      "requested_k": 1,
+      "selection_size_policy": "allow_smaller",
+      "tie_policy": "stable_symbol_order"
+    },
+    "panel.top_k": {
+      "actual_selected": {
+        "t1": 1
+      },
+      "eligible_count": {
+        "t1": 4
+      },
+      "operator_id": "panel.top_k",
+      "requested_k": 1,
+      "selection_size_policy": "allow_smaller",
+      "tie_policy": "stable_symbol_order"
+    },
+    "selection.long_short_fixture": {
+      "long_symbols": [
+        "BTC/USDT"
+      ],
+      "selection_kind": "long_short",
+      "short_symbols": [
+        "ADA/USDT"
+      ],
+      "source": {
+        "long_from": "panel.top_k",
+        "short_from": "panel.bottom_k"
+      },
+      "universe_ref": "tests/reference/panel/fixtures/top_bottom_universe.json"
+    },
+    "selection.to_weights": {
+      "method": "equal_long_short",
+      "normalized": false,
+      "operator_id": "selection.to_weights",
+      "weight_kind": "raw"
+    },
+    "weight.market_neutral": {
+      "adjustment": {
+        "t1": "0"
+      },
+      "eligible_count": {
+        "t1": 2
+      },
+      "gross_after": {
+        "t1": "1"
+      },
+      "gross_after_demean": {
+        "t1": "2"
+      },
+      "gross_before": {
+        "t1": "2"
+      },
+      "net_after": {
+        "t1": "0"
+      },
+      "net_before": {
+        "t1": "0"
+      },
+      "neutralization_method": "demean_then_gross_normalize",
+      "operator_id": "weight.market_neutral",
+      "target_gross": "1",
+      "target_net": "0",
+      "zero_gross_policy": "keep_zero",
+      "zero_gross_policy_applied": {
+        "t1": false
+      }
+    }
+  },
+  "outputs": {
+    "final_exposure": {
+      "gross": "1",
+      "net": "0"
+    },
+    "final_weights": {
+      "normalized": true,
+      "rows": [
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t1",
+          "weight": "-0.5"
+        },
+        {
+          "in_universe": true,
+          "symbol": "BTC/USDT",
+          "timestamp": "t1",
+          "weight": "0.5"
+        }
+      ],
+      "weight_kind": "normalized"
+    },
+    "long_symbols": [
+      "BTC/USDT"
+    ],
+    "raw_exposure": {
+      "gross": "2",
+      "net": "0"
+    },
+    "raw_weights": {
+      "normalized": false,
+      "rows": [
+        {
+          "in_universe": true,
+          "symbol": "ADA/USDT",
+          "timestamp": "t1",
+          "weight": "-1"
+        },
+        {
+          "in_universe": true,
+          "symbol": "BTC/USDT",
+          "timestamp": "t1",
+          "weight": "1"
+        }
+      ],
+      "weight_kind": "raw"
+    },
+    "short_symbols": [
+      "ADA/USDT"
+    ]
+  },
+  "strategy": "panel_top_bottom_market_neutral"
+}

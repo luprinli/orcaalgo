@@ -1,0 +1,31 @@
+﻿schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities: [core]
+strategy:
+  id: 05_cooldown_trend_following
+  version: 1
+  nodes:
+  - id: trend
+    token_ref: {namespace: core, name: indicator.ema, version: 1, behavior_version: 1}
+    inputs: {series: $externals.market.close}
+    params: {span: 50}
+    signature: {outputs: {value: {type: "TimeSeries[float]"}}}
+  - id: above_trend
+    token_ref: {namespace: core, name: compare.gt, version: 1, behavior_version: 1}
+    inputs: {a: $externals.market.close, b: trend.value}
+    params: {}
+    signature: {outputs: {value: {type: "TimeSeries[bool]"}}}
+  - id: decision
+    token_ref: {namespace: core, name: decision.lift_bool, version: 1, behavior_version: 1}
+    inputs: {series: above_trend.value}
+    params: {accept_reason: trend_following, reject_reason: trend_filter_fail}
+    signature: {outputs: {decision: {type: Decision}}}
+  - id: cooldown
+    token_ref: {namespace: core, name: gate.cooldown, version: 1, behavior_version: 1}
+    inputs: {decision: decision.decision}
+    params: {bars: 5}
+    signature: {outputs: {decision: {type: Decision}}}
+  outputs: {decision: cooldown.decision}
+metadata: {}
+

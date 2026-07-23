@@ -1,0 +1,7 @@
+{
+  "artifact_version": "qst-v04-state-fixture/0.1",
+  "case": "state_market_freeze",
+  "events": ["signal", "freeze_on", "signal", "freeze_off", "signal"],
+  "params": {},
+  "values": []
+}

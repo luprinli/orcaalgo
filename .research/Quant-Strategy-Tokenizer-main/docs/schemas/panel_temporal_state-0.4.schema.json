@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_panel_temporal_state_0_4.schema.json",
+  "title": "QST Panel Temporal and State Rules 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "temporal_join",
+    "residualize_v1",
+    "panel_state"
+  ],
+  "properties": {
+    "schema_version": { "const": "qst-panel-temporal-state/0.4" },
+    "temporal_join": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unsafe_future",
+        "available_at",
+        "latency_bars",
+        "min_history_bars"
+      ],
+      "properties": {
+        "unsafe_future": { "const": "any_input_unsafe_future" },
+        "available_at": { "const": "max_available_at_inputs" },
+        "latency_bars": { "const": "max_input_latency_bars" },
+        "min_history_bars": { "const": "max_input_min_history_or_operator_required_history" }
+      }
+    },
+    "residualize_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["panel", "factor", "output", "scope"],
+      "properties": {
+        "panel": { "const": "Panel[float]" },
+        "factor": { "const": "TimeSeries[float]" },
+        "output": { "const": "Panel[float]" },
+        "scope": { "const": "single_factor_only" }
+      }
+    },
+    "panel_state": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["panel_state_shell_allowed", "state_fsm_auto_broadcast"],
+      "properties": {
+        "panel_state_shell_allowed": { "const": true },
+        "state_fsm_auto_broadcast": { "const": false }
+      }
+    }
+  }
+}

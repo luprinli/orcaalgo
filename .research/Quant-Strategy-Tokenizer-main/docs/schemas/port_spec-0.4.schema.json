@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_port_spec_0_4.schema.json",
+  "title": "QST PortSpec 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "inputs", "outputs"],
+  "properties": {
+    "schema_version": {"const": "qst-portspec/0.4"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/input_spec"}
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/output_spec"}
+    }
+  },
+  "$defs": {
+    "input_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type"],
+      "properties": {
+        "schema_version": {"const": "qst-portspec/0.4"},
+        "type": {"$ref": "qst_typespec_0_4.schema.json"},
+        "temporal_requirement": {"$ref": "#/$defs/temporal_requirement"}
+      }
+    },
+    "output_spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "type"],
+      "properties": {
+        "schema_version": {"const": "qst-portspec/0.4"},
+        "type": {"$ref": "qst_typespec_0_4.schema.json"},
+        "port_temporal": {"$ref": "#/$defs/port_temporal"},
+        "temporal_rule": {"$ref": "qst_port_temporal_rule_0_4.schema.json"}
+      }
+    },
+    "available_at": {
+      "enum": ["bar_open", "bar_close", "next_bar_open", "event_time", "unknown"]
+    },
+    "temporal_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "max_available_at", "allow_unsafe_future"],
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "max_available_at": {"$ref": "#/$defs/available_at"},
+        "allow_unsafe_future": {"type": "boolean"}
+      }
+    },
+    "port_temporal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "available_at", "latency_bars", "min_history_bars", "unsafe_future"],
+      "properties": {
+        "schema_version": {"const": "qst-port-temporal/0.4"},
+        "available_at": {"$ref": "#/$defs/available_at"},
+        "latency_bars": {"type": "integer", "minimum": 0},
+        "min_history_bars": {"type": "integer", "minimum": 0},
+        "unsafe_future": {"type": "boolean"}
+      }
+    }
+  }
+}

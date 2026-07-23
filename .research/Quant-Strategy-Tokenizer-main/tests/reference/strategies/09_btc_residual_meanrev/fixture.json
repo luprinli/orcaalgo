@@ -1,0 +1,9 @@
+{
+  "artifact_kind": "stage3b_demo_acceptance_fixture",
+  "case": "09_btc_residual_meanrev",
+  "diagnostics_path": "tests/reference/strategies/09_btc_residual_meanrev/diagnostics.json",
+  "hashes_path": "tests/reference/strategies/09_btc_residual_meanrev/hashes.json",
+  "readme_path": "examples/strategies/09_btc_residual_meanrev/README.md",
+  "strategy_path": "examples/strategies/09_btc_residual_meanrev/strategy.gkr.yaml",
+  "trace_path": null
+}

@@ -1,0 +1,17 @@
+{
+  "name": "quant-toolkit",
+  "version": "0.1.0",
+  "description": "Quant-trading toolkit for prediction markets: Kelly sizing, calibration audit, backtest harness, P&L attribution, maker pricing, and pre-flight safety checks. Venue-agnostic.",
+  "author": {
+    "name": "Aaron Peabody"
+  },
+  "license": "MIT",
+  "keywords": [
+    "quant",
+    "prediction-markets",
+    "kelly",
+    "calibration",
+    "backtest",
+    "risk-management"
+  ]
+}

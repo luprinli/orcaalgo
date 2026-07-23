@@ -1,0 +1,25 @@
+{
+  "$id": "https://qst.dev/schemas/qst_runtime_environment_ref_0_4.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "dependency_token_pack_hashes": {
+      "additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+      "type": "object"
+    },
+    "distribution_hashes": {
+      "additionalProperties": {"pattern": "^sha256:[0-9a-f]{64}$", "type": "string"},
+      "type": "object"
+    },
+    "package_manager": {"type": "object"},
+    "platform_marker": {"type": "string"},
+    "python_version": {"type": "string"},
+    "reproducibility_level": {
+      "enum": ["environment_recorded", "environment_replayable", "bit_exact_verified"],
+      "type": "string"
+    },
+    "schema_version": {"const": "qst-runtime-environment-ref/0.4"}
+  },
+  "required": ["schema_version", "python_version", "platform_marker", "reproducibility_level"],
+  "type": "object"
+}

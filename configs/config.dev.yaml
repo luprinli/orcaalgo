@@ -1,0 +1,39 @@
+# Orca Core Development Configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+database:
+  host: "localhost"
+  port: 5432
+  user: "orca"
+  database: "orca_core"
+  pool_max: 10
+
+redis:
+  host: "localhost"
+  port: 6379
+
+broker:
+  alpaca:
+    paper: true
+    base_url: "https://paper-api.alpaca.markets"
+
+risk:
+  ftmo:
+    daily_loss_limit_pct: 5.0
+    max_drawdown_pct: 10.0
+    consistency_threshold: 30.0
+  regime:
+    hmm_states: 4
+  adversarial:
+    reject_threshold: 3
+    watchlist: ["AAPL", "MSFT", "SPY", "QQQ", "TSLA"]
+
+monitoring:
+  prometheus_port: 9091
+  telegram_enabled: false
+
+logging:
+  level: "info"
+  format: "json"

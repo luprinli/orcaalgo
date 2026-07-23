@@ -1,0 +1,66 @@
+groups:
+  - name: orca_core_alerts
+    interval: 30s
+    rules:
+      - alert: KillSwitchActive
+        expr: orca_kill_switch_active == 1
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kill switch is active"
+          description: "The trading kill switch has been triggered. All trading is halted."
+
+      - alert: HighRejectRate
+        expr: rate(orca_reject_count_total[5m]) > 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High order reject rate"
+          description: "Order reject rate exceeds 3 per 5-minute window. Possible broker issue or adversarial attack."
+
+      - alert: RingBufferOverflow
+        expr: orca_ring_buffer_overflow_total > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ring buffer overflow detected"
+          description: "Market data ring buffer has overflowed. Data loss is occurring."
+
+      - alert: LatencySpike
+        expr: histogram_quantile(0.99, rate(orca_tick_processing_latency_seconds_bucket[5m])) > 0.0001
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tick processing latency spike"
+          description: "99th percentile tick-to-decision latency exceeds 100µs."
+
+      - alert: BrokerDisconnected
+        expr: orca_broker_connected == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Broker disconnected"
+          description: "The broker connection has been lost."
+
+      - alert: HighDrawdown
+        expr: orca_daily_loss_pct > 4.0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Approaching daily loss limit"
+          description: "Daily loss is over 4%, approaching the 5% limit."
+
+      - alert: RegimeChange
+        expr: orca_hmm_regime > 2
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High volatility regime detected"
+          description: "HMM has classified current market as high volatility or crisis regime. Position sizing reduced."

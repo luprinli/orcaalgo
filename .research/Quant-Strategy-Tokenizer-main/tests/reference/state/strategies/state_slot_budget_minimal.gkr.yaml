@@ -1,0 +1,30 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+strategy:
+  id: state_slot_budget_minimal
+  version: 1
+  nodes:
+    - id: slot_budget
+      token_ref:
+        namespace: core
+        name: state.accumulate
+        version: 1
+        behavior_version: 1
+      params:
+        reducer: sum
+      signature:
+        inputs:
+          x:
+            type: TimeSeries[int]
+        outputs:
+          y:
+            type: TimeSeries[int]
+  outputs:
+    slots_used: slot_budget.y
+metadata:
+  reference_validation: state-reference
+  reference_case: state_slot_budget_minimal
+  fixture: tests/reference/state/fixtures/state_slot_budget_minimal.json

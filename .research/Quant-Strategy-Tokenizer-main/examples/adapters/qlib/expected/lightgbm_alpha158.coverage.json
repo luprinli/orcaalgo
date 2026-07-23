@@ -1,0 +1,122 @@
+{
+  "adapter": "qlib",
+  "backtest": {
+    "account": 100000000,
+    "benchmark": "SH000300",
+    "close_cost": 0.0015,
+    "deal_price": "close",
+    "limit_threshold": 0.095,
+    "min_cost": 5.0,
+    "open_cost": 0.0005,
+    "raw": {
+      "account": 100000000,
+      "benchmark": "SH000300",
+      "close_cost": 0.0015,
+      "deal_price": "close",
+      "limit_threshold": 0.095,
+      "min_cost": 5,
+      "open_cost": 0.0005
+    }
+  },
+  "classification": "supported",
+  "dataset": {
+    "class_name": "DatasetH",
+    "handler_class": "Alpha158",
+    "handler_kwargs": {
+      "end_time": "2020-08-01",
+      "fit_end_time": "2014-12-31",
+      "fit_start_time": "2008-01-01",
+      "instruments": "csi300",
+      "start_time": "2008-01-01"
+    },
+    "handler_module_path": "qlib.contrib.data.handler",
+    "module_path": "qlib.data.dataset",
+    "segments": {
+      "test": [
+        "2017-01-01",
+        "2020-08-01"
+      ],
+      "train": [
+        "2008-01-01",
+        "2014-12-31"
+      ],
+      "valid": [
+        "2015-01-01",
+        "2016-12-31"
+      ]
+    },
+    "support": "known"
+  },
+  "model": {
+    "class_name": "LGBModel",
+    "kwargs": {
+      "learning_rate": 0.0421,
+      "loss": "mse",
+      "max_depth": 8,
+      "num_leaves": 210
+    },
+    "module_path": "qlib.contrib.model.gbdt",
+    "support": "known"
+  },
+  "records": [
+    {
+      "class_name": "SignalRecord",
+      "kwargs": {},
+      "module_path": "qlib.workflow.record_temp",
+      "support": "known"
+    },
+    {
+      "class_name": "PortAnaRecord",
+      "kwargs": {
+        "config": {
+          "backtest": {
+            "account": 100000000,
+            "benchmark": "SH000300",
+            "close_cost": 0.0015,
+            "deal_price": "close",
+            "limit_threshold": 0.095,
+            "min_cost": 5,
+            "open_cost": 0.0005
+          },
+          "strategy": {
+            "class": "TopkDropoutStrategy",
+            "kwargs": {
+              "n_drop": 5,
+              "signal": "<PRED>",
+              "topk": 50
+            },
+            "module_path": "qlib.contrib.strategy.strategy"
+          }
+        }
+      },
+      "module_path": "qlib.workflow.record_temp",
+      "support": "known"
+    }
+  ],
+  "source": "examples/adapters/qlib/workflow_config_lightgbm_alpha158.yaml",
+  "strategy": {
+    "class_name": "TopkDropoutStrategy",
+    "kwargs": {
+      "n_drop": 5,
+      "signal": "<PRED>",
+      "topk": 50
+    },
+    "module_path": "qlib.contrib.strategy.strategy",
+    "support": "known"
+  },
+  "tokenized_components": [
+    "data.qlib_dataset_record",
+    "feature.alpha158_record",
+    "model.forecast_model_record",
+    "portfolio.backtest_config_record",
+    "record.portfolio_analysis_record",
+    "record.signal_record",
+    "selection.topk_dropout_record"
+  ],
+  "unsupported_components": [],
+  "warnings": [
+    "Qlib workflows are research/runtime configs.",
+    "This adapter imports record-layer structure only.",
+    "It does not train models, run qrun, run inference, or execute backtests."
+  ]
+}

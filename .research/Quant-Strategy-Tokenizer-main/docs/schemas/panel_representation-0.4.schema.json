@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://qst.local/schemas/qst_panel_representation_0_4.schema.json",
+  "title": "QST Panel Representation 0.4",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "kind", "universe_mask_required"],
+  "properties": {
+    "schema_version": { "const": "qst-panel-representation/0.4" },
+    "kind": { "const": "sparse_logical" },
+    "universe_mask_required": { "const": true }
+  }
+}

@@ -1,0 +1,33 @@
+# Orca ML Model Registry
+# Manages model versions, deployment status, and rollback targets.
+# This file is the source of truth for which models are active in production.
+# Updated by retraining pipelines and canary deployment automation.
+
+meta_labeling:
+  current_version: "v1"
+  versions:
+    v1:
+      path: models/meta_labeling.json
+      trained: "2026-07-01"
+      brier_score: 0.0
+      roc_auc: 0.0
+      status: active
+
+regime_classifier:
+  current_version: "v1"
+  versions:
+    v1:
+      path: models/regime_classifier.json
+      trained: "2026-07-01"
+      accuracy: 0.0
+      status: active
+
+exit_model:
+  current_version: "v1"
+  versions:
+    v1:
+      path: models/exit_model.json
+      trained: "2026-07-01"
+      mse: 0.0
+      r2: 0.0
+      status: active

@@ -1,0 +1,7 @@
+{
+  "artifact_version": "qst-v04-panel-expected-diagnostics/0.1",
+  "case": "panel_top_bottom_market_neutral",
+  "diagnostics": [],
+  "expected_artifact_hash": "sha256:bb89f8fa67fe9f3f75a9001edb5275f1906f2a8b476cb8e475d9b4bf87ec1edf",
+  "strategy": "panel_top_bottom_market_neutral"
+}

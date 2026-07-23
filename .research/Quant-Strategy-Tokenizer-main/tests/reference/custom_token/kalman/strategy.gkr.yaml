@@ -1,0 +1,32 @@
+schema_version: qst-ir-schema/0.4
+ir_version: qst-ir/0.4
+canonical_version: qst-canonical/0.4
+capabilities:
+  - core
+  - custom_token_runtime
+metadata:
+  reference_case: custom_token_kalman
+strategy:
+  id: custom_token_kalman
+  version: 1
+  nodes:
+    - id: kalman
+      token_ref:
+        namespace: my_pack
+        name: kalman_ema
+        version: 1
+        behavior_version: 1
+      inputs:
+        series:
+          external: series
+      params:
+        alpha: 0.5
+      signature:
+        inputs:
+          series:
+            type: TimeSeries[float]
+        outputs:
+          filtered:
+            type: TimeSeries[float]
+  outputs:
+    filtered: kalman.filtered
