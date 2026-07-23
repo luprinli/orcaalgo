@@ -1,0 +1,59 @@
+repos:
+  # Python
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff (check)
+        entry: ruff check orca/ tests/
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: ruff-format
+        name: ruff (format check)
+        entry: ruff format --check orca/ tests/
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: mypy
+        name: mypy
+        entry: mypy orca/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  # Go
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+      - id: go-fmt
+        name: gofmt
+        entry: gofmt -l -s
+        language: system
+        types: [go]
+
+  # General
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        exclude: ^web/|^.kilo/
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: detect-private-key
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+
+  # Secrets
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.0
+    hooks:
+      - id: gitleaks

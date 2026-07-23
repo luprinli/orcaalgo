@@ -1,0 +1,76 @@
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build output
+web/dist/
+web/node_modules/
+web/node_modules/.package-lock.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+*.key
+*.pem
+
+# Logs
+data/
+*.parquet
+*.npy
+*.log
+
+# Test artifacts
+*.test
+*.prof
+test-results/
+screenshots/
+
+# Coverage output (Go)
+coverage*.out
+coverage/
+htmlcov/
+.coverage
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Reports
+reports/
+
+# Kilo plugin dependencies
+.kilo/node_modules/
+
+# Market data
+data/
+
+# Reference projects (extracted archives)
+.hftbacktest-master/
+
+# Backups
+backups/
+coverage*
+cp_bt
+cp_risk

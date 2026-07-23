@@ -1,0 +1,67 @@
+# Git
+.git/
+.gitattributes
+
+# Research (large cloned repos)
+.research/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+reports/
+
+# Go
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
+vendor/
+
+# Node / React
+web/node_modules/
+web/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / Secrets
+.env
+.env.local
+*.key
+*.pem
+
+# Logs
+*.log
+
+# Scripts (Windows-only)
+scripts/*.ps1
+
+# Docs (not needed in image)
+docs/
+*.md
+
+# Kilo / Agent configs
+.kilo/
+.kilo/node_modules/

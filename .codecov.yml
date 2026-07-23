@@ -1,0 +1,40 @@
+coverage:
+  precision: 2
+  round: down
+  range: "60...100"
+
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+      python:
+        target: 80%
+        paths:
+          - "orca/"
+          - "tests/"
+      go:
+        target: 60%
+        paths:
+          - "internal/"
+
+    patch:
+      default:
+        target: 80%
+
+  ignore:
+    - "tests/"
+    - "test/"
+    - "**/*_test.go"
+    - "**/test_*.py"
+    - "cgo_bridge/odin_loader_stubs.go"
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: false
+  require_base: true
+  require_head: true
+
+github_checks:
+  annotations: true
