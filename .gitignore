@@ -20,16 +20,13 @@ web/node_modules/.package-lock.json
 .DS_Store
 Thumbs.db
 
-# Environment
+# Environment (secrets)
 .env
 .env.local
 *.key
 *.pem
 
 # Logs
-data/
-*.parquet
-*.npy
 *.log
 
 # Test artifacts
@@ -38,11 +35,12 @@ data/
 test-results/
 screenshots/
 
-# Coverage output (Go)
-coverage*.out
-coverage/
+# Coverage output
+coverage*
 htmlcov/
 .coverage
+cp_bt
+cp_risk
 
 # Python
 __pycache__/
@@ -63,17 +61,13 @@ reports/
 # Kilo plugin dependencies
 .kilo/node_modules/
 
-# Market data
+# Market data (large)
 data/
+*.parquet
+*.npy
 
 # Reference projects (extracted archives)
 .hftbacktest-master/
 
 # Backups
 backups/
-
-# Environment (secrets)
-.env
-coverage*
-cp_bt
-cp_risk
