@@ -1,0 +1,37 @@
+# Parity drift guard: shared-logic pairs that must be reviewed together.
+# Per docs/backtest_live_parity_audit.md CI-6 — any PR touching only one
+# half of a pair without the other requires a second reviewer.
+
+# Prop-firm rules (single source + all consumers)
+internal/propfirm/rules.go               @lee-econ
+internal/propfirm/profile.go             @lee-econ
+internal/backtest/propfirm_enforcer.go   @lee-econ
+internal/backtest/capital_pool_sim.go    @lee-econ
+internal/risk/capital_pool.go            @lee-econ
+
+# Sizing kernel
+internal/risk/position_sizer.go          @lee-econ
+internal/risk/constants.go               @lee-econ
+
+# Fee model
+internal/broker/fee.go                   @lee-econ
+internal/broker/paper/adapter.go         @lee-econ
+
+# Engine version
+internal/version/version.go              @lee-econ
+Makefile                                  @lee-econ
+.github/workflows/ci.yml                 @lee-econ
+
+# Strategy hash
+internal/hash/hash.go                    @lee-econ
+internal/engine/live_engine.go           @lee-econ
+internal/backtest/engine.go              @lee-econ
+orca/cli.py                               @lee-econ
+
+# Parity enforcement
+scripts/parity_drift_scan.py             @lee-econ
+scripts/anti_pattern_scan.py             @lee-econ
+internal/engine/replay_parity_test.go    @lee-econ
+
+# Audit docs — any change to these must be reviewed
+docs/backtest_live_parity_audit.md       @lee-econ

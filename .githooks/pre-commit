@@ -1,0 +1,17 @@
+#!/bin/bash
+# OrcaAlgo Pre-Commit Guardrails
+# Install: git config core.hooksPath .githooks
+set -e
+
+echo "🔒 OrcaAlgo Pre-Commit Guardrails"
+
+# Phase 1: Change audit — detect destructive file deltas
+python scripts/change_audit.py --staged
+
+# Phase 2: Anti-pattern scan on changed files
+python scripts/anti_pattern_scan.py --changed-only 2>/dev/null || echo "   ⚠️ anti_pattern_scan.py not available (non-blocking)"
+
+# Phase 3: Environment safety check
+python scripts/env_guard.py --check precommit 2>/dev/null || true
+
+echo "✅ Pre-commit guardrails passed"

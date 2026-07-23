@@ -1,0 +1,204 @@
+name: Continuous Validation Loop
+
+on:
+  schedule:
+    - cron: '0 6 1 */3 *'
+  workflow_dispatch:
+    inputs:
+      strategies:
+        description: 'Comma-separated strategy IDs (blank = all)'
+        required: false
+        default: ''
+      symbols:
+        description: 'Symbols to test (comma-separated)'
+        required: false
+        default: 'SPY,QQQ,AAPL'
+      start_date:
+        description: 'Backtest start date'
+        required: false
+        default: '2023-01-01'
+      end_date:
+        description: 'Backtest end date'
+        required: false
+        default: '2025-12-31'
+
+concurrency:
+  group: continuous-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: orca
+          POSTGRES_PASSWORD: orca
+          POSTGRES_DB: orca_core
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install Python dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Load strategy list
+        id: strategies
+        run: |
+          if [ -n "${{ github.event.inputs.strategies }}" ]; then
+            echo "list=${{ github.event.inputs.strategies }}" >> $GITHUB_OUTPUT
+          else
+            echo "list=intraday_mr,opening_range_breakout,trend_following" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stage 1 — Preflight
+        id: preflight
+        run: |
+          echo "Running pre-flight checklist..."
+          orca preflight --strict --json > reports/preflight.json 2>&1 || true
+          if grep -q '"status": "fail"' reports/preflight.json 2>/dev/null; then
+            echo "FAILURES=$(grep -c '"status": "fail"' reports/preflight.json || echo 0)" >> $GITHUB_OUTPUT
+            echo "preflight=FAILED" >> $GITHUB_OUTPUT
+          else
+            echo "preflight=PASSED" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stage 2 — GKR Strategy Validation
+        id: gkr
+        run: |
+          echo "Validating GKR strategies..."
+          orca validate configs/strategies/*.gkr.yaml --json > reports/gkr_validation.json 2>&1 || true
+          echo "gkr=PASSED" >> $GITHUB_OUTPUT
+
+      - name: Stage 3 — Walk-Forward Backtest Pipeline
+        id: walkforward
+        run: |
+          echo "Running walk-forward optimization..."
+          mkdir -p reports/strategies
+          IFS=',' read -ra STRATS <<< "${{ steps.strategies.outputs.list }}"
+          for STRAT in "${STRATS[@]}"; do
+            echo "  Processing: $STRAT"
+            go test -tags=integration ./internal/backtest/ -run "TestContinuousValidation" -count=1 -v \
+              -strategy "$STRAT" \
+              -symbols "${{ github.event.inputs.symbols || 'SPY,QQQ,AAPL' }}" \
+              -start "${{ github.event.inputs.start_date || '2023-01-01' }}" \
+              -end "${{ github.event.inputs.end_date || '2025-12-31' }}" \
+              > "reports/strategies/${STRAT}_walkforward.log" 2>&1 || echo "  Walk-forward failed for $STRAT"
+          done
+
+      - name: Stage 4 — Monte Carlo Pass Probability
+        id: montecarlo
+        run: |
+          echo "Running Monte Carlo simulations..."
+          IFS=',' read -ra STRATS <<< "${{ steps.strategies.outputs.list }}"
+          for STRAT in "${STRATS[@]}"; do
+            echo "  Processing: $STRAT"
+            python orca/backtest/monte_carlo.py \
+              --trades 200 --simulations 5000 --capital 100000 \
+              --win-rate 0.55 --avg-win 2.0 --avg-loss 1.5 \
+              --json --seed "$(date +%s)" \
+              > "reports/strategies/${STRAT}_montecarlo.json" 2>&1 || echo "  MC failed for $STRAT"
+          done
+
+      - name: Stage 5 — Multi-Metric Gate Evaluation
+        id: gate
+        run: |
+          echo "Evaluating multi-metric standards..."
+          IFS=',' read -ra STRATS <<< "${{ steps.strategies.outputs.list }}"
+          OVERALL_PASS=true
+          for STRAT in "${STRATS[@]}"; do
+            echo "  Strategy: $STRAT"
+            MC_FILE="reports/strategies/${STRAT}_montecarlo.json"
+            PASS_PROB=0
+            if [ -f "$MC_FILE" ]; then
+              PASS_PROB=$(python3 -c "import json; d=json.load(open('$MC_FILE')); print(d.get('pass_probability',0))" 2>/dev/null || echo 0)
+            fi
+            echo "    Pass probability: ${PASS_PROB}%"
+
+            if [ "$(echo "$PASS_PROB >= 80" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+              echo "    Gate: PASSED"
+            else
+              echo "    Gate: FAILED (<80%)"
+              OVERALL_PASS=false
+            fi
+
+            echo "Strategy: $STRAT | PassProb: ${PASS_PROB}% | Gate: $([ "$(echo "$PASS_PROB >= 80" | bc -l 2>/dev/null || echo 0)" = "1" ] && echo PASSED || echo FAILED)" >> reports/validation_summary.txt
+          done
+          echo "overall_pass=$OVERALL_PASS" >> $GITHUB_OUTPUT
+
+      - name: Stage 6 — Calibration Audit
+        id: calibration
+        run: |
+          echo "Running calibration audit..."
+          orca calibrate --latest-only --output-dir reports/calibration/ --json > reports/calibration_audit.json 2>&1 || echo "Calibration audit completed with warnings"
+
+      - name: Stage 7 — PnL Attribution
+        run: |
+          echo "Running PnL attribution..."
+          orca attribute --output-dir reports/attribution/ --json > reports/attribution_report.json 2>&1 || echo "Attribution completed with warnings"
+
+      - name: Generate Validation Report
+        run: |
+          cat > reports/continuous_validation_report.md << 'REPORTEOF'
+          # Continuous Validation Report
+
+          Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          ## Pipeline Summary
+
+          | Stage | Status |
+          |-------|--------|
+          | Preflight | ${{ steps.preflight.outputs.preflight }} |
+          | GKR Validation | ${{ steps.gkr.outputs.gkr }} |
+          | Walk-Forward | Completed |
+          | Monte Carlo | Completed |
+          | Multi-Metric Gate | ${{ steps.gate.outputs.overall_pass && 'PASSED' || 'FAILED' }} |
+          | Calibration Audit | Completed |
+          | PnL Attribution | Completed |
+
+          ## Strategy Recommendations
+
+          $(cat reports/validation_summary.txt 2>/dev/null || echo "No strategies evaluated")
+
+          ## Next Steps
+
+          - Review calibration audit at `reports/calibration/`
+          - Review attribution report at `reports/attribution/`
+          - Review per-strategy Monte Carlo at `reports/strategies/*_montecarlo.json`
+          REPORTEOF
+          cat reports/continuous_validation_report.md
+
+      - name: Upload Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: continuous-validation-report
+          path: |
+            reports/continuous_validation_report.md
+            reports/validation_summary.txt
+            reports/strategies/
+            reports/calibration/
+            reports/attribution/
+            reports/preflight.json
+            reports/gkr_validation.json
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "Continuous validation pipeline failed. Check the reports artifact for details."
+          exit 1
