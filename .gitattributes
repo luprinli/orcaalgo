@@ -1,0 +1,11 @@
+# Reference projects — excluded from language statistics
+.research/** linguist-vendored
+.research/** linguist-documentation
+
+# Generated / data files — excluded from language counts
+configs/grafana/** linguist-generated
+configs/simulation/** linguist-generated
+docs/grafana/** linguist-generated
+
+# Test fixtures
+testdata/** linguist-vendored
