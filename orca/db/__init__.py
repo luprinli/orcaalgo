@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import subprocess
-from typing import Optional
 
 
 def fetch_trades(

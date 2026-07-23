@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"time"
 
 	"github.com/lee-econ/orca-core/internal/types"
 )
@@ -30,13 +31,14 @@ const (
 	GTC TimeInForce = "GTC"
 	IOC TimeInForce = "IOC"
 
-	CapPlaceOrder        Capability = "PLACE_ORDER"
-	CapCancelOrder       Capability = "CANCEL_ORDER"
-	CapCancelAllOrders   Capability = "CANCEL_ALL_ORDERS"
-	CapCloseAllPositions Capability = "CLOSE_ALL_POSITIONS"
-	CapGetPositions      Capability = "GET_POSITIONS"
-	CapGetAccount        Capability = "GET_ACCOUNT"
+	CapPlaceOrder          Capability = "PLACE_ORDER"
+	CapCancelOrder         Capability = "CANCEL_ORDER"
+	CapCancelAllOrders     Capability = "CANCEL_ALL_ORDERS"
+	CapCloseAllPositions   Capability = "CLOSE_ALL_POSITIONS"
+	CapGetPositions        Capability = "GET_POSITIONS"
+	CapGetAccount          Capability = "GET_ACCOUNT"
 	CapValidateCredentials Capability = "VALIDATE_CREDENTIALS"
+	CapReconcileFills      Capability = "RECONCILE_FILLS"
 )
 
 type Adapter interface {
@@ -112,4 +114,18 @@ type Account struct {
 	BuyingPower types.Price `json:"buying_power"`
 	DailyPL     float64     `json:"daily_pl"`
 	Status      string      `json:"status"`
+}
+
+type TradeFill struct {
+	OrderID       string
+	Symbol        string
+	Side          OrderSide
+	Quantity      float64
+	FillPrice     types.Price
+	FillTime      time.Time
+	BrokerOrderID string
+}
+
+type FillProvider interface {
+	GetFills(ctx context.Context, date string) ([]TradeFill, error)
 }

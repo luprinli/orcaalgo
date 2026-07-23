@@ -48,7 +48,7 @@ func TestTrendRunner_ImplementsStrategy(t *testing.T) {
 
 func TestGridRunner_ImplementsStrategy(t *testing.T) {
 	var s strategy.Strategy = strategy.NewGridRunner()
-	if s.Name() != "grid" {
+	if s.Name() != "grid_trading" {
 		t.Errorf("GridRunner.Name = %s", s.Name())
 	}
 }

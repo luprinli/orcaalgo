@@ -1,18 +1,25 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/db"
 )
 
 type ReconciliationHandler struct {
-	repo *db.Repository
+	repo         *db.Repository
+	fillProvider broker.FillProvider
 }
 
 func NewReconciliationHandler(repo *db.Repository) *ReconciliationHandler {
 	return &ReconciliationHandler{repo: repo}
+}
+
+func (h *ReconciliationHandler) SetFillProvider(fp broker.FillProvider) {
+	h.fillProvider = fp
 }
 
 func (h *ReconciliationHandler) RegisterRoutes(router *gin.RouterGroup) {
@@ -45,24 +52,38 @@ func (h *ReconciliationHandler) DailyReconciliation(c *gin.Context) {
 
 	ctx := c.Request.Context()
 
-	var internalCount int
-	err := h.repo.Pool().QueryRow(ctx,
-		`SELECT COUNT(*) FROM trade_executions WHERE executed_at::date = $1::date`, date,
-	).Scan(&internalCount)
+	rows, err := h.repo.Pool().Query(ctx,
+		`SELECT id, strategy_id, symbol, side, quantity, price, executed_at, broker_order_id
+		 FROM trade_executions WHERE executed_at::date = $1::date ORDER BY executed_at`, date,
+	)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	defer rows.Close()
 
-	// Broker-side reconciliation: query broker adapters for fills on the given date.
-	// Currently returns internal-only view; broker adapter GetFills(date) not yet
-	// implemented. Once broker adapters support daily fill queries, the matched/
-	// missing/extra counts and discrepancy details will be populated.
-	result := ReconciliationResult{
-		Date:          date,
-		InternalCount: internalCount,
-		Matched:       internalCount,
+	var internal []db.TradeExecution
+	for rows.Next() {
+		var exec db.TradeExecution
+		if err := rows.Scan(&exec.ID, &exec.StrategyID, &exec.Symbol, &exec.Side,
+			&exec.Quantity, &exec.Price, &exec.ExecutedAt, &exec.BrokerOrderID); err != nil {
+			continue
+		}
+		internal = append(internal, exec)
 	}
+
+	var brokerFills []broker.TradeFill
+	if h.fillProvider != nil {
+		fills, fillErr := h.fillProvider.GetFills(ctx, date)
+		if fillErr != nil {
+			slog.Warn("reconciliation: broker fill query failed", "date", date, "err", fillErr)
+		} else {
+			brokerFills = fills
+		}
+	}
+
+	result := MatchReconciliation(internal, brokerFills)
+	result.Date = date
 
 	c.JSON(http.StatusOK, result)
 }

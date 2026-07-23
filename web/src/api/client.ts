@@ -1,3 +1,4 @@
+import { getRequestHeaders, markRequestComplete } from './middleware'
 import type {
   LoginRequest, LoginResponse, Strategy, CreateStrategyRequest, UpdateStrategyRequest,
   DeployStrategyRequest, DeployStrategyResponse, PreflightResponse,
@@ -78,6 +79,7 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...getRequestHeaders(),
   }
   const token = getToken()
   if (token) {
@@ -93,31 +95,35 @@ async function request<T>(
     body: body ? JSON.stringify(body) : undefined,
   })
 
-  if (res.status === 401 && token) {
-    const refreshed = await tryRefresh()
-    if (refreshed) {
-      const newToken = getToken()
-      if (newToken) headers['Authorization'] = `Bearer ${newToken}`
-      const retryRes = await fetch(path, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      })
-      if (retryRes.ok) {
-        return retryRes.json() as Promise<T>
+  const handleResponse = async () => {
+    if (res.status === 401 && token) {
+      const refreshed = await tryRefresh()
+      if (refreshed) {
+        const newToken = getToken()
+        if (newToken) headers['Authorization'] = `Bearer ${newToken}`
+        const retryRes = await fetch(path, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+        })
+        if (retryRes.ok) {
+          return retryRes.json() as Promise<T>
+        }
       }
+      clearAuth()
+      window.location.href = '/login'
+      throw new Error('Unauthorized')
     }
-    clearAuth()
-    window.location.href = '/login'
-    throw new Error('Unauthorized')
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+
+    return res.json() as Promise<T>
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-
-  return res.json() as Promise<T>
+  return handleResponse().finally(() => markRequestComplete())
 }
 
 export { setAuth, clearAuth }

@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { live, orders as ordersApi, positions as positionsApi, risk } from '../api/client'
 import EquityCurveChart from '../charts/EquityCurveChart'
 import type { LiveMetrics, EquityPoint, Position, Order, TradeSummary, RiskStatus } from '../types/api'
 
 export default function LiveTrading() {
+  const { t } = useTranslation()
   const [metrics, setMetrics] = useState<LiveMetrics | null>(null)
   const [equity, setEquity] = useState<EquityPoint[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [orders, setOrders] = useState<Order[]>([])
   const [liveTrades, setLiveTrades] = useState<TradeSummary[]>([])
   const [riskStatus, setRiskStatus] = useState<RiskStatus | null>(null)
-  const [wsTicks, setWsTicks] = useState<unknown[]>([])
+  const [, setWsTicks] = useState<unknown[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useWebSocket('ticks', { onMessage: (data) => setWsTicks(prev => [...prev.slice(-199), data]) })
@@ -34,7 +36,7 @@ export default function LiveTrading() {
       setRiskStatus(r)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load')
+      setError(err instanceof Error ? err.message : t('common:failedToLoad', 'Failed to load'))
     }
   }, [])
 
@@ -45,10 +47,10 @@ export default function LiveTrading() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Live Trading</h1>
-        <h2 style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }} className="mt-2">Positions & Orders</h2>
+        <h1 style={{ margin: 0 }}>{t('liveTrading:title', 'Live Trading')}</h1>
+        <h2 style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }} className="mt-2">{t('liveTrading:positionsAndOrders', 'Positions & Orders')}</h2>
         <span className={`badge ${riskStatus?.halted ? 'badge-err' : 'badge-ok'}`}>
-          {riskStatus?.halted ? 'HALTED' : 'ACTIVE'}
+          {riskStatus?.halted ? t('common:halted', 'HALTED') : t('common:active', 'ACTIVE')}
         </span>
       </div>
 
@@ -56,12 +58,12 @@ export default function LiveTrading() {
 
       <div className="grid-3 mb-4">
         {[
-          { l: 'Equity', v: `$${format(riskStatus?.equity ?? metrics?.equity)}` },
-          { l: 'Daily P&L', v: `${format(riskStatus?.daily_pnl_pct ?? metrics?.daily_pnl_pct)}%`, c: (riskStatus?.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' },
-          { l: 'Open Positions', v: positions.length },
-          { l: 'Active Orders', v: orders.length },
-          { l: 'Today Trades', v: liveTrades.length },
-          { l: 'Win Rate', v: `${format(metrics?.win_rate)}%` },
+          { l: t('liveTrading:equity', 'Equity'), v: `$${format(riskStatus?.equity ?? metrics?.equity)}` },
+          { l: t('liveTrading:dailyPnl', 'Daily P&L'), v: `${format(riskStatus?.daily_pnl_pct ?? metrics?.daily_pnl_pct)}%`, c: (riskStatus?.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' },
+          { l: t('liveTrading:openPositions', 'Open Positions'), v: positions.length },
+          { l: t('liveTrading:activeOrders', 'Active Orders'), v: orders.length },
+          { l: t('liveTrading:todayTrades', 'Today Trades'), v: liveTrades.length },
+          { l: t('liveTrading:winRate', 'Win Rate'), v: `${format(metrics?.win_rate)}%` },
         ].map(m => (
           <div key={m.l} className="metric-card">
             <div className="metric-label orca-metric-card__label">{m.l}</div>
@@ -71,15 +73,15 @@ export default function LiveTrading() {
       </div>
 
       {equity.length > 0 && (
-        <EquityCurveChart data={equity} height={260} title="Live Equity Curve" color="#3fb950" />
+          <EquityCurveChart data={equity} height={260} title={t('liveTrading:liveEquityCurve', 'Live Equity Curve')} color="#3fb950" />
       )}
 
       <div className="grid-2 mt-4">
         {positions.length > 0 && (
           <div className="card">
-            <h2>Positions ({positions.length})</h2>
-            <table className="data-table">
-              <thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>P&L</th></tr></thead>
+              <h2>{t('liveTrading:positions', 'Positions')} ({positions.length})</h2>
+              <table className="data-table">
+                <thead><tr><th>{t('liveTrading:table.symbol', 'Symbol')}</th><th>{t('liveTrading:table.side', 'Side')}</th><th>{t('liveTrading:table.qty', 'Qty')}</th><th>{t('liveTrading:table.entry', 'Entry')}</th><th>{t('liveTrading:table.pnl', 'P&L')}</th></tr></thead>
               <tbody>
                 {positions.map((p, i) => (
                   <tr key={i}>
@@ -99,9 +101,9 @@ export default function LiveTrading() {
 
         {orders.length > 0 && (
           <div className="card">
-            <h2>Active Orders ({orders.length})</h2>
-            <table className="data-table">
-              <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th>Qty</th><th>Price</th><th>State</th></tr></thead>
+              <h2>{t('liveTrading:activeOrders', 'Active Orders')} ({orders.length})</h2>
+              <table className="data-table">
+                <thead><tr><th>{t('liveTrading:table.symbol', 'Symbol')}</th><th>{t('liveTrading:table.side', 'Side')}</th><th>{t('liveTrading:table.type', 'Type')}</th><th>{t('liveTrading:table.qty', 'Qty')}</th><th>{t('liveTrading:table.price', 'Price')}</th><th>{t('liveTrading:table.state', 'State')}</th></tr></thead>
               <tbody>
                 {orders.map((o, i) => (
                   <tr key={o.order_id ?? i}>
@@ -121,10 +123,10 @@ export default function LiveTrading() {
 
       {liveTrades.length > 0 && (
         <div className="card mt-4">
-          <h2>Recent Trades ({liveTrades.length})</h2>
-          <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
-            <table className="data-table">
-              <thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Date</th></tr></thead>
+            <h2>{t('liveTrading:recentTrades', 'Recent Trades')} ({liveTrades.length})</h2>
+            <div style={{ overflowX: 'auto', maxHeight: 400, overflowY: 'auto' }}>
+              <table className="data-table">
+                <thead><tr><th>{t('liveTrading:table.symbol', 'Symbol')}</th><th>{t('liveTrading:table.side', 'Side')}</th><th>{t('liveTrading:table.qty', 'Qty')}</th><th>{t('liveTrading:table.entry', 'Entry')}</th><th>{t('liveTrading:table.exit', 'Exit')}</th><th>{t('liveTrading:table.pnl', 'P&L')}</th><th>{t('liveTrading:table.date', 'Date')}</th></tr></thead>
               <tbody>
                 {liveTrades.map((t, i) => (
                   <tr key={t.id ?? i}>

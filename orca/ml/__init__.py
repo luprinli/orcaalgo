@@ -22,4 +22,5 @@ __all__ = [
     "feature_selection",
     "features",
     "purge_cv",
+    "train",
 ]

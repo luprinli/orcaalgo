@@ -14,7 +14,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from orca.math.brier import brier_score as _canonical_brier, murphy_decomposition as _canonical_murphy
+from orca.math.brier import brier_score as _canonical_brier
+from orca.math.brier import murphy_decomposition as _canonical_murphy
 from orca.ml.config import MIN_SAMPLES_PER_BIN
 
 logger = logging.getLogger("orca.ml.train.evaluate")
@@ -44,6 +45,7 @@ class ModelEvaluation:
 
 
 def brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+    """NumPy convenience wrapper around canonical `orca.math.brier.brier_score`."""
     return _canonical_brier(y_prob.tolist(), y_true.astype(int).tolist())
 
 

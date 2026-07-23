@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { strategies } from '../api/client'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -6,6 +7,7 @@ import { STRATEGY_CATALOG, type CatalogWithInstance } from '../data/strategyCata
 import type { Strategy } from '../types/api'
 
 export default function StrategiesPage() {
+  const { t } = useTranslation()
   const nav = useNavigate()
   const [dbList, setDbList] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,9 +41,9 @@ export default function StrategiesPage() {
     try {
       await strategies.update(id, { enabled: !current })
       setDbList((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !current } : s)))
-      setMsg('Updated')
+      setMsg(t('strategies:updated', 'Updated'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Update failed')
+      setError(err instanceof Error ? err.message : t('strategies:updateFailed', 'Update failed'))
     }
   }
 
@@ -52,13 +54,13 @@ export default function StrategiesPage() {
     try {
       const params = JSON.parse(form.params || '{}')
       const res = await strategies.create({ name: form.name, type: form.type, parameters: params, enabled: form.enabled })
-      setMsg(`"${res.name}" created`)
+      setMsg(t('strategies:createdMsg', '"{{name}}" created', { name: res.name }))
       setShowCreate(false)
       setForm({ name: '', type: 'intraday_mr', params: '{}', enabled: false })
       const refreshed = await strategies.list()
       setDbList(refreshed.strategies ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create failed')
+      setError(err instanceof Error ? err.message : t('strategies:createFailed', 'Create failed'))
     } finally {
       setCreating(false)
     }
@@ -73,9 +75,9 @@ export default function StrategiesPage() {
     try {
       await strategies.delete(confirmDelete)
       setDbList((prev) => prev.filter((s) => s.id !== confirmDelete))
-      setMsg('Deleted')
+      setMsg(t('strategies:deleted', 'Deleted'))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed')
+      setError(err instanceof Error ? err.message : t('strategies:deleteFailed', 'Delete failed'))
     } finally {
       setConfirmDelete(null)
     }
@@ -84,29 +86,29 @@ export default function StrategiesPage() {
   const handleClone = async (id: string) => {
     try {
       const clone = await strategies.clone(id)
-      setMsg(`Cloned as "${clone.name}"`)
+      setMsg(t('strategies:clonedAs', 'Cloned as "{{name}}"', { name: clone.name }))
       const refreshed = await strategies.list()
       setDbList(refreshed.strategies ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Clone failed')
+      setError(err instanceof Error ? err.message : t('strategies:cloneFailed', 'Clone failed'))
     }
   }
 
-  if (loading) return <div className="card"><p className="text-muted">Loading strategies...</p></div>
+  if (loading) return <div className="card"><p className="text-muted">{t('strategies:loading', 'Loading strategies...')}</p></div>
   if (error) return <div className="card"><p style={{ color: 'var(--danger)' }}>{error}</p></div>
 
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Strategies</h1>
+        <h1 style={{ margin: 0 }}>{t('strategies:title', 'Strategies')}</h1>
         <div className="flex gap-2">
           <button className={`btn ${viewMode === 'catalog' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('catalog')}>
-            Catalog ({catalog.length})
+            {t('strategies:catalogTab', 'Catalog ({{n}})', { n: catalog.length })}
           </button>
           <button className={`btn ${viewMode === 'instances' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setViewMode('instances')}>
-            Instances ({dbList.length})
+            {t('strategies:instancesTab', 'Instances ({{n}})', { n: dbList.length })}
           </button>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Strategy</button>
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>{t('strategies:newStrategy', '+ New Strategy')}</button>
         </div>
       </div>
 
@@ -114,14 +116,14 @@ export default function StrategiesPage() {
 
       {showCreate && (
         <div className="card mb-4">
-          <h2>Create Strategy Instance</h2>
+          <h2>{t('strategies:createInstance', 'Create Strategy Instance')}</h2>
           <div className="grid-2">
             <div>
-              <label className="text-muted">Display Name</label>
+              <label className="text-muted">{t('strategies:displayName', 'Display Name')}</label>
               <input className="input" placeholder="my_strategy" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
             </div>
             <div>
-              <label className="text-muted">Strategy Type</label>
+              <label className="text-muted">{t('strategies:strategyType', 'Strategy Type')}</label>
               <select className="input" value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}>
                 {STRATEGY_CATALOG.filter(c => c.inEngine).map(c => (
                   <option key={c.typeKey} value={c.typeKey}>{c.displayName}</option>
@@ -130,16 +132,16 @@ export default function StrategiesPage() {
             </div>
           </div>
           <div className="mt-2">
-            <label className="text-muted">Parameters (JSON)</label>
+            <label className="text-muted">{t('strategies:paramsJson', 'Parameters (JSON)')}</label>
             <textarea className="input" style={{ minHeight: 60, fontFamily: 'monospace', fontSize: 12, resize: 'vertical' }} placeholder='{ "lookback": 20 }' value={form.params} onChange={e => setForm(p => ({ ...p, params: e.target.value }))} />
           </div>
           <label className="flex gap-2 mt-2" style={{ alignItems: 'center' }}>
             <input type="checkbox" checked={form.enabled} onChange={e => setForm(p => ({ ...p, enabled: e.target.checked }))} />
-            Enable immediately
+            {t('strategies:enableImmediately', 'Enable immediately')}
           </label>
           <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !form.name}>{creating ? 'Creating...' : 'Create'}</button>
-            <button className="btn btn-outline" onClick={() => setShowCreate(false)}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleCreate} disabled={creating || !form.name}>{creating ? t('strategies:creating', 'Creating...') : t('strategies:create', 'Create')}</button>
+            <button className="btn btn-outline" onClick={() => setShowCreate(false)}>{t('strategies:cancel', 'Cancel')}</button>
           </div>
         </div>
       )}
@@ -151,13 +153,13 @@ export default function StrategiesPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Strategy</th>
-                  <th>Type Key</th>
-                  <th>Engine</th>
-                  <th>GKR</th>
-                  <th>DB Instance</th>
-                  <th>Parameters</th>
-                  <th>Actions</th>
+                  <th>{t('strategies:table:strategy', 'Strategy')}</th>
+                  <th>{t('strategies:table:typeKey', 'Type Key')}</th>
+                  <th>{t('strategies:table:engine', 'Engine')}</th>
+                  <th>{t('strategies:table:gkr', 'GKR')}</th>
+                  <th>{t('strategies:table:dbInstance', 'DB Instance')}</th>
+                  <th>{t('strategies:table:parameters', 'Parameters')}</th>
+                  <th>{t('strategies:table:actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -167,22 +169,22 @@ export default function StrategiesPage() {
                     <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{c.typeKey}</td>
                     <td>
                       <span className={`badge ${c.inEngine ? 'badge-ok' : 'badge-err'}`}>
-                        {c.inEngine ? 'Registered' : '—'}
+                        {c.inEngine ? t('strategies:registered', 'Registered') : '—'}
                       </span>
                     </td>
                     <td>
-                      {c.hasGkrFile ? <span className="badge badge-ok">YAML</span> : <span className="text-muted">—</span>}
+                      {c.hasGkrFile ? <span className="badge badge-ok">{t('strategies:yaml', 'YAML')}</span> : <span className="text-muted">—</span>}
                     </td>
                     <td>
                       {c.dbInstance ? (
                         <span>
                           <span className={`badge ${c.dbInstance.enabled ? 'badge-ok' : 'badge-err'}`}>
-                            {c.dbInstance.enabled ? 'Active' : 'Disabled'}
+                            {c.dbInstance.enabled ? t('common:active', 'Active') : t('common:disabled', 'Disabled')}
                           </span>
                           <span className="text-muted" style={{ marginLeft: 4, fontSize: 11 }}>{c.dbInstance.name}</span>
                         </span>
                       ) : (
-                        <span className="text-muted">None</span>
+                        <span className="text-muted">{t('common:none', 'None')}</span>
                       )}
                     </td>
                     <td style={{ fontSize: 11, color: 'var(--text-secondary)', maxWidth: 180 }}>
@@ -193,20 +195,20 @@ export default function StrategiesPage() {
                         {c.dbInstance ? (
                           <>
                             <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => toggleEnabled(c.dbInstance!.id, c.dbInstance!.enabled)}>
-                              {c.dbInstance.enabled ? 'Disable' : 'Enable'}
+                              {c.dbInstance.enabled ? t('common:disable', 'Disable') : t('common:enable', 'Enable')}
                             </button>
                             <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleClone(c.dbInstance!.id)}>
-                              Clone
+                              {t('common:clone', 'Clone')}
                             </button>
                             <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => handleDelete(c.dbInstance!.id)}>
-                              Del
+                              {t('common:del', 'Del')}
                             </button>
                           </>
                         ) : c.inEngine ? (
                           <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => {
                             setForm({ name: c.displayName, type: c.typeKey, params: '{}', enabled: false })
                             setShowCreate(true)
-                          }}>Create</button>
+                          }}>{t('common:create', 'Create')}</button>
                         ) : null}
                       </div>
                     </td>
@@ -222,19 +224,19 @@ export default function StrategiesPage() {
       {viewMode === 'instances' && (
         <>
           {dbList.length === 0 ? (
-            <div className="card"><p className="text-muted">No strategy instances. Switch to Catalog view and click "Create" on a strategy type.</p></div>
+            <div className="card"><p className="text-muted">{t('strategies:noInstances', 'No strategy instances. Switch to Catalog view and click "Create" on a strategy type.')}</p></div>
           ) : (
             <div className="card">
               <div style={{ overflowX: 'auto' }}>
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Type</th>
-                      <th>Parameters</th>
-                      <th>Enabled</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th>{t('strategies:table:name', 'Name')}</th>
+                      <th>{t('strategies:table:type', 'Type')}</th>
+                      <th>{t('strategies:table:parameters', 'Parameters')}</th>
+                      <th>{t('strategies:table:enabled', 'Enabled')}</th>
+                      <th>{t('strategies:table:created', 'Created')}</th>
+                      <th>{t('strategies:table:actions', 'Actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -249,7 +251,7 @@ export default function StrategiesPage() {
                         </td>
                         <td>
                           <span className={`badge ${s.enabled ? 'badge-ok' : 'badge-err'}`}>
-                            {s.enabled ? 'Enabled' : 'Disabled'}
+                            {s.enabled ? t('common:enabled', 'Enabled') : t('common:disabled', 'Disabled')}
                           </span>
                         </td>
                         <td style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
@@ -257,9 +259,9 @@ export default function StrategiesPage() {
                         </td>
                         <td>
                           <div className="flex gap-1">
-                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => toggleEnabled(s.id, s.enabled)}>Toggle</button>
-                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleClone(s.id)}>Clone</button>
-                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => handleDelete(s.id)}>Del</button>
+                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => toggleEnabled(s.id, s.enabled)}>{t('common:toggle', 'Toggle')}</button>
+                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleClone(s.id)}>{t('common:clone', 'Clone')}</button>
+                            <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => handleDelete(s.id)}>{t('common:del', 'Del')}</button>
                           </div>
                         </td>
                       </tr>
@@ -274,9 +276,9 @@ export default function StrategiesPage() {
 
       {confirmDelete && (
         <ConfirmDialog
-          title="Delete Strategy"
-          message="Delete this strategy instance? This action cannot be undone."
-          confirmLabel="Delete"
+          title={t('strategies:deleteTitle', 'Delete Strategy')}
+          message={t('strategies:deleteConfirm', 'Delete this strategy instance? This action cannot be undone.')}
+          confirmLabel={t('common:delete', 'Delete')}
           danger
           onConfirm={confirmDeleteStrategy}
           onCancel={() => setConfirmDelete(null)}

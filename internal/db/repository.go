@@ -541,6 +541,25 @@ type BacktestResult struct {
 	NumTrades      int
 }
 
+type MatrixProgressRecord struct {
+	BatchID      string    `json:"batch_id"`
+	Mode         string    `json:"mode"`
+	Total        int       `json:"total"`
+	Completed    int       `json:"completed"`
+	Failed       int       `json:"failed"`
+	Running      int       `json:"running"`
+	Passed       int       `json:"passed"`
+	Status       string    `json:"status"`
+	StartTime    time.Time `json:"start_time"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	CombosJSON   []byte    `json:"-"`
+	ResultsJSON  []byte    `json:"-"`
+	BestSharpe   float64   `json:"best_sharpe"`
+	BestStrategy string    `json:"best_strategy"`
+	BestSymbol   string    `json:"best_symbol"`
+	TotalTrades  int       `json:"total_trades"`
+}
+
 var DefaultSymbols = []Symbol{
 	{Ticker: "AAPL", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
 	{Ticker: "MSFT", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
@@ -1005,4 +1024,73 @@ func (r *Repository) LoadAllCandles(ctx context.Context, symbols []string, start
 		result[ticker] = append(result[ticker], c)
 	}
 	return result, nil
+}
+
+func (r *Repository) UpsertMatrixProgress(ctx context.Context, mp *MatrixProgressRecord) error {
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO matrix_progress (batch_id, mode, total, completed, failed, running, passed, status, start_time, updated_at, combos_json, results_json, best_sharpe, best_strategy, best_symbol, total_trades)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+		 ON CONFLICT (batch_id) DO UPDATE SET
+		   total=$3, completed=$4, failed=$5, running=$6, passed=$7, status=$8,
+		   updated_at=$10, combos_json=$11, results_json=$12,
+		   best_sharpe=$13, best_strategy=$14, best_symbol=$15, total_trades=$16`,
+		mp.BatchID, mp.Mode, mp.Total, mp.Completed, mp.Failed, mp.Running,
+		mp.Passed, mp.Status, mp.StartTime, mp.UpdatedAt,
+		mp.CombosJSON, mp.ResultsJSON, mp.BestSharpe, mp.BestStrategy, mp.BestSymbol, mp.TotalTrades,
+	)
+	return err
+}
+
+func (r *Repository) GetMatrixProgress(ctx context.Context, batchID string) (*MatrixProgressRecord, error) {
+	var mp MatrixProgressRecord
+	err := r.pool.QueryRow(ctx,
+		`SELECT batch_id, mode, total, completed, failed, running, passed, status, start_time, updated_at,
+		        combos_json, results_json, best_sharpe, best_strategy, best_symbol, total_trades
+		 FROM matrix_progress WHERE batch_id=$1`, batchID,
+	).Scan(&mp.BatchID, &mp.Mode, &mp.Total, &mp.Completed, &mp.Failed, &mp.Running,
+		&mp.Passed, &mp.Status, &mp.StartTime, &mp.UpdatedAt,
+		&mp.CombosJSON, &mp.ResultsJSON, &mp.BestSharpe, &mp.BestStrategy, &mp.BestSymbol, &mp.TotalTrades,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &mp, nil
+}
+
+func (r *Repository) ListActiveMatrices(ctx context.Context) ([]*MatrixProgressRecord, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT batch_id, mode, total, completed, failed, running, passed, status, start_time, updated_at,
+		        combos_json, results_json, best_sharpe, best_strategy, best_symbol, total_trades
+		 FROM matrix_progress WHERE status='running' ORDER BY start_time DESC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []*MatrixProgressRecord
+	for rows.Next() {
+		var mp MatrixProgressRecord
+		if err := rows.Scan(&mp.BatchID, &mp.Mode, &mp.Total, &mp.Completed, &mp.Failed, &mp.Running,
+			&mp.Passed, &mp.Status, &mp.StartTime, &mp.UpdatedAt,
+			&mp.CombosJSON, &mp.ResultsJSON, &mp.BestSharpe, &mp.BestStrategy, &mp.BestSymbol, &mp.TotalTrades); err != nil {
+			continue
+		}
+		results = append(results, &mp)
+	}
+	return results, nil
+}
+
+func (r *Repository) DeleteMatrixBatch(ctx context.Context, batchID string) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM matrix_progress WHERE batch_id=$1`, batchID)
+	return err
+}
+
+func (r *Repository) CleanupOldMatrices(ctx context.Context) (int64, error) {
+	tag, err := r.pool.Exec(ctx,
+		`DELETE FROM matrix_progress WHERE status IN ('completed','failed','cancelled') AND updated_at < NOW() - INTERVAL '24 hours'`,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

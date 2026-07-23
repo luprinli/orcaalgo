@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -19,6 +20,7 @@ const orderSchema = z.object({
 type OrderFormData = z.infer<typeof orderSchema>
 
 export default function ExecutionPage() {
+  const { t } = useTranslation()
   const { register, handleSubmit, formState: { errors }, reset, watch } = useForm<OrderFormData>({
     resolver: zodResolver(orderSchema),
     defaultValues: { symbol: '', side: 'BUY', orderType: 'MARKET', quantity: '100', limitPrice: '', stopPrice: '' },
@@ -53,12 +55,12 @@ export default function ExecutionPage() {
         stopPrice: data.stopPrice ? parseFloat(data.stopPrice) : undefined,
         timeInForce: 'DAY',
       })
-      setMsg(`Order placed: ${res.state ?? res.order_id}`)
-      showToast('success', `Order placed: ${res.order_id?.slice(0, 8)}`)
+      setMsg(t('execution:orderPlaced', 'Order placed: {{id}}', { id: res.state ?? res.order_id }))
+      showToast('success', t('execution:orderPlaced', 'Order placed: {{id}}', { id: res.order_id?.slice(0, 8) }))
       reset()
       fetchOrders()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Order failed')
+      setMsg(err instanceof Error ? err.message : t('execution:orderFailed', 'Order failed'))
     } finally {
       setLoading(false)
     }
@@ -69,68 +71,68 @@ export default function ExecutionPage() {
       await orders.cancel(orderId)
       fetchOrders()
     } catch {
-      setMsg('Cancel failed')
+      setMsg(t('execution:cancelFailed', 'Cancel failed'))
     }
   }
 
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Execution</h1>
-        <button className="btn btn-outline" onClick={fetchOrders}>Refresh Orders</button>
+        <h1 style={{ margin: 0 }}>{t('execution:title', 'Execution')}</h1>
+        <button className="btn btn-outline" onClick={fetchOrders}>{t('execution:refreshOrders', 'Refresh Orders')}</button>
       </div>
 
       <div className="grid-2 mb-4">
         <div className="card">
-          <h2>Place Order</h2>
+          <h2>{t('execution:placeOrder', 'Place Order')}</h2>
           <form onSubmit={place} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <FormField label="Order Type" name="orderType" register={register} error={errors.orderType}>
-              <select className="input" aria-label="Order Type" {...register('orderType')}>
-                <option value="MARKET">Market</option>
-                <option value="LIMIT">Limit</option>
-                <option value="STOP">Stop</option>
-                <option value="STOP_LIMIT">Stop Limit</option>
+            <FormField label={t('execution:orderType', 'Order Type')} name="orderType" register={register} error={errors.orderType}>
+              <select className="input" aria-label={t('execution:orderType', 'Order Type')} {...register('orderType')}>
+                <option value="MARKET">{t('execution:orderType_market', 'Market')}</option>
+                <option value="LIMIT">{t('execution:orderType_limit', 'Limit')}</option>
+                <option value="STOP">{t('execution:orderType_stop', 'Stop')}</option>
+                <option value="STOP_LIMIT">{t('execution:orderType_stopLimit', 'Stop Limit')}</option>
               </select>
             </FormField>
-            <FormField label="Symbol" name="symbol" register={register} error={errors.symbol} placeholder="SPX500" />
-            <FormField label="Side" name="side" register={register} error={errors.side}>
-              <select className="input" aria-label="Side" {...register('side')}>
-                <option value="BUY">BUY</option>
-                <option value="SELL">SELL</option>
+            <FormField label={t('execution:symbol', 'Symbol')} name="symbol" register={register} error={errors.symbol} placeholder={t('execution:placeholder.symbol', 'SPX500')} />
+            <FormField label={t('execution:side', 'Side')} name="side" register={register} error={errors.side}>
+              <select className="input" aria-label={t('execution:side', 'Side')} {...register('side')}>
+                <option value="BUY">{t('execution:side_buy', 'BUY')}</option>
+                <option value="SELL">{t('execution:side_sell', 'SELL')}</option>
               </select>
             </FormField>
-            <FormField label="Quantity" name="quantity" register={register} error={errors.quantity} type="number" placeholder="100" />
+            <FormField label={t('execution:quantity', 'Quantity')} name="quantity" register={register} error={errors.quantity} type="number" placeholder={t('execution:placeholder.quantity', '100')} />
             {(orderType === 'LIMIT' || orderType === 'STOP_LIMIT') && (
-              <FormField label="Limit Price" name="limitPrice" register={register} error={errors.limitPrice} type="number" placeholder="0.00" />
+              <FormField label={t('execution:limitPrice', 'Limit Price')} name="limitPrice" register={register} error={errors.limitPrice} type="number" placeholder={t('execution:placeholder.limitPrice', '0.00')} />
             )}
             {(orderType === 'STOP' || orderType === 'STOP_LIMIT') && (
-              <FormField label="Stop Price" name="stopPrice" register={register} error={errors.stopPrice} type="number" placeholder="0.00" />
+              <FormField label={t('execution:stopPrice', 'Stop Price')} name="stopPrice" register={register} error={errors.stopPrice} type="number" placeholder={t('execution:placeholder.limitPrice', '0.00')} />
             )}
             <button className="btn btn-primary" type="submit" disabled={loading} style={{ justifyContent: 'center' }}>
-              {loading ? 'Placing...' : `Place ${orderType} Order`}
+              {loading ? t('execution:placing', 'Placing...') : t('execution:placeOrderButton', 'Place {{orderType}} Order', { orderType: t(`execution:orderType_${orderType.toLowerCase()}`, orderType) })}
             </button>
             {msg && <p className="text-muted" style={{ margin: 0, fontSize: 13 }}>{msg}</p>}
           </form>
         </div>
 
         <div className="card">
-          <h2>Active Orders ({orderList.length})</h2>
+          <h2>{t('execution:activeOrders', 'Active Orders')} ({orderList.length})</h2>
           {orderList.length === 0 ? (
-            <p className="text-muted">No active orders</p>
+            <p className="text-muted">{t('execution:noActiveOrders', 'No active orders')}</p>
           ) : (
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>Symbol</th>
-                    <th>Side</th>
-                    <th>Type</th>
-                    <th>Qty</th>
-                    <th>Filled</th>
-                    <th>Price</th>
-                    <th>Status</th>
-                    <th>Action</th>
+                    <th>{t('execution:table.id', 'ID')}</th>
+                    <th>{t('execution:table.symbol', 'Symbol')}</th>
+                    <th>{t('execution:table.side', 'Side')}</th>
+                    <th>{t('execution:table.type', 'Type')}</th>
+                    <th>{t('execution:table.qty', 'Qty')}</th>
+                    <th>{t('execution:table.filled', 'Filled')}</th>
+                    <th>{t('execution:table.price', 'Price')}</th>
+                    <th>{t('execution:table.status', 'Status')}</th>
+                    <th>{t('execution:table.action', 'Action')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -145,8 +147,8 @@ export default function ExecutionPage() {
                       <td>{o.price != null ? `$${o.price}` : '--'}</td>
                       <td>{o.state}</td>
                       <td>
-                        <button className="btn btn-outline" aria-label={`Cancel order ${o.order_id?.slice(0, 8)}`} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => cancelOrder(o.order_id)}>
-                          Cancel
+                        <button className="btn btn-outline" aria-label={t('execution:cancelOrderAria', 'Cancel order {{id}}', { id: o.order_id?.slice(0, 8) })} style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => cancelOrder(o.order_id)}>
+                          {t('execution:cancelOrder', 'Cancel')}
                         </button>
                       </td>
                     </tr>

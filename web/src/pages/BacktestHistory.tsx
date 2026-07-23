@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { backtests } from '../api/client'
 import ErrorCard from '../components/ErrorCard'
@@ -14,6 +15,7 @@ interface EntryWithMetrics extends BacktestHistoryEntry {
 }
 
 export default function BacktestHistory() {
+  const { t } = useTranslation()
   const nav = useNavigate()
   const [list, setList] = useState<EntryWithMetrics[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,7 +75,7 @@ export default function BacktestHistory() {
       }))
       setList(runs)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load history')
+      setError(err instanceof Error ? err.message : t('backtestHistory:failedToLoad', 'Failed to load history'))
     } finally {
       setLoading(false)
     }
@@ -111,7 +113,7 @@ export default function BacktestHistory() {
       setConfirmDelete(null)
       fetchList()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed')
+      setError(err instanceof Error ? err.message : t('backtestHistory:deleteFailed', 'Delete failed'))
       setConfirmDelete(null)
     }
   }
@@ -121,14 +123,14 @@ export default function BacktestHistory() {
       const res = await backtests.rerun(id)
       nav(`/backtest/history/${res.run_id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Rerun failed')
+      setError(err instanceof Error ? err.message : t('backtestHistory:rerunFailed', 'Rerun failed'))
     }
   }
 
   if (loading && list.length === 0) {
     return (
       <div className="card">
-        <h2>Backtest History</h2>
+        <h2>{t('backtestHistory:title', 'Backtest History')}</h2>
         <TableSkeleton rows={6} cols={8} />
       </div>
     )
@@ -137,28 +139,28 @@ export default function BacktestHistory() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Backtest History</h1>
+        <h1 style={{ margin: 0 }}>{t('backtestHistory:title', 'Backtest History')}</h1>
         <div className="flex gap-2">
           {compareMode ? (
             <>
               <button className="btn btn-outline" onClick={clearComparison}>
-                Cancel Compare
+                {t('backtestHistory:cancelCompare', 'Cancel Compare')}
               </button>
               <button
                 className="btn btn-primary"
                 onClick={runComparison}
                 disabled={selectedForCompare.size < 2 || compareLoading}
               >
-                {compareLoading ? 'Loading...' : `Compare (${selectedForCompare.size})`}
+                {compareLoading ? t('backtestHistory:loading', 'Loading...') : t('backtestHistory:compareWithCount', 'Compare ({{n}})', { n: selectedForCompare.size })}
               </button>
             </>
           ) : (
             <button className="btn btn-outline" onClick={() => setCompareMode(true)}>
-              Compare
+              {t('backtestHistory:compare', 'Compare')}
             </button>
           )}
           <button className="btn btn-outline" onClick={fetchList}>
-            Refresh
+            {t('backtestHistory:refresh', 'Refresh')}
           </button>
         </div>
       </div>
@@ -167,7 +169,7 @@ export default function BacktestHistory() {
 
       {list.length === 0 ? (
         <div className="card">
-          <p className="text-muted">No backtest runs yet. Run a backtest to see results here.</p>
+          <p className="text-muted">{t('backtestHistory:noRuns', 'No backtest runs yet. Run a backtest to see results here.')}</p>
         </div>
       ) : (
         <div className="card">
@@ -176,18 +178,18 @@ export default function BacktestHistory() {
                 <thead>
                   <tr>
                     {compareMode && <th style={{ width: 32 }}></th>}
-                    <th>ID</th>
-                    <th>Type</th>
-                    <th>Strategies</th>
-                    <th>Symbols</th>
-                    <th>Sharpe</th>
-                  <th>Max DD</th>
-                  <th>Win Rate</th>
-                  <th>Trades</th>
-                  <th>Return</th>
-                  <th>Started</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                    <th>{t('backtestHistory:table:id', 'ID')}</th>
+                    <th>{t('backtestHistory:table:type', 'Type')}</th>
+                    <th>{t('backtestHistory:table:strategies', 'Strategies')}</th>
+                    <th>{t('backtestHistory:table:symbols', 'Symbols')}</th>
+                    <th>{t('backtestHistory:table:sharpe', 'Sharpe')}</th>
+                  <th>{t('backtestHistory:table:maxDd', 'Max DD')}</th>
+                  <th>{t('backtestHistory:table:winRate', 'Win Rate')}</th>
+                  <th>{t('backtestHistory:table:trades', 'Trades')}</th>
+                  <th>{t('backtestHistory:table:return', 'Return')}</th>
+                  <th>{t('backtestHistory:table:started', 'Started')}</th>
+                  <th>{t('backtestHistory:table:status', 'Status')}</th>
+                  <th>{t('backtestHistory:table:actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -198,7 +200,7 @@ export default function BacktestHistory() {
                     <tr key={bt.id} style={{ cursor: 'pointer', background: isSelected ? 'rgba(63,185,80,.06)' : undefined }} onClick={() => compareMode ? toggleCompareSelect(bt.id) : nav(`/backtest/history/${bt.id}`)}>
                       {compareMode && (
                         <td onClick={e => e.stopPropagation()}>
-                          <input type="checkbox" checked={isSelected} onChange={() => toggleCompareSelect(bt.id)} aria-label={`Select ${bt.id} for comparison`} />
+                          <input type="checkbox" checked={isSelected} onChange={() => toggleCompareSelect(bt.id)} aria-label={t('backtestHistory:selectForComparison', 'Select {{id}} for comparison', { id: bt.id })} />
                         </td>
                       )}
                       <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{bt.id?.slice(0, 12)}</td>
@@ -227,14 +229,14 @@ export default function BacktestHistory() {
                             style={{ padding: '2px 8px', fontSize: 11 }}
                             onClick={(e) => { e.stopPropagation(); handleRerun(bt.id) }}
                           >
-                            Rerun
+                            {t('backtestHistory:rerun', 'Rerun')}
                           </button>
                           <button
                             className="btn btn-outline"
                             style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }}
                             onClick={(e) => { e.stopPropagation(); handleDelete(bt.id) }}
                           >
-                            Delete
+                            {t('backtestHistory:delete', 'Delete')}
                           </button>
                         </div>
                       </td>
@@ -250,9 +252,9 @@ export default function BacktestHistory() {
       {compareEquity && Object.keys(compareEquity).length >= 2 && (
         <div className="card mb-4">
           <div className="flex-between mb-2">
-            <h2 style={{ margin: 0 }}>Comparison</h2>
+            <h2 style={{ margin: 0 }}>{t('backtestHistory:comparison', 'Comparison')}</h2>
             <button className="btn btn-outline" style={{ fontSize: 11, padding: '2px 8px' }} onClick={clearComparison}>
-              Close
+              {t('backtestHistory:close', 'Close')}
             </button>
           </div>
 
@@ -260,7 +262,7 @@ export default function BacktestHistory() {
             <table className="data-table" style={{ fontSize: 12 }}>
               <thead>
                 <tr>
-                  <th>Metric</th>
+                  <th>{t('backtestHistory:compareMetric', 'Metric')}</th>
                   {Object.keys(compareEquity).map((id, idx) => {
                     const entry = list.find(l => l.id === id)
                     return (
@@ -273,20 +275,20 @@ export default function BacktestHistory() {
               </thead>
               <tbody>
                 {( [
-                  ['Sharpe', (m: BacktestMetrics | undefined) => m ? formatNumber(m.sharpe_ratio, 2) : '—'],
-                  ['Sortino', (m: BacktestMetrics | undefined) => m ? formatNumber(m.sortino_ratio, 2) : '—'],
-                  ['Max DD', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.max_drawdown_pct, 1) : '—'],
-                  ['Win Rate', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.win_rate_pct, 1) : '—'],
-                  ['Profit Factor', (m: BacktestMetrics | undefined) => m ? formatNumber(m.profit_factor, 2) : '—'],
-                  ['Total Return', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.total_return_pct, 1) : '—'],
-                  ['Trades', (m: BacktestMetrics | undefined) => m ? String(m.num_trades) : '—'],
-                  ['CAGR', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.cagr, 1) : '—'],
-                  ['Calmar', (m: BacktestMetrics | undefined) => m ? formatNumber(m.calmar, 2) : '—'],
-                  ['VaR 95%', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.var_95, 1) : '—'],
-                  ['Pass Prob', (m: BacktestMetrics | undefined) => m ? `${m.pass_probability?.toFixed(0)}%` : '—'],
-                ] as Array<[string, (m: BacktestMetrics | undefined) => string]> ).map(([label, fmt]) => (
-                  <tr key={label}>
-                    <td style={{ fontWeight: 600 }}>{label}</td>
+                  ['backtestDetail:metrics:sharpe', (m: BacktestMetrics | undefined) => m ? formatNumber(m.sharpe_ratio, 2) : '—'],
+                  ['backtestDetail:metrics:sortino', (m: BacktestMetrics | undefined) => m ? formatNumber(m.sortino_ratio, 2) : '—'],
+                  ['backtestDetail:metrics:maxDd', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.max_drawdown_pct, 1) : '—'],
+                  ['backtestDetail:metrics:winRate', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.win_rate_pct, 1) : '—'],
+                  ['backtestDetail:metrics:profitFactor', (m: BacktestMetrics | undefined) => m ? formatNumber(m.profit_factor, 2) : '—'],
+                  ['backtestDetail:metrics:totalReturn', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.total_return_pct, 1) : '—'],
+                  ['backtestDetail:metrics:trades', (m: BacktestMetrics | undefined) => m ? String(m.num_trades) : '—'],
+                  ['backtestDetail:metrics:cagr', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.cagr, 1) : '—'],
+                  ['backtestDetail:metrics:calmar', (m: BacktestMetrics | undefined) => m ? formatNumber(m.calmar, 2) : '—'],
+                  ['backtestDetail:metrics:var95', (m: BacktestMetrics | undefined) => m ? formatPctRaw(m.var_95, 1) : '—'],
+                  ['backtestDetail:metrics:passProb', (m: BacktestMetrics | undefined) => m ? `${m.pass_probability?.toFixed(0)}%` : '—'],
+                ] as Array<[string, (m: BacktestMetrics | undefined) => string]> ).map(([labelKey, fmt]) => (
+                  <tr key={labelKey}>
+                    <td style={{ fontWeight: 600 }}>{t(labelKey)}</td>
                     {Object.keys(compareEquity).map(id => {
                       const entry = list.find(l => l.id === id)
                       return <td key={id}>{fmt(entry?._metrics)}</td>
@@ -313,7 +315,7 @@ export default function BacktestHistory() {
               <EquityCurveChart
                 data={primary[1]}
                 height={350}
-                title={`${primaryEntry?.strategy_ids?.[0] ?? primary[0]?.slice(0, 8)} vs ${entries.length - 1} others`}
+                title={t('backtestHistory:vsOthers', '{{name}} vs {{n}} others', { name: primaryEntry?.strategy_ids?.[0] ?? primary[0]?.slice(0, 8), n: entries.length - 1 })}
                 color={compareColors[0]}
                 overlays={overlayData}
               />
@@ -324,9 +326,9 @@ export default function BacktestHistory() {
 
       {confirmDelete && (
         <ConfirmDialog
-          title="Delete Backtest"
-          message="Delete this backtest run? This action cannot be undone."
-          confirmLabel="Delete"
+          title={t('backtestHistory:deleteTitle', 'Delete Backtest')}
+          message={t('backtestHistory:deleteConfirm', 'Delete this backtest run? This action cannot be undone.')}
+          confirmLabel={t('backtestHistory:delete', 'Delete')}
           danger
           onConfirm={confirmDeleteRun}
           onCancel={() => setConfirmDelete(null)}

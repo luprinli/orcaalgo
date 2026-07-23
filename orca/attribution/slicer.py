@@ -41,7 +41,6 @@ def _compute_slice(trades_subset: list[dict]) -> SliceStats:
         ci_low, ci_high = 0.0, 1.0
     else:
         wins = sum(1 for t in trades_subset if t.get("pnl", 0) > 0)
-        p = wins / n
         ci_low, ci_high = wilson_ci(wins, n)
 
     wins = sum(1 for t in trades_subset if t.get("pnl", 0) > 0)

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries,
   type IChartApi, type Time,
@@ -22,6 +23,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, number | string>> = {
 }
 
 export default function IndicatorsPage() {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<Array<{ ticker: string; exchange: string; asset_type: string; id: number; is_active: boolean }>>([])
   const [selectedSymbol, setSelectedSymbol] = useState('')
   const [range, setRange] = useState('1M')
@@ -233,7 +235,7 @@ export default function IndicatorsPage() {
       const d = await candlesApi.get(selectedSymbol, range)
       setCandles(d.candles ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load candles')
+      setError(err instanceof Error ? err.message : t('indicators:failedToLoad', 'Failed to load candles'))
     } finally {
       setLoading(false)
     }
@@ -304,14 +306,14 @@ export default function IndicatorsPage() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Indicators</h1>
+        <h1 style={{ margin: 0 }}>{t('indicators:title', 'Indicators')}</h1>
         <div className="flex gap-2">
           <select className="input" style={{ width: 100 }} value={range} onChange={e => setRange(e.target.value)}>
-            <option value="1D">1 Day</option><option value="1W">1 Week</option><option value="1M">1 Month</option><option value="3M">3 Months</option><option value="1Y">1 Year</option>
+            <option value="1D">{t('indicators:range.1D', '1 Day')}</option><option value="1W">{t('indicators:range.1W', '1 Week')}</option><option value="1M">{t('indicators:range.1M', '1 Month')}</option><option value="3M">{t('indicators:range.3M', '3 Months')}</option><option value="1Y">{t('indicators:range.1Y', '1 Year')}</option>
           </select>
           <TimeframeChips variant="toolbar" />
           <button className="btn btn-primary" onClick={fetchCandles} disabled={loading}>
-            {loading ? 'Loading...' : 'Refresh'}
+            {loading ? t('indicators:loading', 'Loading...') : t('indicators:refresh', 'Refresh')}
           </button>
         </div>
       </div>
@@ -323,7 +325,7 @@ export default function IndicatorsPage() {
       )}
 
       <div className="card mb-4">
-        <h2 className="mb-3">Add Indicator</h2>
+        <h2 className="mb-3">{t('indicators:addIndicator', 'Add Indicator')}</h2>
         <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
           {INDICATOR_IDS.map(id => {
             const spec = specs.find(s => s.id === id)
@@ -345,7 +347,7 @@ export default function IndicatorsPage() {
 
       {activeIds.length > 0 && (
         <div className="card mb-4">
-          <h2 className="mb-3">Active Overlays ({activeIds.length})</h2>
+          <h2 className="mb-3">{t('indicators:activeOverlays', 'Active Overlays ({{n}})', { n: activeIds.length })}</h2>
           <div className="flex gap-2" style={{ flexWrap: 'wrap' }}>
             {store.all().map(i => (
               <div key={i._id} className="flex gap-2" style={{ alignItems: 'center', padding: '4px 8px', background: 'var(--bg-hover)', borderRadius: 6 }}>
@@ -357,7 +359,7 @@ export default function IndicatorsPage() {
                 ))}
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{i.spec.name}</span>
                 <button className="btn btn-outline" style={{ fontSize: 10, padding: '1px 6px' }} onClick={() => removeIndicator(i._id)}>
-                  Remove
+                  {t('indicators:remove', 'Remove')}
                 </button>
               </div>
             ))}
@@ -368,7 +370,7 @@ export default function IndicatorsPage() {
       <div ref={fullscreenContainerRef} style={{ width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: isFullscreen ? 'var(--chart-bg)' : undefined }}>
         <button
           onClick={toggleFullscreen}
-          title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          title={isFullscreen ? t('indicators:exitFullscreen', 'Exit fullscreen') : t('indicators:fullscreen', 'Fullscreen')}
           style={{
             position: 'absolute', top: 8, right: 8, zIndex: 10,
             background: 'transparent', border: 'none', color: '#d1d4dc',
@@ -385,11 +387,11 @@ export default function IndicatorsPage() {
 
       <div className="card mt-4">
         <div className="flex-between mb-3">
-          <h2 style={{ margin: 0 }}>Symbols ({symbols.length})</h2>
+          <h2 style={{ margin: 0 }}>{t('indicators:symbols', 'Symbols ({{n}})', { n: symbols.length })}</h2>
         </div>
         <div style={{ maxHeight: 300, overflowY: 'auto' }}>
           <table className="data-table">
-            <thead><tr><th>Ticker</th><th>Exchange</th><th>Type</th><th>Active</th></tr></thead>
+            <thead><tr><th>{t('indicators:table.ticker', 'Ticker')}</th><th>{t('indicators:table.exchange', 'Exchange')}</th><th>{t('indicators:table.type', 'Type')}</th><th>{t('indicators:table.active', 'Active')}</th></tr></thead>
             <tbody>
               {symbols.map(s => (
                 <tr key={s.id}
@@ -405,7 +407,7 @@ export default function IndicatorsPage() {
                     {s.exchange}
                   </td>
                   <td>{s.asset_type}</td>
-                  <td><span className={`badge ${s.is_active ? 'badge-ok' : 'badge-err'}`}>{s.is_active ? 'Active' : 'Inactive'}</span></td>
+                  <td><span className={`badge ${s.is_active ? 'badge-ok' : 'badge-err'}`}>{s.is_active ? t('common:active', 'Active') : t('common:inactive', 'Inactive')}</span></td>
                 </tr>
               ))}
             </tbody>

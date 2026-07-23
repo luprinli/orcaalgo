@@ -1,6 +1,8 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export default function LoginPage({ onLogin }: { onLogin: (t: string) => void }) {
+  const { t } = useTranslation()
   const [user, setUser] = useState('')
   const [pass, setPass] = useState('')
   const [err, setErr] = useState('')
@@ -16,38 +18,38 @@ export default function LoginPage({ onLogin }: { onLogin: (t: string) => void })
       if (d.access_token) {
         onLogin(d.access_token)
       } else {
-        setErr('Invalid credentials')
+        setErr(t('auth:invalidCredentials', 'Invalid credentials'))
       }
     } catch {
-      setErr('Login failed')
+      setErr(t('auth:loginFailed', 'Login failed'))
     }
   }
 
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <h1>Orca Algo</h1>
+        <h1>{t('sidebar:brandName', 'Orca Algo')}</h1>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input
             className="input"
-            placeholder="Username"
-            aria-label="Username"
+            placeholder={t('auth:username', 'Username')}
+            aria-label={t('auth:username', 'Username')}
             value={user}
             onChange={e => setUser(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && login()}
           />
           <input
             className="input"
-            placeholder="Password"
+            placeholder={t('auth:password', 'Password')}
             type="password"
-            aria-label="Password"
+            aria-label={t('auth:password', 'Password')}
             value={pass}
             onChange={e => setPass(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && login()}
           />
           {err && <p role="alert" style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{err}</p>}
-          <button className="btn btn-primary" onClick={login} aria-label="Sign in" style={{ justifyContent: 'center' }}>
-            Sign In
+          <button className="btn btn-primary" onClick={login} aria-label={t('auth:loginButton', 'Sign in')} style={{ justifyContent: 'center' }}>
+            {t('auth:loginButton', 'Sign In')}
           </button>
         </div>
       </div>

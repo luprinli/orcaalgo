@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { backtests } from '../api/client'
 import PromoteToLiveWizard from '../components/deploy/PromoteToLiveWizard'
@@ -21,6 +22,7 @@ import ComparisonTab from '../components/backtest/ComparisonTab'
 import type { BacktestMetrics, EquityPoint, DailyReturn, TradeSummary, RegimeStat, OptimizationFootprint, LiveComparisonResponse, MonthlyReturn } from '../types/api'
 
 export default function BacktestDetail() {
+  const { t } = useTranslation()
   const { id } = useParams()
   const [showWizard, setShowWizard] = useState(false)
   const [metrics, setMetrics] = useState<BacktestMetrics | null>(null)
@@ -50,7 +52,7 @@ export default function BacktestDetail() {
     setLoading(true)
     setError(null)
     try {
-      const [m, e, d, t] = await Promise.all([
+      const [m, e, d, tr] = await Promise.all([
         backtests.metrics(id),
         backtests.equity(id),
         backtests.dailyReturns(id),
@@ -64,9 +66,9 @@ export default function BacktestDetail() {
         regime: (typeof p.regime_label === 'number' ? p.regime_label : p.regime) ?? 0,
       })) : [])
       setDailyReturns(Array.isArray(d) ? d : [])
-      setTrades(t?.trades ?? [])
+      setTrades(tr?.trades ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load backtest')
+      setError(err instanceof Error ? err.message : t('backtestDetail:failedToLoad', 'Failed to load backtest'))
       setMetrics(null)
     } finally {
       setLoading(false)
@@ -124,7 +126,7 @@ export default function BacktestDetail() {
   if (loading) {
     return (
       <div className="card">
-        <p className="text-muted">Loading backtest data...</p>
+        <p className="text-muted">{t('backtestDetail:loading', 'Loading backtest data...')}</p>
       </div>
     )
   }
@@ -140,7 +142,7 @@ export default function BacktestDetail() {
   if (!metrics) {
     return (
       <div className="card">
-        <p className="text-muted">Backtest not found</p>
+        <p className="text-muted">{t('backtestDetail:notFound', 'Backtest not found')}</p>
       </div>
     )
   }
@@ -148,41 +150,41 @@ export default function BacktestDetail() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Backtest Detail</h1>
+        <h1 style={{ margin: 0 }}>{t('backtestDetail:title', 'Backtest Detail')}</h1>
         <div className="flex gap-2">
           {trades.length > 0 && (
             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => {
               exportTradesCSV(filteredTrades)
-              showToast('success', `Exported ${filteredTrades.length} trades`)
+              showToast('success', t('backtestDetail:exportedTrades', 'Exported {{n}} trades', { n: filteredTrades.length }))
             }}>
-              Export Trades
+              {t('backtestDetail:exportTrades', 'Export Trades')}
             </button>
           )}
           {equity.length > 0 && (
             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => {
               exportEquityCSV(equity)
-              showToast('success', `Exported equity curve`)
+              showToast('success', t('backtestDetail:exportedEquity', 'Exported equity curve'))
             }}>
-              Export Equity
+              {t('backtestDetail:exportEquity', 'Export Equity')}
             </button>
           )}
           {dailyReturns.length > 0 && (
             <button className="btn btn-outline" style={{ fontSize: 11, padding: '4px 10px' }} onClick={() => {
               exportDailyReturnsCSV(dailyReturns)
-              showToast('success', `Exported daily returns`)
+              showToast('success', t('backtestDetail:exportedReturns', 'Exported daily returns'))
             }}>
-              Export Returns
+              {t('backtestDetail:exportReturns', 'Export Returns')}
             </button>
           )}
           <button className="btn btn-primary" onClick={() => setShowWizard(true)}>
-            Promote to Live
+            {t('backtestDetail:promoteToLive', 'Promote to Live')}
           </button>
         </div>
       </div>
 
       {metrics.warnings && metrics.warnings.length > 0 && (
         <div className="card mb-4" style={{ background: 'rgba(210,153,34,.12)', border: '1px solid var(--warn)' }}>
-          <h3 style={{ color: 'var(--warn)', margin: '0 0 8px' }}>Warnings</h3>
+          <h3 style={{ color: 'var(--warn)', margin: '0 0 8px' }}>{t('backtestDetail:warnings', 'Warnings')}</h3>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--text-secondary)' }}>
             {metrics.warnings.map((w, i) => <li key={i}>{w}</li>)}
           </ul>
@@ -191,24 +193,24 @@ export default function BacktestDetail() {
 
       <div className="metric-grid mb-4">
         {[
-          { label: 'Sharpe', value: metrics.sharpe_ratio?.toFixed(2) },
-          { label: 'Sortino', value: metrics.sortino_ratio?.toFixed(2) },
-          { label: 'Max DD', value: metrics.max_drawdown_pct != null ? `${metrics.max_drawdown_pct.toFixed(1)}%` : '--' },
-          { label: 'Win Rate', value: metrics.win_rate_pct != null ? `${metrics.win_rate_pct.toFixed(1)}%` : '--' },
-          { label: 'Profit Factor', value: metrics.profit_factor?.toFixed(2) },
-          { label: 'Total Return', value: metrics.total_return_pct != null ? `${metrics.total_return_pct.toFixed(1)}%` : '--' },
-          { label: 'Trades', value: metrics.num_trades },
-          { label: 'Volume', value: metrics.trading_volume?.toLocaleString() },
-          { label: 'Calmar', value: metrics.calmar?.toFixed(2) },
-          { label: 'VaR 95%', value: metrics.var_95 != null ? `${(metrics.var_95 * 100).toFixed(1)}%` : '--' },
-          { label: 'CVaR 95%', value: metrics.cvar_95 != null ? `${(metrics.cvar_95 * 100).toFixed(1)}%` : '--' },
-          { label: 'CAGR', value: metrics.cagr != null ? `${(metrics.cagr * 100).toFixed(1)}%` : '--' },
-          { label: 'Pass Prob', value: metrics.pass_probability != null ? `${metrics.pass_probability.toFixed(0)}%` : '--' },
-          { label: 'Commission', value: metrics.commission_bps != null ? `${metrics.commission_bps.toFixed(1)} bps` : '--' },
-          { label: 'Total Fees', value: metrics.total_commission != null ? `$${metrics.total_commission.toFixed(2)}` : '--' },
+          { tKey: 'backtestDetail:metrics:sharpe', value: metrics.sharpe_ratio?.toFixed(2) },
+          { tKey: 'backtestDetail:metrics:sortino', value: metrics.sortino_ratio?.toFixed(2) },
+          { tKey: 'backtestDetail:metrics:maxDd', value: metrics.max_drawdown_pct != null ? `${metrics.max_drawdown_pct.toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:winRate', value: metrics.win_rate_pct != null ? `${metrics.win_rate_pct.toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:profitFactor', value: metrics.profit_factor?.toFixed(2) },
+          { tKey: 'backtestDetail:metrics:totalReturn', value: metrics.total_return_pct != null ? `${metrics.total_return_pct.toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:trades', value: metrics.num_trades },
+          { tKey: 'backtestDetail:metrics:volume', value: metrics.trading_volume?.toLocaleString() },
+          { tKey: 'backtestDetail:metrics:calmar', value: metrics.calmar?.toFixed(2) },
+          { tKey: 'backtestDetail:metrics:var95', value: metrics.var_95 != null ? `${(metrics.var_95 * 100).toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:cvar95', value: metrics.cvar_95 != null ? `${(metrics.cvar_95 * 100).toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:cagr', value: metrics.cagr != null ? `${(metrics.cagr * 100).toFixed(1)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:passProb', value: metrics.pass_probability != null ? `${metrics.pass_probability.toFixed(0)}%` : '--' },
+          { tKey: 'backtestDetail:metrics:commission', value: metrics.commission_bps != null ? `${metrics.commission_bps.toFixed(1)} bps` : '--' },
+          { tKey: 'backtestDetail:metrics:totalFees', value: metrics.total_commission != null ? `$${metrics.total_commission.toFixed(2)}` : '--' },
         ].map((m) => (
-          <div key={m.label} className="metric-card">
-            <div className="metric-label">{m.label}</div>
+          <div key={m.tKey} className="metric-card">
+            <div className="metric-label">{t(m.tKey)}</div>
             <div className="metric-value">{m.value ?? '--'}</div>
           </div>
         ))}
@@ -223,10 +225,10 @@ export default function BacktestDetail() {
       <ErrorBoundary>
         <div className="grid-2 mb-4">
           {equity.length > 0 && (
-            <EquityCurveChart data={equity} height={300} title="Equity Curve" color="#2962FF" />
+            <EquityCurveChart data={equity} height={300} title={t('backtestDetail:equityCurve', 'Equity Curve')} color="#2962FF" />
           )}
           {dailyReturns.length > 0 && (
-            <DailyReturnsChart data={dailyReturns} height={200} title="Daily Returns" />
+            <DailyReturnsChart data={dailyReturns} height={200} title={t('backtestDetail:dailyReturns', 'Daily Returns')} />
           )}
         </div>
       </ErrorBoundary>
@@ -239,7 +241,7 @@ export default function BacktestDetail() {
               simulations={500}
               forwardDays={252}
               height={280}
-              title="Monte Carlo Simulation"
+              title={t('backtestDetail:monteCarlo', 'Monte Carlo Simulation')}
               seed={42}
               onMCResult={setMCResult}
             />
@@ -294,7 +296,7 @@ export default function BacktestDetail() {
               className={`btn ${activeTab === tab ? 'btn-primary' : 'btn-outline'}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab === 'overview' ? 'Overview' : tab === 'trades' ? `Trades (${filteredTrades.length})` : tab === 'optimization' ? 'Optimization' : 'Live vs BT'}
+              {tab === 'overview' ? t('backtestDetail:tab:overview') : tab === 'trades' ? t('backtestDetail:tab:trades', { n: filteredTrades.length }) : tab === 'optimization' ? t('backtestDetail:tab:optimization') : t('backtestDetail:tab:liveVsBt')}
             </button>
           ))}
         </div>
@@ -316,7 +318,7 @@ export default function BacktestDetail() {
           onClose={() => setShowWizard(false)}
           onDeployed={() => {
             setShowWizard(false)
-            alert('Strategy deployed successfully!')
+            alert(t('backtestDetail:deployedSuccess', 'Strategy deployed successfully!'))
           }}
         />
       )}

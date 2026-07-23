@@ -11,26 +11,28 @@ import (
 )
 
 type PaperAdapter struct {
-	mu           sync.RWMutex
-	balance      float64
-	equity       float64
+	mu              sync.RWMutex
+	balance         float64
+	equity          float64
 	startingBalance float64
-	positions    map[string]*broker.Position
-	orders       map[string]*broker.OrderResponse
-	lastPrices   map[string]types.Price
-	orderCount   int
-	feeConfig    broker.BrokerageFeeConfig
+	positions       map[string]*broker.Position
+	orders          map[string]*broker.OrderResponse
+	lastPrices      map[string]types.Price
+	orderCount      int
+	feeConfig       broker.BrokerageFeeConfig
+	fillTimes       map[string]time.Time
 }
 
 func NewAdapter(startingBalance float64) *PaperAdapter {
 	return &PaperAdapter{
-		balance:      startingBalance,
-		equity:       startingBalance,
+		balance:         startingBalance,
+		equity:          startingBalance,
 		startingBalance: startingBalance,
-		positions:    make(map[string]*broker.Position),
-		orders:       make(map[string]*broker.OrderResponse),
-		lastPrices:   make(map[string]types.Price),
-		feeConfig:    broker.DefaultBrokerageFee(),
+		positions:       make(map[string]*broker.Position),
+		orders:          make(map[string]*broker.OrderResponse),
+		lastPrices:      make(map[string]types.Price),
+		fillTimes:       make(map[string]time.Time),
+		feeConfig:       broker.DefaultBrokerageFee(),
 	}
 }
 
@@ -91,6 +93,7 @@ func (p *PaperAdapter) PlaceOrder(ctx context.Context, req *broker.OrderRequest)
 	commission := p.feeConfig.CalculateFee(req.Quantity, resp.AvgFillPrice.Float64())
 
 	p.orders[orderID] = resp
+	p.fillTimes[orderID] = time.Now()
 
 	pos, exists := p.positions[req.Symbol]
 	if !exists {
@@ -281,4 +284,43 @@ func (p *PaperAdapter) ConfirmOrder(ctx context.Context, brokerID string) (*brok
 
 func (p *PaperAdapter) IsTransactional() bool {
 	return true
+}
+
+func (p *PaperAdapter) GetFills(ctx context.Context, date string) ([]broker.TradeFill, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	targetDate, err := time.Parse("2006-01-02", date)
+	if err != nil {
+		return nil, fmt.Errorf("paper: invalid date format: %w", err)
+	}
+	targetDay := targetDate.Truncate(24 * time.Hour)
+
+	var fills []broker.TradeFill
+	for orderID, order := range p.orders {
+		if order.Status != broker.Filled {
+			continue
+		}
+		ft, ok := p.fillTimes[orderID]
+		if !ok {
+			continue
+		}
+		if !sameDay(ft, targetDay) {
+			continue
+		}
+		fills = append(fills, broker.TradeFill{
+			OrderID:       orderID,
+			Symbol:        "PAPER",
+			Side:          broker.Buy,
+			Quantity:      order.FilledQty,
+			FillPrice:     order.AvgFillPrice,
+			FillTime:      ft,
+			BrokerOrderID: order.BrokerOrderID,
+		})
+	}
+	return fills, nil
+}
+
+func sameDay(t, target time.Time) bool {
+	return t.Year() == target.Year() && t.YearDay() == target.YearDay()
 }

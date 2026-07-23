@@ -46,7 +46,7 @@ func NewGridRunner() *GridRunner {
 }
 
 func (r *GridRunner) Name() string {
-	return "grid"
+	return "grid_trading"
 }
 
 func (r *GridRunner) Type() string {

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react'
 import {
   LineStyle, LineSeries,
-  type IPriceLine, type LineData, type Time, type SeriesMarker,
+  type IPriceLine, type Time, type SeriesMarker,
 } from 'lightweight-charts'
 import { useChart, useLineSeries, useAreaSeries, convertToUTCTime, equityToLineData } from './useChart'
 import { useChartKeyboard } from '../hooks/useChartKeyboard'
@@ -284,7 +284,7 @@ export default function EquityCurveChart({
         rows: [
           { label: 'Equity', value: crosshairData.equity.toFixed(2) },
           { label: 'Drawdown', value: `${crosshairData.drawdown.toFixed(2)}%`, color: 'var(--danger)' },
-          ...(crosshairData.overlays?.map((o, i) => ({ label: o.label, value: o.value.toFixed(2) })) ?? []),
+          ...(crosshairData.overlays?.map((o, _i) => ({ label: o.label, value: o.value.toFixed(2) })) ?? []),
         ],
       }} />
       {hasOverlays && (

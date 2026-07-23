@@ -24,7 +24,7 @@ describe('ErrorBoundary', () => {
         <Exploder shouldThrow={true} />
       </ErrorBoundary>,
     )
-    expect(getByText('Component Error')).toBeDefined()
+    expect(getByText('Something went wrong')).toBeDefined()
     expect(getByText('Simulated chart crash: data must be asc ordered by time, index=1, time=NaN')).toBeDefined()
     expect(getByText('Retry')).toBeDefined()
     spy.mockRestore()

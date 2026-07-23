@@ -28,21 +28,25 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import configparser
 import http.client
 import os
 import platform
+import shutil
 import signal
 import socket
 import subprocess
 import sys
 import time
+import venv
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+VENV_DIR = PROJECT_ROOT / ".venv"
+PYTHON_MIN_VERSION = (3, 11)
+WINDOWS = platform.system() == "Windows"
 
 COLORS = {
     "reset":   "\033[0m",
@@ -60,6 +64,228 @@ if platform.system() == "Windows":
     kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
     for key in list(COLORS.keys()):
         COLORS[key] = ""
+
+
+def get_python_exe(min_version: tuple[int, int] = PYTHON_MIN_VERSION) -> str | None:
+    """Find a Python interpreter meeting the minimum version requirement.
+
+    Checks, in order:
+      1. VIRTUAL_ENV / CONDA_PREFIX environment variable
+      2. python3 / python on PATH
+      3. Windows: py launcher with version flag
+
+    Returns path to the Python executable, or None if no suitable interpreter found.
+    """
+    venv_python = os.environ.get("VIRTUAL_ENV")
+    if venv_python:
+        candidate = Path(venv_python) / ("Scripts" if WINDOWS else "bin") / "python.exe" if WINDOWS else Path(venv_python) / "bin" / "python3"
+        if candidate.exists():
+            return str(candidate)
+
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidate = Path(conda_prefix) / "python.exe" if WINDOWS else Path(conda_prefix) / "bin" / "python3"
+        if candidate.exists():
+            return str(candidate)
+
+    for name in ("python3", "python"):
+        found = shutil.which(name)
+        if found:
+            try:
+                result = subprocess.run(
+                    [found, "--version"], capture_output=True, text=True, timeout=5
+                )
+                version_str = result.stdout.strip() or result.stderr.strip()
+                if version_str.startswith("Python "):
+                    parts = version_str.split()[1].split(".")
+                    ver = (int(parts[0]), int(parts[1]))
+                    if ver >= min_version:
+                        return found
+            except (subprocess.CalledProcessError, ValueError, IndexError):
+                continue
+
+    if WINDOWS:
+        try:
+            for tag in ("3.11", "3.12", "3.13", "3.14"):
+                result = subprocess.run(
+                    ["py", f"-{tag}", "--version"], capture_output=True, text=True, timeout=5
+                )
+                if result.returncode == 0 and "Python" in (result.stdout or result.stderr):
+                    return f"py -{tag}"
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+    return None
+
+
+def find_venv_python(venv_path: Path) -> Path:
+    """Return the path to the Python executable inside a virtual environment."""
+    if WINDOWS:
+        return venv_path / "Scripts" / "python.exe"
+    return venv_path / "bin" / "python3"
+
+
+def is_venv_valid(venv_path: Path) -> bool:
+    """Check if an existing venv is functional."""
+    python_exe = find_venv_python(venv_path)
+    if not python_exe.exists():
+        return False
+    try:
+        result = subprocess.run(
+            [str(python_exe), "--version"], capture_output=True, text=True, timeout=10
+        )
+        return result.returncode == 0 and "Python" in (result.stdout or result.stderr)
+    except Exception:
+        return False
+
+
+def create_venv(venv_path: Path, python_exe: str | None = None,
+                clear: bool = False, with_pip: bool = True) -> bool:
+    """Create a Python virtual environment at venv_path.
+
+    Args:
+        venv_path: Target directory for the virtual environment.
+        python_exe: Python interpreter to use. Auto-detected if None.
+        clear: Remove existing venv before creating.
+        with_pip: Ensure pip is installed in the venv.
+
+    Returns True on success.
+    """
+    if clear and venv_path.exists():
+        log("INFO", "venv", f"Removing existing venv at {venv_path}")
+        shutil.rmtree(venv_path, ignore_errors=True)
+
+    if venv_path.exists():
+        if is_venv_valid(venv_path):
+            log("OK", "venv", f"Existing venv at {venv_path} is valid — reusing")
+            return True
+        log("WARN", "venv", f"Existing venv at {venv_path} is broken — recreating")
+        shutil.rmtree(venv_path, ignore_errors=True)
+
+    resolved_python = python_exe or get_python_exe()
+    if not resolved_python:
+        log("ERROR", "venv", f"No Python {PYTHON_MIN_VERSION[0]}.{PYTHON_MIN_VERSION[1]}+ interpreter found")
+        log("ERROR", "venv", "Install Python >= 3.11 from https://python.org or use --python-path")
+        return False
+
+    log("STEP", "venv", f"Creating virtual environment at {venv_path} (Python: {resolved_python})")
+
+    class _VenvBuilder(venv.EnvBuilder):
+        def __init__(self) -> None:
+            super().__init__(with_pip=with_pip, clear=False, prompt="orca")
+
+        def post_setup(self, context: Any) -> None:
+            pass
+
+    try:
+        builder = _VenvBuilder()
+        builder.create(str(venv_path))
+        log("OK", "venv", f"Virtual environment created at {venv_path}")
+        return True
+    except Exception as e:
+        log("ERROR", "venv", f"Failed to create venv: {e}")
+        return False
+
+
+def install_python_deps(venv_path: Path, extras: list[str] | None = None,
+                         upgrade_pip: bool = True) -> bool:
+    """Install Python project dependencies into the virtual environment.
+
+    Args:
+        venv_path: Path to the virtual environment.
+        extras: List of optional dependency groups (e.g., ['dev', 'ml']).
+        upgrade_pip: Upgrade pip before installing dependencies.
+
+    Returns True on success.
+    """
+    python_exe = find_venv_python(venv_path)
+    if not python_exe.exists():
+        log("ERROR", "venv", f"Python not found in venv at {python_exe}")
+        return False
+
+    def _pip_install(args: list[str]) -> bool:
+        cmd = [str(python_exe), "-m", "pip", "install"] + args
+        log("INFO", "venv", f"Running: {' '.join(cmd)}")
+        timeout = 600 if any("ml" in str(a) or "lightgbm" in str(a) or "xgboost" in str(a) for a in args) else 180
+        result = subprocess.run(
+            cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=timeout
+        )
+        if result.returncode != 0:
+            stderr_tail = result.stderr.strip()[-300:] if result.stderr else ""
+            log("ERROR", "venv", f"pip install failed: {stderr_tail}")
+            return False
+        return True
+
+    if upgrade_pip:
+        if not _pip_install(["--upgrade", "pip", "--quiet"]):
+            return False
+
+    install_target = str(PROJECT_ROOT)
+    extra_flag = f"[{','.join(extras)}]" if extras else ""
+
+    if extra_flag:
+        if not _pip_install(["-e", f"{install_target}{extra_flag}", "--quiet"]):
+            return False
+    else:
+        if not _pip_install(["-e", install_target, "--quiet"]):
+            return False
+
+    log("OK", "venv", "Dependencies installed successfully" + (f" (extras: {extras})" if extras else ""))
+
+    pyproject = PROJECT_ROOT / "pyproject.toml"
+    if pyproject.exists():
+        _verify_deps(python_exe)
+
+    return True
+
+
+def _verify_deps(python_exe: Path) -> None:
+    """Quick-verify core dependencies are importable."""
+    for mod in ("pydantic", "yaml", "numpy", "typer"):
+        result = subprocess.run(
+            [str(python_exe), "-c", f"import {mod}"],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode != 0:
+            log("WARN", "venv", f"Module '{mod}' not importable — may need reinstall")
+
+
+def setup_python_environment(venv_path: Path, force_recreate: bool = False,
+                               install_dev: bool = True, install_ml: bool = False,
+                               python_exe: str | None = None,
+                               skip_install: bool = False,
+                               dry_run: bool = False) -> Path | None:
+    """Set up the Python virtual environment and install dependencies.
+
+    This is the main entry point for venv management. Called early in the
+    orchestrator startup sequence to ensure Python services have a working
+    environment before any subprocess calls.
+
+    Returns the path to the venv's Python executable, or None on failure.
+    """
+    if dry_run:
+        log("OK", "venv", f"DRY-RUN: Would create venv at {venv_path}")
+        log("OK", "venv", f"DRY-RUN: Would install deps from {PROJECT_ROOT}")
+        return find_venv_python(venv_path)
+
+    if not create_venv(venv_path, python_exe=python_exe, clear=force_recreate):
+        return None
+
+    if skip_install:
+        log("INFO", "venv", "Skipping dependency installation (--skip-pip-install)")
+        return find_venv_python(venv_path)
+
+    extras: list[str] = []
+    if install_dev:
+        extras.append("dev")
+    if install_ml:
+        extras.append("ml")
+
+    if not install_python_deps(venv_path, extras=extras if extras else None):
+        log("WARN", "venv", "Dependency installation had issues — some Python commands may fail")
+        return find_venv_python(venv_path)
+
+    return find_venv_python(venv_path)
 
 
 @dataclass
@@ -207,7 +433,7 @@ _log_file: Path | None = None
 
 
 def log(level: str, service: str, message: str) -> None:
-    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    ts = datetime.now(UTC).strftime("%H:%M:%S")
     color = {"INFO": COLORS["cyan"], "OK": COLORS["green"], "WARN": COLORS["yellow"],
              "ERROR": COLORS["red"], "STEP": COLORS["magenta"]}.get(level, "")
     line = f"{COLORS['gray']}{ts}{COLORS['reset']} {color}{level:5}{COLORS['reset']} [{service:14}] {message}"
@@ -274,11 +500,11 @@ def stop_windows_service(service_names: list[str]) -> None:
                 ["sc", "stop", name], capture_output=True, text=True, timeout=15
             )
             if result.returncode == 0 or "STOP_PENDING" in result.stdout or "not started" in result.stdout.lower():
-                log("OK", f"Service", f"Stopped '{name}'")
+                log("OK", "Service", f"Stopped '{name}'")
             else:
-                log("WARN", f"Service", f"Could not stop '{name}': {result.stderr.strip() or result.stdout.strip()}")
+                log("WARN", "Service", f"Could not stop '{name}': {result.stderr.strip() or result.stdout.strip()}")
         except Exception as e:
-            log("WARN", f"Service", f"Failed to stop '{name}': {e}")
+            log("WARN", "Service", f"Failed to stop '{name}': {e}")
 
 
 def find_postgresql_service() -> list[str]:
@@ -362,7 +588,7 @@ def stop_project_docker_services(docker_svcs: list[str]) -> bool:
         return True
 
     log("INFO", "Docker", f"Gracefully stopping existing project containers: {', '.join(docker_svcs)}")
-    result = subprocess.run(
+    subprocess.run(
         ["docker", "compose", "stop"] + docker_svcs,
         cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=30
     )
@@ -713,6 +939,22 @@ def build_cli() -> argparse.ArgumentParser:
                         help="Show what would happen without executing")
     parser.add_argument("--monitor", action="store_true",
                         help="Keep running and health-check services (Ctrl+C to stop)")
+
+    venv_group = parser.add_argument_group("Python Virtual Environment")
+    venv_group.add_argument("--setup-venv", action="store_true",
+                            help="Create and configure Python virtual environment before starting services")
+    venv_group.add_argument("--venv-path", type=str, default=str(VENV_DIR),
+                            help=f"Path to Python virtual environment (default: {VENV_DIR})")
+    venv_group.add_argument("--python-path", type=str,
+                            help="Path to Python interpreter for venv creation (auto-detected if not set)")
+    venv_group.add_argument("--force-recreate-venv", action="store_true",
+                            help="Delete and recreate the virtual environment even if it exists")
+    venv_group.add_argument("--install-ml", action="store_true",
+                            help="Install ML dependencies (xgboost, lightgbm, scikit-learn, etc.)")
+    venv_group.add_argument("--skip-pip-install", action="store_true",
+                            help="Skip pip install — assume dependencies are already installed in venv")
+    venv_group.add_argument("--skip-venv", action="store_true",
+                            help="Skip virtual environment setup entirely (use system Python)")
     return parser
 
 
@@ -814,6 +1056,27 @@ def main() -> None:
     if args.log_file:
         _log_file = Path(args.log_file)
 
+    venv_python: str | None = None
+    venv_path = Path(args.venv_path)
+    if not args.skip_venv:
+        venv_result = setup_python_environment(
+            venv_path=venv_path,
+            force_recreate=args.force_recreate_venv,
+            install_dev=not args.production or args.setup_venv,
+            install_ml=args.install_ml,
+            python_exe=args.python_path,
+            skip_install=args.skip_pip_install or (args.production and not args.setup_venv),
+            dry_run=args.dry_run,
+        )
+        if venv_result:
+            venv_python = str(venv_result)
+    elif not args.dry_run:
+        detected = get_python_exe()
+        venv_python = detected
+        if not detected:
+            log("ERROR", "venv", f"--skip-venv specified but no Python {PYTHON_MIN_VERSION[0]}.{PYTHON_MIN_VERSION[1]}+ found on PATH")
+            sys.exit(1)
+
     local_mode = args.local
     if local_mode:
         db_info = detect_local_postgresql()
@@ -865,7 +1128,7 @@ def main() -> None:
     log("INFO", "Orchestrator", f"Platform: {platform.system()} {platform.release()}")
     log("INFO", "Orchestrator", f"Project: {PROJECT_ROOT}")
     if args.production:
-        log("INFO", "Orchestrator", f"Binary: bin/orca-server.exe")
+        log("INFO", "Orchestrator", "Binary: bin/orca-server.exe")
     if local_mode:
         log("INFO", "Orchestrator", f"Database: {db_user}@{db_host}:{db_port}/{db_name} (source: {db_info.get('source', 'cli')})")
     print()
@@ -957,8 +1220,9 @@ def main() -> None:
 
     if args.production:
         log("STEP", "Production", "Running pre-flight checks...")
+        python_cmd = venv_python or "python"
         result = subprocess.run(
-            ["python", "-m", "orca.cli", "preflight"],
+            [python_cmd, "-m", "orca.cli", "preflight"],
             cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:
@@ -968,7 +1232,6 @@ def main() -> None:
         log("OK", "Production", "Preflight checks passed")
 
     if args.production or args.seed:
-        db_url = env_overrides.get("ORCA_DB_URL", f"postgresql://{db_user}:{db_password}@{db_host}:{db_port}/{db_name}")
         log("STEP", "Database", "Verifying migrations...")
         result = subprocess.run(
             ["docker", "exec", "orca_algo-postgres-1", "psql", "-U", db_user, "-d", db_name,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { symbols as symbolsApi } from '../api/client'
 
 interface SymbolItem {
@@ -16,7 +17,8 @@ interface SymbolSearchProps {
   style?: React.CSSProperties
 }
 
-export default function SymbolSearch({ value, onChange, placeholder = 'Symbol', style }: SymbolSearchProps) {
+export default function SymbolSearch({ value, onChange, placeholder, style }: SymbolSearchProps) {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
@@ -67,7 +69,7 @@ export default function SymbolSearch({ value, onChange, placeholder = 'Symbol', 
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t('components:symbolSearch.placeholder', 'Search symbols...')}
       />
       {open && filtered.length > 0 && (
         <div

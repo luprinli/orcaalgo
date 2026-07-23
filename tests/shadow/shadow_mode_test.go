@@ -59,7 +59,6 @@ func TestShadowModeSignalParity(t *testing.T) {
 
 	liveEng := engine.NewLiveEngine()
 	liveEng.RiskState = risk.NewGlobalRiskState()
-	liveEng.SetStopLossConfig(nil, nil, 14, false)
 
 	liveRunner := strategy.GlobalRegistry().Get("mean_reversion")
 	if liveRunner == nil {
@@ -94,12 +93,8 @@ func TestShadowModeStopLossActivation(t *testing.T) {
 		prices[i] = uint64(100000 + i*100)
 	}
 
-	slCfg := &backtest.StopLossConfig{Type: backtest.StopLossATR, ATRPeriod: 14, ATRMultiplier: 2.0}
-	tpCfg := &backtest.TakeProfitConfig{Type: backtest.TakeProfitRR, RRRatio: 2.0}
-
 	liveEng := engine.NewLiveEngine()
 	liveEng.RiskState = risk.NewGlobalRiskState()
-	liveEng.SetStopLossConfig(slCfg, tpCfg, 14, false)
 
 	runner := strategy.GlobalRegistry().Get("mean_reversion")
 	if runner == nil {
@@ -112,7 +107,7 @@ func TestShadowModeStopLossActivation(t *testing.T) {
 		liveEng.ProcessTick(symbolID, prices[i], 100, timestampNS)
 	}
 
-	t.Logf("Active positions after feed: %d, halted: %v", liveEng.ActivePositions(), liveEng.Halted)
+	t.Logf("Feed complete, halted: %v", liveEng.Halted)
 }
 
 func TestShadowModeBacktestEngine(t *testing.T) {

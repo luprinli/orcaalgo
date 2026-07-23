@@ -6,9 +6,9 @@ import random
 from datetime import UTC, datetime
 
 __all__ = [
+    "DEFAULT_PRICE_SCALE",
     "Candle",
     "load_candles",
-    "DEFAULT_PRICE_SCALE",
 ]
 
 DEFAULT_PRICE_SCALE = 100000

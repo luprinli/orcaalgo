@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useWebSocket } from '../hooks/useWebSocket'
 import { symbols as symbolsApi } from '../api/client'
 import type { WSTickData } from '../types/ws'
@@ -24,6 +25,7 @@ interface PriceInfo {
 }
 
 export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onToggle }: WatchlistProps) {
+  const { t } = useTranslation()
   const [symbols, setSymbols] = useState<SymbolItem[]>([])
   const [prices, setPrices] = useState<Record<string, PriceInfo>>({})
 
@@ -89,10 +91,10 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
             justifyContent: 'space-between',
             alignItems: 'center',
           }}>
-            Watchlist
+            {t('watchlist:title', 'Watchlist')}
             {connected
-              ? <span className="badge badge-ok" style={{ fontSize: 9, padding: '1px 5px' }}>LIVE</span>
-              : <span className="badge badge-err" style={{ fontSize: 9, padding: '1px 5px' }}>OFF</span>
+              ? <span className="badge badge-ok" style={{ fontSize: 9, padding: '1px 5px' }}>{t('common:live', 'LIVE')}</span>
+              : <span className="badge badge-err" style={{ fontSize: 9, padding: '1px 5px' }}>{t('common:off', 'OFF')}</span>
             }
           </div>
           <div style={{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto', overflowX: 'hidden' }}>
@@ -133,7 +135,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
                       fontSize: 11,
                       fontVariantNumeric: 'tabular-nums',
                     }}>
-                      {p ? p.price.toFixed(2) : '--'}
+                      {p ? p.price.toFixed(2) : t('common:noData', '--')}
                     </span>
                     {change != null && (
                       <span style={{
@@ -151,7 +153,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
             })}
             {activeSymbols.length === 0 && (
               <div style={{ padding: '10px', fontSize: 11, color: 'var(--text-secondary)' }}>
-                No symbols
+                {t('watchlist:noSymbols', 'No symbols')}
               </div>
             )}
           </div>
@@ -160,7 +162,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
 
       <button
         onClick={onToggle}
-        title={isOpen ? 'Collapse watchlist' : 'Expand watchlist'}
+        title={isOpen ? t('watchlist:collapse', 'Collapse watchlist') : t('watchlist:expand', 'Expand watchlist')}
         style={{
           position: 'absolute',
           left: isOpen ? 200 : 0,

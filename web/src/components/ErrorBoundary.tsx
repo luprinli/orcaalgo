@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react'
+import i18n from '../i18n/config'
 
 interface Props {
   children: ReactNode
@@ -10,7 +11,7 @@ interface State {
   error: Error | null
 }
 
-export default class ErrorBoundary extends Component<Props, State> {
+class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
     this.state = { hasError: false, error: null }
@@ -30,7 +31,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         this.props.fallback ?? (
           <div className="card" style={{ border: '1px solid var(--danger)', padding: 16 }}>
             <h3 style={{ color: 'var(--danger)', marginBottom: 8 }}>
-              Component Error
+              {i18n.t('components:errorBoundary.somethingWentWrong', 'Something went wrong')}
             </h3>
             <p className="text-muted" style={{ fontSize: 12 }}>
               {this.state.error?.message}
@@ -39,7 +40,7 @@ export default class ErrorBoundary extends Component<Props, State> {
               className="btn btn-outline mt-2"
               onClick={() => this.setState({ hasError: false, error: null })}
             >
-              Retry
+              {i18n.t('components:errorBoundary.retry', 'Retry')}
             </button>
           </div>
         )
@@ -48,3 +49,5 @@ export default class ErrorBoundary extends Component<Props, State> {
     return this.props.children
   }
 }
+
+export default ErrorBoundary

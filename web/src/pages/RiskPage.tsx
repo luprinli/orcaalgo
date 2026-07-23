@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { risk, monitor } from '../api/client'
 import { useWebSocket } from '../hooks/useWebSocket'
 import type { WSRiskData } from '../types/ws'
 import type { RiskStatus } from '../types/api'
 
 export default function RiskPage() {
+  const { t } = useTranslation()
   const [wsRisk, setWsRisk] = useState<WSRiskData | null>(null)
   const [restStatus, setRestStatus] = useState<RiskStatus | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,7 +51,7 @@ export default function RiskPage() {
   const dailyLimitPct = wsRisk?.daily_limit_pct ?? restStatus?.daily_limit_pct ?? 5
   const maxDdPct = wsRisk?.max_dd_pct ?? restStatus?.max_dd_pct ?? 10
   const regime = wsRisk?.regime ?? -1
-  const regimeLabel = ['Calm', 'Trending', 'HighVol', 'Crisis']
+  const regimeLabel = [t('risk:regime.calm', 'Calm'), t('risk:regime.trending', 'Trending'), t('risk:regime.highVol', 'HighVol'), t('risk:regime.crisis', 'Crisis')]
   const regimeColors = ['var(--success)', 'var(--warn)', 'var(--danger-text)', 'var(--danger)']
 
   const handleEmergency = async (action: 'stop' | 'resume') => {
@@ -63,26 +65,26 @@ export default function RiskPage() {
     try {
       if (show2FA === 'stop') {
         await risk.emergencyStop(twoFACode)
-        setMsg('Emergency stop triggered — trading halted')
+        setMsg(t('risk:emergencyStopTriggered', 'Emergency stop triggered \u2014 trading halted'))
       } else {
         await risk.emergencyResume(twoFACode)
-        setMsg('Trading resumed')
+        setMsg(t('risk:tradingResumed', 'Trading resumed'))
       }
       setShow2FA(null)
       setTwoFACode('')
       fetchStatus()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : '2FA action failed')
+      setMsg(err instanceof Error ? err.message : t('risk:2faActionFailed', '2FA action failed'))
     }
   }
 
   const format = (v: number | null | undefined, d = 2) =>
-    v != null ? Number(v).toFixed(d) : '--'
+    v != null ? Number(v).toFixed(d) : t('common:noData', '--')
 
   if (loading) {
     return (
       <div className="card">
-        <p className="text-muted">Loading risk status...</p>
+        <p className="text-muted">{t('risk:loadingStatus', 'Loading risk status...')}</p>
       </div>
     )
   }
@@ -90,53 +92,53 @@ export default function RiskPage() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Risk Dashboard</h1>
+        <h1 style={{ margin: 0 }}>{t('risk:title', 'Risk Dashboard')}</h1>
         <span className={`badge ${halted ? 'badge-err' : 'badge-ok'}`}>
-          {halted ? 'HALTED' : 'ACTIVE'}
+          {halted ? t('common:halted', 'HALTED') : t('common:active', 'ACTIVE')}
         </span>
       </div>
 
       <div className="grid-3 mb-4">
         <div className="metric-card">
-          <div className="metric-label">Balance</div>
+          <div className="metric-label">{t('risk:balance', 'Balance')}</div>
           <div className="metric-value">${format(balance)}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Equity</div>
+          <div className="metric-label">{t('risk:equity', 'Equity')}</div>
           <div className="metric-value">${format(equity)}</div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Daily P&L</div>
+          <div className="metric-label">{t('risk:dailyPnl', 'Daily P&L')}</div>
           <div className="metric-value" style={{ color: dailyPnlPct >= 0 ? 'var(--success)' : 'var(--danger)' }}>
             {format(dailyPnlPct, 2)}%
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Daily Loss Used</div>
+          <div className="metric-label">{t('risk:dailyLossUsed', 'Daily Loss Used')}</div>
           <div className="metric-value" style={{ color: dailyLossUsed > 80 ? 'var(--danger-text)' : dailyLossUsed > 50 ? 'var(--warn)' : 'var(--success)' }}>
             {format(dailyLossUsed, 1)}%
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Drawdown Used</div>
+          <div className="metric-label">{t('risk:drawdownUsed', 'Drawdown Used')}</div>
           <div className="metric-value" style={{ color: drawdownUsed > 80 ? 'var(--danger-text)' : drawdownUsed > 50 ? 'var(--warn)' : 'var(--success)' }}>
             {format(drawdownUsed, 1)}%
           </div>
         </div>
         <div className="metric-card">
-          <div className="metric-label">Regime</div>
+          <div className="metric-label">{t('risk:regime', 'Regime')}</div>
           <div className="metric-value" style={{ color: regimeColors[regime] ?? 'var(--text-secondary)' }}>
-            {regimeLabel[regime] ?? '--'}
+            {regimeLabel[regime] ?? t('common:noData', '--')}
           </div>
         </div>
       </div>
 
       <div className="card mb-4">
-        <h2>Risk Limits</h2>
+        <h2>{t('risk:riskLimits', 'Risk Limits')}</h2>
         <div className="grid-2">
           {[
-            { label: 'Drawdown Used', value: drawdownUsed, max: maxDdPct },
-            { label: 'Daily Loss Used', value: dailyLossUsed, max: dailyLimitPct },
+            { label: t('risk:drawdownUsed', 'Drawdown Used'), value: drawdownUsed, max: maxDdPct },
+            { label: t('risk:dailyLossUsed', 'Daily Loss Used'), value: dailyLossUsed, max: dailyLimitPct },
           ].map((g) => {
             const pct = g.max > 0 ? Math.min(100, (g.value / g.max) * 100) : 0
             return (
@@ -163,11 +165,11 @@ export default function RiskPage() {
       </div>
 
       <div className="card mb-4">
-        <h2>Emergency Controls</h2>
+        <h2>{t('risk:emergencyControls', 'Emergency Controls')}</h2>
         <p className="text-muted mb-4">
           {halted
-            ? 'Trading is currently halted. Use emergency resume to re-enable.'
-            : 'Use emergency stop to immediately halt all trading activity.'}
+            ? t('risk:haltedMessage', 'Trading is currently halted. Use emergency resume to re-enable.')
+            : t('risk:activeMessage', 'Use emergency stop to immediately halt all trading activity.')}
         </p>
         <div className="flex gap-2">
           <button
@@ -175,34 +177,34 @@ export default function RiskPage() {
             onClick={() => handleEmergency('stop')}
             disabled={halted}
           >
-            Emergency Stop
+            {t('risk:emergencyStop', 'Emergency Stop')}
           </button>
           <button
             className="btn btn-primary"
             onClick={() => handleEmergency('resume')}
             disabled={!halted}
           >
-            Resume Trading
+            {t('risk:resumeTrading', 'Resume Trading')}
           </button>
         </div>
 
         {show2FA && (
           <div className="mt-3" style={{ maxWidth: 300 }}>
-            <label className="text-muted">2FA Code (required)</label>
+            <label className="text-muted">{t('risk:2faCodeRequired', '2FA Code (required)')}</label>
             <div className="flex gap-2 mt-2">
               <input
                 className="input"
-                placeholder="000000"
+                placeholder={t('risk:2faPlaceholder', '000000')}
                 maxLength={6}
                 value={twoFACode}
                 onChange={(e) => setTwoFACode(e.target.value.replace(/\D/g, ''))}
                 onKeyDown={(e) => e.key === 'Enter' && confirm2FA()}
               />
               <button className="btn btn-primary" onClick={confirm2FA} disabled={twoFACode.length !== 6}>
-                Confirm
+                {t('risk:confirm', 'Confirm')}
               </button>
               <button className="btn btn-outline" onClick={() => setShow2FA(null)}>
-                Cancel
+                {t('risk:cancel', 'Cancel')}
               </button>
             </div>
           </div>
@@ -217,13 +219,13 @@ export default function RiskPage() {
 
       {regimeHistory.length > 0 && (
         <div className="card">
-          <h2>Regime History (last {regimeHistory.length})</h2>
+          <h2>{t('risk:regimeHistory', 'Regime History (last {{n}})', { n: regimeHistory.length })}</h2>
           <div style={{ overflowX: 'auto' }}>
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Regime</th>
+                  <th>{t('risk:table.time', 'Time')}</th>
+                  <th>{t('risk:table.regime', 'Regime')}</th>
                 </tr>
               </thead>
               <tbody>

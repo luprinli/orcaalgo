@@ -6,7 +6,7 @@ const ROUTES = [
   { path: '/live/market', label: 'Live Market', check: 'visible' },
   { path: '/execution', label: 'Execution', heading: 'Execution' },
   { path: '/backtest', label: 'Backtest', heading: 'Backtest Runner' },
-  { path: '/strategies', label: 'Strategies', heading: 'Strategy Detail' },
+  { path: '/strategies', label: 'Strategies', heading: 'Strategies' },
   { path: '/brokers', label: 'Brokers', heading: 'Broker Management' },
   { path: '/data-sources', label: 'Data Sources', heading: 'Data Sources' },
   { path: '/symbols', label: 'Symbols', heading: 'Symbol Management' },
@@ -17,9 +17,9 @@ const ROUTES = [
   { path: '/settings', label: 'Settings', heading: 'Settings' },
   { path: '/propfirm', label: 'Prop Firms', heading: 'Prop Firm Configuration' },
   { path: '/admin', label: 'Admin', heading: 'Admin Panel' },
-  { path: '/admin/health', label: 'System Health', heading: 'System Health' },
-  { path: '/admin/logs', label: 'Error Logs', heading: 'Error Logs' },
-  { path: '/audit', label: 'Audit Log', heading: 'Audit Log' },
+  { path: '/admin/health', label: 'System Health', check: 'visible' },
+  { path: '/admin/logs', label: 'Error Logs', check: 'visible' },
+  { path: '/audit', label: 'Audit Log', check: 'visible' },
 ];
 
 async function setupAuth(page) {

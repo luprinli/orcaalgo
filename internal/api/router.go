@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -29,8 +28,6 @@ import (
 	"github.com/lee-econ/orca-core/internal/types"
 	"github.com/lee-econ/orca-core/internal/universe"
 	"github.com/lee-econ/orca-core/internal/version"
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 type Server struct {
@@ -149,6 +146,7 @@ func (s *Server) registerRoutes() {
 		protected.POST("/strategies/:id/clone", s.cloneStrategy)
 
 		protected.GET("/candles", s.getCandles)
+		protected.GET("/brokers", s.listBrokers)
 		protected.GET("/accounts", s.getAccounts)
 		protected.POST("/accounts", s.createAccount)
 		protected.DELETE("/accounts/:id", s.deleteAccount)
@@ -165,6 +163,10 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/regime-stats", s.getBacktestRegimeStats)
 		protected.GET("/backtests/:id/progress", s.getBacktestProgress)
 		protected.POST("/optimize", s.submitOptimization)
+		protected.POST("/optimizations", s.submitBacktestWithOptimization)
+		protected.GET("/optimizations", s.listOptimizationRuns)
+		protected.GET("/optimizations/:id", s.getOptimizationStatus)
+		protected.GET("/optimizations/:id/results", s.getOptimizationResults)
 
 		protected.GET("/backtests/:id/metrics", s.getBacktestMetrics)
 		protected.GET("/backtests/:id/equity", s.getBacktestEquity)
@@ -912,15 +914,17 @@ func (s *Server) submitOptimization(c *gin.Context) {
 
 func (s *Server) submitBacktest(c *gin.Context) {
 	var req struct {
-		Mode        string   `json:"mode"`
-		StrategyID  string   `json:"strategy_id"`
-		StrategyIDs []string `json:"strategy_ids"`
-		Symbols     []string `json:"symbols" binding:"required"`
-		Timeframes  []string `json:"timeframes"`
-		StartDate   string   `json:"start_date" binding:"required"`
-		EndDate     string   `json:"end_date" binding:"required"`
-		Capital     float64  `json:"capital"`
-		GateProfile string   `json:"gate_profile"`
+		Mode          string   `json:"mode"`
+		StrategyID    string   `json:"strategy_id"`
+		StrategyIDs   []string `json:"strategy_ids"`
+		Symbols       []string `json:"symbols" binding:"required"`
+		Timeframes    []string `json:"timeframes"`
+		StartDate     string   `json:"start_date" binding:"required"`
+		EndDate       string   `json:"end_date" binding:"required"`
+		Capital       float64  `json:"capital"`
+		GateProfile   string   `json:"gate_profile"`
+		SizingPercent float64  `json:"sizing_percent"`
+		KellyFraction float64  `json:"kelly_fraction"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -953,20 +957,23 @@ func (s *Server) submitBacktest(c *gin.Context) {
 
 	if req.Mode == "matrix" {
 		if len(req.StrategyIDs) == 0 {
-		req.StrategyIDs = []string{"intraday_mr", "opening_range_breakout", "trend_following",
-			"grid_trading", "session_scalp", "pairs_trading", "volatility_harvesting"}
+			req.StrategyIDs = []string{"intraday_mr", "opening_range_breakout", "trend_following",
+				"grid_trading", "session_scalp", "pairs_trading", "volatility_harvesting"}
 		}
 		mc := backtest.MatrixBacktestConfig{
-			StrategyIDs:    req.StrategyIDs,
-			Symbols:        req.Symbols,
-			Timeframes:     req.Timeframes,
-			StartDate:      startDate,
-			EndDate:        endDate,
-			InitialCapital: req.Capital,
-			DataSource:     ds,
-			GateProfile:    req.GateProfile,
+			StrategyIDs:     req.StrategyIDs,
+			Symbols:         req.Symbols,
+			Timeframes:      req.Timeframes,
+			StartDate:       startDate,
+			EndDate:         endDate,
+			InitialCapital:  req.Capital,
+			DataSource:      ds,
+			GateProfile:     req.GateProfile,
+			PropFirmEnabled: true,
+			SizingPercent:   req.SizingPercent,
+			KellyFraction:   req.KellyFraction,
 		}
-		combos := cartesianTuples(mc.StrategyIDs, mc.Symbols, mc.Timeframes)
+		combos := backtest.CartesianProduct(mc.StrategyIDs, mc.Symbols, mc.Timeframes)
 		batchID := fmt.Sprintf("matrix-%s", time.Now().Format("20060102150405"))
 
 		cp := make([]ComboProgress, len(combos))
@@ -983,148 +990,85 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		go func(bid string) {
 			defer func() {
 				if r := recover(); r != nil {
-					log.Printf("MATRIX BACKTEST PANIC [%s]: %v", bid, r)
-					mp := s.progressStore.Get(bid)
+					slog.Error("MATRIX BACKTEST PANIC", "batch_id", bid, "panic", r)
+					ps := s.progressStore
+					mp := ps.Get(bid)
 					if mp != nil {
 						mp.Status = "failed"
 						for i := range mp.Combos {
 							if mp.Combos[i].Status == "pending" || mp.Combos[i].Status == "running" {
-								s.progressStore.UpdateCombo(bid, i, "failed", fmt.Sprintf("server panic: %v", r), nil)
+								ps.UpdateCombo(bid, i, "failed", fmt.Sprintf("server panic: %v", r), nil)
 							}
 						}
 					}
 				}
 			}()
-			bgCtx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
-		defer cancel()
+
 			dbAdapter := &backtestRepoAdapter{repo: s.repo}
-
-			maxWorkers := runtime.NumCPU()
-			if maxWorkers > 8 { maxWorkers = 8 }
-			if maxWorkers < 2 { maxWorkers = 2 }
-
-			sem := semaphore.NewWeighted(int64(maxWorkers))
-			g, ctx := errgroup.WithContext(bgCtx)
-			for i, co := range combos {
-				i, co := i, co
-				if err := sem.Acquire(ctx, 1); err != nil {
-					break
-				}
-				g.Go(func() error {
-					defer sem.Release(1)
-					s.progressStore.UpdateCombo(bid, i, "running", "", nil)
-					btConfig := backtest.BacktestConfig{
-						StrategyID:     co.Strategy,
-						Symbols:        []string{co.Symbol},
-						StartDate:      mc.StartDate,
-						EndDate:        mc.EndDate,
-						InitialCapital: mc.InitialCapital,
-						Timeframe:      co.Timeframe,
-						DataSource:     ds,
-						PropFirmEnabled: true,
-						StopLoss: &backtest.StopLossConfig{
-							Type:          "atr",
-							ATRPeriod:     14,
-							ATRMultiplier: 2.0,
-						},
-						TakeProfit: &backtest.TakeProfitConfig{
-							Type:    "risk_reward",
-							RRRatio: 2.0,
-						},
-						ApplyGate:   mc.GateProfile != "" && mc.GateProfile != "none",
-						GateProfile: mc.GateProfile,
-					}
-					engine := backtest.NewEngine(dbAdapter)
-					result, err := engine.Run(ctx, btConfig)
-					if err != nil {
-						s.progressStore.UpdateCombo(bid, i, "failed", err.Error(), nil)
-						return nil
-					}
-					cr := backtest.ComboResult{
-						Symbol:       co.Symbol,
-						StrategyID:   co.Strategy,
-						Timeframe:    co.Timeframe,
-						SharpeRatio:  result.SharpeRatio,
-						SortinoRatio: result.SortinoRatio,
-						MaxDrawdown:  result.MaxDrawdown,
-						TotalReturn:  result.TotalReturnPct,
-						WinRate:      result.WinRate,
-						ProfitFactor: result.ProfitFactor,
-						AvgTrade:     result.AvgTrade,
-						AvgWin:       result.AvgWin,
-						AvgLoss:      result.AvgLoss,
-						NumTrades:    result.NumTrades,
-						Warnings:     result.Warnings,
-						AdverseSelectRate: result.AdverseSelectionRate,
-					}
-					if result.MetricGateStatus != nil {
-						passed := result.MetricGateStatus.Passed
-						cr.GatePassed = &passed
-					}
-					s.progressStore.UpdateCombo(bid, i, "completed", "", &cr)
-					if s.repo != nil {
-						sd := startDate; ed := endDate
-						rec := &db.BacktestRunRecord{
-							StrategyID:     co.Strategy,
-							RunType:        "matrix",
-							Status:         "completed",
-							StrategyIDs:    []string{co.Strategy},
-							Symbols:        []string{co.Symbol},
-							StartDate:      &sd,
-							EndDate:        &ed,
-							InitialCapital: mc.InitialCapital,
-							SharpeRatio:    cr.SharpeRatio,
-							MaxDrawdown:    cr.MaxDrawdown,
-							TotalReturn:    cr.TotalReturn,
-							WinRate:        cr.WinRate,
-							NumTrades:      cr.NumTrades,
+			_, _ = backtest.RunMatrixConcurrent(context.Background(), dbAdapter, mc,
+				func(index int, status string, errMsg string, result *backtest.ComboResult) {
+					switch status {
+					case "running":
+						s.progressStore.UpdateCombo(bid, index, "running", "", nil)
+					case "failed":
+						s.progressStore.UpdateCombo(bid, index, "failed", errMsg, nil)
+					case "completed":
+						if result == nil {
+							return
 						}
-					metricsJSON, err := json.Marshal(gin.H{
-						"sharpe_ratio": cr.SharpeRatio, "max_drawdown": cr.MaxDrawdown,
-						"total_return": cr.TotalReturn, "win_rate": cr.WinRate,
-						"num_trades": cr.NumTrades, "timeframe": cr.Timeframe, "symbol": cr.Symbol,
-					})
-				if err != nil {
-					log.Printf("backtest matrix: failed to marshal metrics: %v", err)
-					return nil
-				}
-				rec.ResultsJSON = metricsJSON
-				if createErr := s.repo.CreateBacktestRun(ctx, rec); createErr != nil {
-					log.Printf("backtest matrix: failed to persist combo [%s/%s/%s]: %v", co.Symbol, co.Strategy, co.Timeframe, createErr)
-				} else {
-					cr.RunID = rec.ID
-					s.progressStore.UpdateCombo(bid, i, "completed", "", &cr)
-					eqJSON, err := json.Marshal(result.EquityCurve)
-					if err != nil {
-						log.Printf("backtest matrix: failed to marshal equity curve: %v", err)
-						return nil
-					}
-					tradesJSON, err := json.Marshal(result.Trades)
-					if err != nil {
-						log.Printf("backtest matrix: failed to marshal trades: %v", err)
-						return nil
-					}
-					tradeMetrics, err := json.Marshal(result)
-					if err != nil {
-						log.Printf("backtest matrix: failed to marshal trade metrics: %v", err)
-						return nil
-					}
-					_ = s.repo.InsertBacktestResult(ctx, &db.BacktestResultRecord{
-							RunID:         rec.ID,
-							StrategyID:    co.Strategy,
-							ResultType:    "matrix",
-							TrialIndex:    0,
-							SchemaVersion: 1,
-							Metrics:       tradeMetrics,
-							EquityCurve:   eqJSON,
-							Trades:        tradesJSON,
-						})
+						s.progressStore.UpdateCombo(bid, index, "completed", "", result)
+						if s.repo != nil {
+							sd := startDate
+							ed := endDate
+							rec := &db.BacktestRunRecord{
+								StrategyID:     result.StrategyID,
+								RunType:        "matrix",
+								Status:         "completed",
+								StrategyIDs:    []string{result.StrategyID},
+								Symbols:        []string{result.Symbol},
+								StartDate:      &sd,
+								EndDate:        &ed,
+								InitialCapital: mc.InitialCapital,
+								SharpeRatio:    result.SharpeRatio,
+								MaxDrawdown:    result.MaxDrawdown,
+								TotalReturn:    result.TotalReturn,
+								WinRate:        result.WinRate,
+								NumTrades:      result.NumTrades,
+							}
+							metricsJSON, merr := json.Marshal(gin.H{
+								"sharpe_ratio": result.SharpeRatio, "max_drawdown": result.MaxDrawdown,
+								"total_return": result.TotalReturn, "win_rate": result.WinRate,
+								"num_trades": result.NumTrades, "timeframe": result.Timeframe, "symbol": result.Symbol,
+							})
+							if merr != nil {
+								slog.Error("matrix: failed to marshal metrics", "err", merr)
+								return
+							}
+							rec.ResultsJSON = metricsJSON
+							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
+								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
+							} else {
+								cr := *result
+								cr.RunID = rec.ID
+								s.progressStore.UpdateCombo(bid, index, "completed", "", &cr)
+								eqJSON, _ := json.Marshal(result)
+								tradesJSON, _ := json.Marshal(result)
+								tradeMetrics, _ := json.Marshal(result)
+								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
+									RunID:         rec.ID,
+									StrategyID:    result.StrategyID,
+									ResultType:    "matrix",
+									TrialIndex:    0,
+									SchemaVersion: 1,
+									Metrics:       tradeMetrics,
+									EquityCurve:   eqJSON,
+									Trades:        tradesJSON,
+								})
+							}
 						}
 					}
-					return nil
-				})
-			}
-			_ = g.Wait()
+				},
+			)
 		}(batchID)
 
 		c.JSON(http.StatusAccepted, gin.H{
@@ -1602,30 +1546,6 @@ func (a *backtestRepoAdapter) LoadCandlesTFFiltered(ctx context.Context, symbols
 	return a.LoadCandles(ctx, symbols, start, end)
 }
 
-type comboTuple struct {
-	Strategy  string
-	Symbol    string
-	Timeframe string
-}
-
-func cartesianTuples(strategies, symbols, timeframes []string) []comboTuple {
-	if len(timeframes) == 0 {
-		timeframes = []string{"1d"}
-	}
-	if len(strategies) == 0 {
-		strategies = []string{"intraday_mr"}
-	}
-	combos := make([]comboTuple, 0, len(strategies)*len(symbols)*len(timeframes))
-	for _, s := range strategies {
-		for _, sym := range symbols {
-			for _, tf := range timeframes {
-				combos = append(combos, comboTuple{Strategy: s, Symbol: sym, Timeframe: tf})
-			}
-		}
-	}
-	return combos
-}
-
 func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end time.Time) ([]backtest.RegimeLog, error) {
 	logs, err := a.repo.LoadRegimeLogs(ctx, start, end)
 	if err != nil {
@@ -1725,13 +1645,16 @@ func (a *backtestRepoAdapter) LoadAllCandles(ctx context.Context, symbols []stri
 
 func (s *Server) submitMatrix(c *gin.Context) {
 	var req struct {
-		StrategyIDs    []string `json:"strategy_ids"`
-		Symbols        []string `json:"symbols"`
-		Timeframes     []string `json:"timeframes"`
-		StartDate      string   `json:"start_date"`
-		EndDate        string   `json:"end_date"`
-		InitialCapital float64  `json:"initial_capital"`
-		DataSource     string   `json:"data_source"`
+		StrategyIDs      []string `json:"strategy_ids"`
+		Symbols          []string `json:"symbols"`
+		Timeframes       []string `json:"timeframes"`
+		StartDate        string   `json:"start_date"`
+		EndDate          string   `json:"end_date"`
+		InitialCapital   float64  `json:"initial_capital"`
+		DataSource       string   `json:"data_source"`
+		GateProfile      string   `json:"gate_profile"`
+		SizingPercent    float64  `json:"sizing_percent"`
+		KellyFraction    float64  `json:"kelly_fraction"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1765,13 +1688,17 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	}
 
 	config := backtest.MatrixBacktestConfig{
-		StrategyIDs:    req.StrategyIDs,
-		Symbols:        req.Symbols,
-		Timeframes:     req.Timeframes,
-		StartDate:      startDate,
-		EndDate:        endDate,
-		InitialCapital: req.InitialCapital,
-		DataSource:     req.DataSource,
+		StrategyIDs:     req.StrategyIDs,
+		Symbols:         req.Symbols,
+		Timeframes:      req.Timeframes,
+		StartDate:       startDate,
+		EndDate:         endDate,
+		InitialCapital:  req.InitialCapital,
+		DataSource:      req.DataSource,
+		GateProfile:     req.GateProfile,
+		PropFirmEnabled: true,
+		SizingPercent:   req.SizingPercent,
+		KellyFraction:   req.KellyFraction,
 	}
 
 	dbAdapter := &backtestRepoAdapter{repo: s.repo}
@@ -1791,20 +1718,70 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	s.progressStore.Create(batchID, combos, progresses)
 
 	go func() {
-		result, err := backtest.RunMatrixConcurrent(context.Background(), dbAdapter, config)
-		ps := s.progressStore
+		_, err := backtest.RunMatrixConcurrent(context.Background(), dbAdapter, config,
+			func(index int, status string, errMsg string, result *backtest.ComboResult) {
+				switch status {
+				case "running":
+					s.progressStore.UpdateCombo(batchID, index, "running", "", nil)
+				case "failed":
+					s.progressStore.UpdateCombo(batchID, index, "failed", errMsg, nil)
+				case "completed":
+					if result == nil {
+						return
+					}
+					s.progressStore.UpdateCombo(batchID, index, "completed", "", result)
+					if s.repo != nil {
+						sd := startDate
+						ed := endDate
+						rec := &db.BacktestRunRecord{
+							StrategyID:     result.StrategyID,
+							RunType:        "matrix",
+							Status:         "completed",
+							StrategyIDs:    []string{result.StrategyID},
+							Symbols:        []string{result.Symbol},
+							StartDate:      &sd,
+							EndDate:        &ed,
+							InitialCapital: config.InitialCapital,
+							SharpeRatio:    result.SharpeRatio,
+							MaxDrawdown:    result.MaxDrawdown,
+							TotalReturn:    result.TotalReturn,
+							WinRate:        result.WinRate,
+							NumTrades:      result.NumTrades,
+						}
+						metricsJSON, merr := json.Marshal(gin.H{
+							"sharpe_ratio": result.SharpeRatio, "max_drawdown": result.MaxDrawdown,
+							"total_return": result.TotalReturn, "win_rate": result.WinRate,
+							"num_trades": result.NumTrades, "timeframe": result.Timeframe, "symbol": result.Symbol,
+						})
+						if merr == nil {
+							rec.ResultsJSON = metricsJSON
+							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
+								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
+							} else {
+								cr := *result
+								cr.RunID = rec.ID
+								s.progressStore.UpdateCombo(batchID, index, "completed", "", &cr)
+								eqJSON, _ := json.Marshal(result)
+								tradesJSON, _ := json.Marshal(result)
+								tradeMetrics, _ := json.Marshal(result)
+								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
+									RunID:         rec.ID,
+									StrategyID:    result.StrategyID,
+									ResultType:    "matrix",
+									TrialIndex:    0,
+									SchemaVersion: 1,
+									Metrics:       tradeMetrics,
+									EquityCurve:   eqJSON,
+									Trades:        tradesJSON,
+								})
+							}
+						}
+					}
+				}
+			},
+		)
 		if err != nil {
 			slog.Error("matrix failed", "batch_id", batchID, "error", err)
-			return
-		}
-		for i, r := range result.Results {
-			status := "completed"
-			errStr := ""
-			if r.Error != "" {
-				status = "failed"
-				errStr = r.Error
-			}
-			ps.UpdateCombo(batchID, i, status, errStr, &r)
 		}
 	}()
 
@@ -1833,11 +1810,12 @@ func (s *Server) getMatrixResults(c *gin.Context) {
 			sinceSeq = v
 		}
 	}
-	results, nextSeq, complete := s.progressStore.GetSince(id, sinceSeq)
+	results, nextSeq, _ := s.progressStore.GetSince(id, sinceSeq)
+	summary := s.progressStore.GetSummary(id)
 	c.JSON(http.StatusOK, gin.H{
-		"results":    results,
-		"next_since": nextSeq,
-		"complete":   complete,
+		"summary": summary,
+		"results": results,
+		"seq":     nextSeq,
 	})
 }
 
@@ -1858,4 +1836,12 @@ func (s *Server) getSystemHealth(c *gin.Context) {
 		"engine_version": version.Engine(),
 		"status":         "ok",
 	})
+}
+
+func (s *Server) listBrokers(c *gin.Context) {
+	if s.providerHandler != nil {
+		s.providerHandler.ListProviders(c)
+		return
+	}
+	c.JSON(http.StatusServiceUnavailable, gin.H{"error": "provider service not available"})
 }

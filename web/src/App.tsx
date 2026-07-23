@@ -1,7 +1,9 @@
 import { useState, useEffect, createContext, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import ErrorBoundary from './components/ErrorBoundary'
+import AppHeader from './components/AppHeader'
 import Dashboard from './pages/Dashboard'
 import LiveTrading from './pages/LiveTrading'
 import ExecutionPage from './pages/ExecutionPage'
@@ -55,6 +57,7 @@ interface NavGroup {
 function Sidebar() {
   const nav = useNavigate()
   const loc = useLocation()
+  const { t } = useTranslation()
   const [theme, setTheme] = useState<'dark' | 'light'>(() => (localStorage.getItem('orca_theme') as 'dark' | 'light') || 'dark')
   const [collapsed, setCollapsed] = useState(false)
   useEffect(() => { document.body.className = theme === 'light' ? 'light' : ''; localStorage.setItem('orca_theme', theme) }, [theme])
@@ -62,50 +65,53 @@ function Sidebar() {
 
   const groups: NavGroup[] = [
     {
-      id: 'monitoring', label: 'Monitoring', items: [
-        { path: '/', label: 'Dashboard', icon: '⊡' },
-        { path: '/live', label: 'Live Trading', icon: '⚡' },
-        { path: '/live/market', label: 'Live Market', icon: '◉' },
-        { path: '/execution', label: 'Execution', icon: '▶' },
-        { path: '/status', label: 'Status', icon: '⬡' },
+      id: 'monitoring', label: t('sidebar:group.monitoring', 'Monitoring'), items: [
+        { path: '/', label: t('sidebar:nav.dashboard', 'Dashboard'), icon: '⊡' },
+        { path: '/live', label: t('sidebar:nav.liveTrading', 'Live Trading'), icon: '⚡' },
+        { path: '/live/market', label: t('sidebar:nav.liveMarket', 'Live Market'), icon: '◉' },
+        { path: '/execution', label: t('sidebar:nav.execution', 'Execution'), icon: '▶' },
+        { path: '/risk', label: t('sidebar:nav.risk', 'Risk'), icon: '⚠' },
+        { path: '/status', label: t('sidebar:nav.status', 'Status'), icon: '⬡' },
       ],
     },
     {
-      id: 'trading', label: 'Trading', items: [
-        { path: '/backtest', label: 'Backtest', icon: '◈' },
-        { path: '/backtest/history', label: 'History', icon: '☰' },
-        { path: '/strategies', label: 'Strategies', icon: '◇' },
-        { path: '/accounts', label: 'Accounts', icon: '⊠' },
-        { path: '/propfirm', label: 'Prop Firms', icon: '⛁' },
+      id: 'trading', label: t('sidebar:group.trading', 'Trading'), items: [
+        { path: '/backtest', label: t('sidebar:nav.backtest', 'Backtest'), icon: '◈' },
+        { path: '/backtest/history', label: t('sidebar:nav.history', 'History'), icon: '☰' },
+        { path: '/optimize', label: t('sidebar:nav.optimize', 'Optimize'), icon: '◆' },
+        { path: '/strategies', label: t('sidebar:nav.strategies', 'Strategies'), icon: '◇' },
+        { path: '/accounts', label: t('sidebar:nav.accounts', 'Accounts'), icon: '⊠' },
+        { path: '/propfirm', label: t('sidebar:nav.propFirms', 'Prop Firms'), icon: '⛁' },
       ],
     },
     {
-      id: 'data', label: 'Data & Sources', items: [
-        { path: '/market-data', label: 'Market Data', icon: '∿' },
-        { path: '/indicators', label: 'Indicators', icon: '≋' },
-        { path: '/data-sources', label: 'Data Sources', icon: '◇' },
-        { path: '/brokers', label: 'Brokers', icon: '◧' },
-        { path: '/symbols', label: 'Symbols', icon: '♆' },
+      id: 'data', label: t('sidebar:group.data', 'Data & Sources'), items: [
+        { path: '/market-data', label: t('sidebar:nav.marketData', 'Market Data'), icon: '∿' },
+        { path: '/indicators', label: t('sidebar:nav.indicators', 'Indicators'), icon: '≋' },
+        { path: '/data-sources', label: t('sidebar:nav.dataSources', 'Data Sources'), icon: '◇' },
+        { path: '/brokers', label: t('sidebar:nav.brokers', 'Brokers'), icon: '◧' },
+        { path: '/symbols', label: t('sidebar:nav.symbols', 'Symbols'), icon: '♆' },
       ],
     },
     {
-      id: 'validation', label: 'Validation', items: [
-        { path: '/admin/health', label: 'System Health', icon: '⚠' },
-        { path: '/admin/logs', label: 'Error Logs', icon: '✕' },
-        { path: '/audit', label: 'Audit Log', icon: '⊟' },
-        { path: '/calibrate', label: 'Calibration', icon: '◎' },
-        { path: '/attribution', label: 'Attribution', icon: '◫' },
+      id: 'validation', label: t('sidebar:group.validation', 'Validation'), items: [
+        { path: '/admin/health', label: t('sidebar:nav.systemHealth', 'System Health'), icon: '⚠' },
+        { path: '/admin/logs', label: t('sidebar:nav.errorLogs', 'Error Logs'), icon: '✕' },
+        { path: '/audit', label: t('sidebar:nav.auditLog', 'Audit Log'), icon: '⊟' },
+        { path: '/calibrate', label: t('sidebar:nav.calibration', 'Calibration'), icon: '◎' },
+        { path: '/attribution', label: t('sidebar:nav.attribution', 'Attribution'), icon: '◫' },
+        { path: '/simulate', label: t('sidebar:nav.simulate', 'Simulate'), icon: '≋' },
       ],
     },
     {
-      id: 'config', label: 'Configuration', items: [
-        { path: '/credentials', label: 'Credentials', icon: '⬡' },
-        { path: '/webhooks', label: 'Webhooks', icon: '⌘' },
-        { path: '/llm', label: 'LLM', icon: '◈' },
-        { path: '/2fa', label: '2FA', icon: '◉' },
-        { path: '/settings', label: 'Settings', icon: '⚙' },
-        { path: '/notifications', label: 'Notifications', icon: '◈' },
-        { path: '/admin', label: 'Admin', icon: '⊛' },
+      id: 'config', label: t('sidebar:group.config', 'Configuration'), items: [
+        { path: '/credentials', label: t('sidebar:nav.credentials', 'Credentials'), icon: '⬡' },
+        { path: '/webhooks', label: t('sidebar:nav.webhooks', 'Webhooks'), icon: '⌘' },
+        { path: '/llm', label: t('sidebar:nav.llm', 'LLM'), icon: '◈' },
+        { path: '/2fa', label: t('sidebar:nav.2fa', '2FA'), icon: '◉' },
+        { path: '/settings', label: t('sidebar:nav.settings', 'Settings'), icon: '⚙' },
+        { path: '/notifications', label: t('sidebar:nav.notifications', 'Notifications'), icon: '◈' },
+        { path: '/admin', label: t('sidebar:nav.admin', 'Admin'), icon: '⊛' },
       ],
     },
   ]
@@ -114,7 +120,7 @@ function Sidebar() {
     <aside className={`sidebar app-sidebar${collapsed ? ' sidebar-collapsed' : ''}`} role="navigation" aria-label="Main navigation">
       <div className="sidebar-brand" onClick={() => nav('/')} role="button" tabIndex={0} onKeyDown={e => e.key === 'Enter' && nav('/')}>
         <span className="sidebar-brand-icon">O</span>
-        {!collapsed && <span>Orca Algo</span>}
+        {!collapsed && <span>{t('sidebar:brandName', 'Orca Algo')}</span>}
       </div>
       <nav className="sidebar-nav">
         {groups.map(g => (
@@ -129,14 +135,14 @@ function Sidebar() {
         ))}
       </nav>
       <div className="sidebar-footer">
-        <button className="sidebar-link" onClick={() => setCollapsed(c => !c)} title={collapsed ? 'Expand' : 'Collapse'}>
-          {collapsed ? '▶' : '◀'} {!collapsed && <span>Collapse</span>}
+        <button className="sidebar-link" onClick={() => setCollapsed(c => !c)} title={collapsed ? t('sidebar:expand', 'Expand') : t('sidebar:collapse', 'Collapse')}>
+          {collapsed ? '▶' : '◀'} {!collapsed && <span>{t('sidebar:collapse', 'Collapse')}</span>}
         </button>
         <button className="sidebar-link" onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? '☀' : '☾'} {!collapsed && <span>{theme === 'dark' ? 'Light' : 'Dark'}</span>}
+          {theme === 'dark' ? '☀' : '☾'} {!collapsed && <span>{theme === 'dark' ? t('sidebar:light', 'Light') : t('sidebar:dark', 'Dark')}</span>}
         </button>
-        <button className="sidebar-link sidebar-logout" onClick={() => { localStorage.removeItem('orca_auth'); window.location.href = '/' }} aria-label="Log out">
-          ⊘ {!collapsed && <span>Logout</span>}
+        <button className="sidebar-link sidebar-logout" onClick={() => { localStorage.removeItem('orca_auth'); window.location.href = '/' }} aria-label={t('sidebar:logout', 'Logout')}>
+          ⊘ {!collapsed && <span>{t('sidebar:logout', 'Logout')}</span>}
         </button>
       </div>
     </aside>
@@ -147,6 +153,7 @@ function AuthenticatedApp() {
   return (
     <div className="app-shell">
       <Sidebar />
+      <AppHeader />
       <main className="main app-main" role="main" id="main-content">
         <ErrorBoundary>
           <Routes>
@@ -214,7 +221,7 @@ function AuthGate() {
     window.history.pushState({}, '', paths[p])
   }
 
-  useEffect(() => { token ? localStorage.setItem('orca_auth', token) : localStorage.removeItem('orca_auth') }, [token])
+  useEffect(() => { if (token) { localStorage.setItem('orca_auth', token) } else { localStorage.removeItem('orca_auth') } }, [token])
 
   if (token) return <AuthCtx.Provider value={{ token, setToken }}><AuthenticatedApp /></AuthCtx.Provider>
 

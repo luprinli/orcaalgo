@@ -186,7 +186,7 @@ func runMatrix() {
 		len(matrixCfg.StrategyIDs)*len(matrixCfg.Symbols)*len(matrixCfg.Timeframes))
 
 	ctx := context.Background()
-	result, err := backtest.RunMatrix(ctx, db, matrixCfg)
+	result, err := backtest.RunMatrix(ctx, db, matrixCfg, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Matrix error: %v\n", err)
 	}

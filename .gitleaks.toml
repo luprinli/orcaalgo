@@ -1,0 +1,22 @@
+# OrcaAlgo Gitleaks configuration
+# See https://github.com/gitleaks/gitleaks for rule reference
+
+title = "OrcaAlgo Gitleaks Config"
+
+# Allow known test/dev credentials that are intentionally non-secret.
+# Remove the rules you don't need — they are here to suppress false positives.
+[allowlist]
+  description = "Known test/dev credentials used in CI, E2E tests, and local development"
+  paths = [
+    # E2E tests reference hardcoded JWT tokens for test auth
+    '''web/e2e/.*\.spec\.(cjs|js)''',
+    # CI uses test credentials
+    '''\.github/workflows/.*\.yml''',
+    # Local development fixture
+    '''\.env\.example''',
+    '''scripts/.*\.py''',
+    '''tests/.*\.py''',
+  ]
+
+# Default Gitleaks rules are sufficient for production code.
+# No custom rules needed.

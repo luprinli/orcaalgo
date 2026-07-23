@@ -12,6 +12,27 @@ dependencies = [
     "structlog>=23",
 ]
 
+[project.scripts]
+orca = "orca.cli:app"
+orca-validate = "orca.cli:validate"
+orca-calibrate = "orca.cli:calibrate"
+orca-hash = "orca.cli:hash_cmd"
+orca-preflight = "orca.cli:preflight"
+orca-attribute = "orca.cli:attribute"
+orca-data-validate = "orca.cli:data_validate"
+orca-ir-compile = "orca.cli:ir_compile"
+orca-sim-calibrate = "orca.cli:sim_calibrate"
+orca-generate-1m = "orca.cli:generate_1m"
+orca-ticks = "orca.cli:ticks"
+orca-sim-validate = "orca.cli:sim_validate"
+orca-generate-regime = "orca.cli:generate_regime"
+orca-inject-signal = "orca.cli:inject_signal"
+orca-bootstrap = "orca.cli:bootstrap"
+orca-calibrate-regime = "orca.cli:calibrate_regime"
+orca-validate-regime = "orca.cli:validate_regime"
+orca-status = "orca.cli:status"
+orca-halt = "orca.cli:halt"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7",

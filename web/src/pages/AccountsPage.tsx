@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,6 +16,7 @@ const accountSchema = z.object({
 type AccountFormData = z.infer<typeof accountSchema>
 
 export default function AccountsPage() {
+  const { t } = useTranslation()
   const [list, setList] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +41,7 @@ export default function AccountsPage() {
       const res = await accounts.list()
       setList(Array.isArray(res) ? res : [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load accounts')
+      setError(err instanceof Error ? err.message : t('accounts:failedToLoad', 'Failed to load accounts'))
     } finally {
       setLoading(false)
     }
@@ -53,9 +55,9 @@ export default function AccountsPage() {
       }
     }).catch(() => {
       setBrokerOptions([
-        { id: 'paper', label: 'Paper' },
-        { id: 'alpaca', label: 'Alpaca Live' },
-        { id: 'ibkr', label: 'IBKR' },
+        { id: 'paper', label: t('accounts:paper', 'Paper') },
+        { id: 'alpaca', label: t('accounts:alpacaLive', 'Alpaca Live') },
+        { id: 'ibkr', label: t('accounts:ibkr', 'IBKR') },
       ])
     })
   }, [fetchAll])
@@ -68,12 +70,12 @@ export default function AccountsPage() {
         is_default: form.is_default,
       }
       await accounts.create(data)
-      setMsg(`Account "${form.name}" created`)
+      setMsg(t('accounts:accountCreated', 'Account "{{name}}" created', { name: form.name }))
       setShowCreate(false)
       reset()
       fetchAll()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Create failed')
+      setMsg(err instanceof Error ? err.message : t('accounts:createFailed', 'Create failed'))
     }
   }
 
@@ -81,11 +83,11 @@ export default function AccountsPage() {
     if (!confirmDelete) return
     try {
       await accounts.delete(confirmDelete.id)
-      setMsg(`Account "${confirmDelete.name}" deleted`)
+      setMsg(t('accounts:accountDeleted', 'Account "{{name}}" deleted', { name: confirmDelete.name }))
       setConfirmDelete(null)
       fetchAll()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Delete failed')
+      setMsg(err instanceof Error ? err.message : t('accounts:deleteFailed', 'Delete failed'))
       setConfirmDelete(null)
     }
   }
@@ -93,17 +95,17 @@ export default function AccountsPage() {
   const handleSetDefault = async (id: string) => {
     try {
       await accounts.setDefault(id)
-      setMsg('Default account updated')
+      setMsg(t('accounts:defaultUpdated', 'Default account updated'))
       fetchAll()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Failed to set default')
+      setMsg(err instanceof Error ? err.message : t('accounts:failedToSetDefault', 'Failed to set default'))
     }
   }
 
   if (loading) {
     return (
       <div className="card">
-        <p className="text-muted">Loading accounts...</p>
+        <p className="text-muted">{t('accounts:loading', 'Loading accounts...')}</p>
       </div>
     )
   }
@@ -111,9 +113,9 @@ export default function AccountsPage() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Accounts</h1>
+        <h1 style={{ margin: 0 }}>{t('accounts:title', 'Accounts')}</h1>
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          + New Account
+          {t('accounts:newAccount', '+ New Account')}
         </button>
       </div>
 
@@ -125,11 +127,11 @@ export default function AccountsPage() {
 
       {showCreate && (
         <div className="card mb-4" style={{ maxWidth: 400 }}>
-          <h2>Create Account</h2>
+          <h2>{t('accounts:createAccount', 'Create Account')}</h2>
           <form onSubmit={handleSubmit(onCreate)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
-              <input className="input" placeholder="Account name" {...register('name')} />
-              {errors.name && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.name.message}</p>}
+              <input className="input" placeholder={t('accounts:accountName', 'Account name')} {...register('name')} />
+              {errors.name && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{t('accounts:validation:nameRequired', errors.name.message || 'Account name is required')}</p>}
             </div>
             <select className="input" {...register('broker_type')}>
               {(brokerOptions.length > 0 ? brokerOptions : [{ id: 'paper', label: 'Paper' }]).map((b) => (
@@ -138,14 +140,14 @@ export default function AccountsPage() {
             </select>
             <label className="flex gap-2" style={{ alignItems: 'center' }}>
               <input type="checkbox" {...register('is_default')} />
-              Set as default
+              {t('accounts:setAsDefault', 'Set as default')}
             </label>
             <div className="flex gap-2">
               <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Creating...' : 'Create'}
+                {isSubmitting ? t('accounts:creating', 'Creating...') : t('accounts:create', 'Create')}
               </button>
               <button className="btn btn-outline" type="button" onClick={() => setShowCreate(false)}>
-                Cancel
+                {t('accounts:cancel', 'Cancel')}
               </button>
             </div>
           </form>
@@ -158,7 +160,7 @@ export default function AccountsPage() {
 
       {list.length === 0 ? (
         <div className="card">
-          <p className="text-muted">No accounts configured. Create one to start trading.</p>
+          <p className="text-muted">{t('accounts:noAccounts', 'No accounts configured. Create one to start trading.')}</p>
         </div>
       ) : (
         <div className="card">
@@ -166,15 +168,15 @@ export default function AccountsPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Broker</th>
-                  <th>Default</th>
-                  <th>Balance</th>
-                  <th>Equity</th>
-                  <th>Daily P&L</th>
-                  <th>Buying Power</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th>{t('accounts:table:name', 'Name')}</th>
+                  <th>{t('accounts:table:broker', 'Broker')}</th>
+                  <th>{t('accounts:table:default', 'Default')}</th>
+                  <th>{t('accounts:table:balance', 'Balance')}</th>
+                  <th>{t('accounts:table:equity', 'Equity')}</th>
+                  <th>{t('accounts:table:dailyPnl', 'Daily P&L')}</th>
+                  <th>{t('accounts:table:buyingPower', 'Buying Power')}</th>
+                  <th>{t('accounts:table:status', 'Status')}</th>
+                  <th>{t('accounts:table:actions', 'Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -182,7 +184,7 @@ export default function AccountsPage() {
                   <tr key={a.id}>
                     <td><strong>{a.label || a.id}</strong></td>
                     <td>{a.broker_type}</td>
-                    <td>{a.is_default ? <span className="badge badge-ok">Default</span> : '—'}</td>
+                    <td>{a.is_default ? <span className="badge badge-ok">{t('accounts:defaultAccount', 'Default')}</span> : '—'}</td>
                     <td>${a.balance?.toFixed(2) ?? '--'}</td>
                     <td>${a.equity?.toFixed(2) ?? '--'}</td>
                     <td style={{ color: (a.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
@@ -191,18 +193,18 @@ export default function AccountsPage() {
                     <td>${a.buying_power?.toFixed(2) ?? '--'}</td>
                     <td>
                       <span className={`badge ${a.halted ? 'badge-err' : 'badge-ok'}`}>
-                        {a.halted ? 'Halted' : 'Active'}
+                        {a.halted ? t('common:halted', 'HALTED') : t('common:active', 'Active')}
                       </span>
                     </td>
                     <td>
                       <div className="flex gap-1">
                         {!a.is_default && (
                           <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleSetDefault(a.id)}>
-                            Set Default
+                            {t('accounts:setDefault', 'Set Default')}
                           </button>
                         )}
                         <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmDelete({ id: a.id, name: a.label || a.id })}>
-                          Delete
+                          {t('accounts:delete', 'Delete')}
                         </button>
                       </div>
                     </td>
@@ -216,9 +218,9 @@ export default function AccountsPage() {
 
       {confirmDelete && (
         <ConfirmDialog
-          title="Delete Account"
-          message={`Delete account "${confirmDelete.name}"? This action cannot be undone.`}
-          confirmLabel="Delete"
+          title={t('accounts:deleteTitle', 'Delete Account')}
+          message={t('accounts:deleteConfirm', 'Delete account "{{name}}"? This action cannot be undone.', { name: confirmDelete.name })}
+          confirmLabel={t('accounts:delete', 'Delete')}
           danger
           onConfirm={confirmDeleteAccount}
           onCancel={() => setConfirmDelete(null)}

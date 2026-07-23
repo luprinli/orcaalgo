@@ -4,6 +4,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from orca.optimize.indicator_factory import get_config
@@ -151,13 +152,11 @@ def _evaluate_params(df: pd.DataFrame, params: dict[str, float]) -> dict[str, fl
     }
 
 
-def _generate_signals(df: pd.DataFrame, params: dict[str, float]) -> "np.ndarray":
+def _generate_signals(df: pd.DataFrame, params: dict[str, float]) -> np.ndarray:
     """Generate entry (+1) / exit (-1) signals from OHLCV data and parameters.
 
     Uses numpy for RSI/EMA computations. VectorBT provides vbt.RSI.run() if installed.
     """
-    import numpy as np
-
     close = df["Close"].values
     n = len(close)
     signals = np.zeros(n, dtype=int)
@@ -177,9 +176,7 @@ def _generate_signals(df: pd.DataFrame, params: dict[str, float]) -> "np.ndarray
     return signals
 
 
-def _compute_rsi(prices: "np.ndarray", period: int = 14) -> "np.ndarray":
-    import numpy as np
-
+def _compute_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
     if len(prices) < period + 1:
         return np.full(len(prices), np.nan)
 

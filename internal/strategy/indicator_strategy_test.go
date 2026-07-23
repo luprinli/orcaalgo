@@ -254,7 +254,7 @@ func TestAllStrategiesRegistered(t *testing.T) {
 	required := []string{
 		"ma_crossover", "rsi2_reversion", "donchian_breakout",
 		"keltner_macd", "ichimoku_cloud", "trend_following",
-		"opening_range_breakout", "grid", "session_scalp", "mean_reversion",
+		"opening_range_breakout", "grid_trading", "session_scalp", "mean_reversion",
 	}
 	for _, name := range required {
 		if !names[name] {

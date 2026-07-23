@@ -85,10 +85,10 @@ def run_preflight_checks() -> list[CheckResult]:
         results.append(CheckResult("kill_switch_guard", "fail", str(e)))
 
     # Check 8: Balance reconciliation readiness
-    try:
-        from orca.attribution.slicer import attribute_pnl
+    import importlib.util
+    if importlib.util.find_spec("orca.attribution.slicer"):
         results.append(CheckResult("balance_reconcile", "pass", "PnL attribution engine available for reconciliation"))
-    except ImportError:
+    else:
         results.append(CheckResult("balance_reconcile", "warn", "Attribution engine not importable; balance reconciliation unavailable"))
 
     # Check 9: Calibration recency

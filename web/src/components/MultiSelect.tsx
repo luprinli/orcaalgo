@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export interface MultiSelectItem {
   key: string
@@ -23,9 +24,10 @@ export interface MultiSelectProps<T extends MultiSelectItem> {
 
 export default function MultiSelect<T extends MultiSelectItem>({
   items, selectedKeys, onToggle, onSelectAll, onDeselectAll,
-  label, placeholder = 'Select...', rowRender, extraActions,
-  searchPlaceholder = 'Filter...', width,
+  label, placeholder, rowRender, extraActions,
+  searchPlaceholder, width,
 }: MultiSelectProps<T>) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -55,7 +57,7 @@ export default function MultiSelect<T extends MultiSelectItem>({
       </div>
       <div className="flex gap-1 flex-wrap" style={{ minHeight: 28, padding: '2px 6px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--input-bg)', cursor: 'pointer', fontSize: 10 }}
            onClick={() => setOpen(v => !v)}>
-        {selCount === 0 && <span className="text-muted" style={{ fontSize: 10, lineHeight: '22px' }}>{placeholder}</span>}
+        {selCount === 0 && <span className="text-muted" style={{ fontSize: 10, lineHeight: '22px' }}>{placeholder ?? t('components:multiSelect.placeholder', 'Select...')}</span>}
         {selected.slice(0, 6).map(s => chip(s.key, s.name))}
         {selCount > 6 && <span className="text-muted" style={{ fontSize: 10, lineHeight: '22px' }}>+{selCount - 6}</span>}
       </div>
@@ -63,13 +65,13 @@ export default function MultiSelect<T extends MultiSelectItem>({
         <div className="card" style={{ position: 'absolute', zIndex: 200, minWidth: 240, maxHeight: 340, overflowY: 'auto', marginTop: 2, padding: 8, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>
           {onSelectAll && (
             <div className="flex gap-1 mb-2 flex-wrap">
-              <button className="btn btn-outline" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onSelectAll}>All ({total})</button>
-              {onDeselectAll && <button className="btn btn-outline" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onDeselectAll}>None</button>}
+              <button className="btn btn-outline" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onSelectAll}>{t('components:multiSelect.all', 'All')} ({total})</button>
+              {onDeselectAll && <button className="btn btn-outline" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onDeselectAll}>{t('common:none', 'None')}</button>}
               {extraActions}
             </div>
           )}
           <input className="input" style={{ fontSize: 10, padding: '3px 6px', marginBottom: 4, width: '100%', boxSizing: 'border-box' }}
-                 placeholder={searchPlaceholder} value={filter} onChange={e => setFilter(e.target.value)} />
+                 placeholder={searchPlaceholder ?? t('components:multiSelect.searchPlaceholder', 'Filter...')} value={filter} onChange={e => setFilter(e.target.value)} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '1px 4px' }}>
             {filtered.map(item => {
               const sel = selectedKeys.has(item.key)
@@ -80,7 +82,7 @@ export default function MultiSelect<T extends MultiSelectItem>({
               )
             })}
           </div>
-          {filtered.length === 0 && <p className="text-muted" style={{ fontSize: 10, padding: 8, textAlign: 'center' }}>No items found</p>}
+          {filtered.length === 0 && <p className="text-muted" style={{ fontSize: 10, padding: 8, textAlign: 'center' }}>{t('components:multiSelect.noItems', 'No items found')}</p>}
         </div>
       )}
     </div>

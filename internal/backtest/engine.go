@@ -57,14 +57,17 @@ type BacktestConfig struct {
 }
 
 type MatrixBacktestConfig struct {
-	StrategyIDs    []string `json:"strategy_ids"`
-	Symbols        []string `json:"symbols"`
-	Timeframes     []string `json:"timeframes"`
-	StartDate      time.Time `json:"start_date"`
-	EndDate        time.Time `json:"end_date"`
-	InitialCapital float64   `json:"initial_capital"`
-	DataSource     string    `json:"data_source"`
-	GateProfile    string    `json:"gate_profile"`
+	StrategyIDs      []string `json:"strategy_ids"`
+	Symbols          []string `json:"symbols"`
+	Timeframes       []string `json:"timeframes"`
+	StartDate        time.Time `json:"start_date"`
+	EndDate          time.Time `json:"end_date"`
+	InitialCapital   float64   `json:"initial_capital"`
+	DataSource       string    `json:"data_source"`
+	GateProfile      string    `json:"gate_profile"`
+	PropFirmEnabled  bool      `json:"propfirm_enabled"`
+	SizingPercent    float64   `json:"sizing_percent"`
+	KellyFraction    float64   `json:"kelly_fraction"`
 }
 
 type ComboResult struct {

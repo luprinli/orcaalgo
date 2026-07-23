@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { candles } from '../api/client'
 import { useWebSocket } from '../hooks/useWebSocket'
 import CandlesChart from '../charts/CandlesChart'
@@ -16,6 +17,7 @@ const RANGES = [
 ]
 
 export default function MarketDataPage() {
+  const { t } = useTranslation()
   const [symbol, setSymbol] = useState('SPY')
   const [range, setRange] = useState('1D')
   const [candleData, setCandleData] = useState<Candle[]>([])
@@ -64,7 +66,7 @@ export default function MarketDataPage() {
       const res = await candles.get(symbol, range)
       setCandleData(res.candles ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load candles')
+      setError(err instanceof Error ? err.message : t('marketData:failedToLoad', 'Failed to load candles'))
     } finally {
       setLoading(false)
     }
@@ -77,15 +79,15 @@ export default function MarketDataPage() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Market Data</h1>
+        <h1 style={{ margin: 0 }}>{t('marketData:title', 'Market Data')}</h1>
         <div className="flex gap-2">
           <span className={`badge ${connected ? 'badge-ok' : 'badge-err'}`}>
-            {connected ? 'Live' : 'Offline'}
+            {connected ? t('marketData:live', 'Live') : t('marketData:offline', 'Offline')}
           </span>
           <input
             className="input"
             style={{ width: 120 }}
-            placeholder="Symbol"
+              placeholder={t('marketData:symbol', 'Symbol')}
             value={symbol}
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && fetchCandles()}
@@ -96,7 +98,7 @@ export default function MarketDataPage() {
             ))}
           </select>
           <button className="btn btn-primary" onClick={fetchCandles} disabled={loading}>
-            {loading ? 'Loading...' : 'Load'}
+            {loading ? t('marketData:loading', 'Loading...') : t('marketData:load', 'Load')}
           </button>
         </div>
       </div>
@@ -113,19 +115,19 @@ export default function MarketDataPage() {
 
       <div className="grid-2 mt-4">
         <div className="card">
-          <h2>Recent Ticks</h2>
+          <h2>{t('marketData:recentTicks', 'Recent Ticks')}</h2>
           {ticks.length === 0 ? (
-            <p className="text-muted">Waiting for tick data...</p>
+            <p className="text-muted">{t('marketData:waitingForTicks', 'Waiting for tick data...')}</p>
           ) : (
             <div style={{ overflowX: 'auto', maxHeight: 300, overflowY: 'auto' }}>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Symbol</th>
-                    <th>Price</th>
-                    <th>Volume</th>
-                    <th>Side</th>
-                    <th>Time</th>
+                    <th>{t('marketData:table.symbol', 'Symbol')}</th>
+                    <th>{t('marketData:table.price', 'Price')}</th>
+                    <th>{t('marketData:table.volume', 'Volume')}</th>
+                    <th>{t('marketData:table.side', 'Side')}</th>
+                    <th>{t('marketData:table.time', 'Time')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -146,7 +148,7 @@ export default function MarketDataPage() {
 
         <div>
           {cvdHistory.length > 0 && (
-            <CVDChart data={cvdHistory} height={200} title="CVD" />
+            <CVDChart data={cvdHistory} height={200} title={t('marketData:cvdTitle', 'CVD')} />
           )}
 
           {latestCvd && (
@@ -158,10 +160,10 @@ export default function MarketDataPage() {
 
           {divergence && (
             <div className="card" style={{ border: '1px solid var(--warn)' }}>
-              <h2>Divergence Alert</h2>
+              <h2>{t('marketData:divergenceAlert', 'Divergence Alert')}</h2>
               <div style={{ padding: 8, borderRadius: 6, background: 'rgba(210,153,34,.1)' }}>
-                <div><strong>Type:</strong> {divergence.type}</div>
-                <div><strong>Confidence:</strong> {(divergence.confidence * 100).toFixed(0)}%</div>
+                <div><strong>{t('marketData:type', 'Type:')}</strong> {divergence.type}</div>
+                <div><strong>{t('marketData:confidence', 'Confidence:')}</strong> {(divergence.confidence * 100).toFixed(0)}%</div>
                 <div className="text-muted">{divergence.time ? new Date(divergence.time).toLocaleString() : ''}</div>
               </div>
             </div>

@@ -3,8 +3,8 @@
 import json
 import os
 import time
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import timedelta
+from typing import Any
 
 try:
     import optuna
@@ -33,7 +33,7 @@ class BayesianOptimizer:
         n_trials: int = 50,
         timeout_minutes: int = 30,
         objective_metric: str = "sharpe",
-        param_ranges: Optional[Dict[str, Tuple[float, float]]] = None,
+        param_ranges: dict[str, tuple[float, float]] | None = None,
     ):
         self.strategy_id = strategy_id
         self.symbol = symbol
@@ -48,7 +48,7 @@ class BayesianOptimizer:
         self.objective_metric = objective_metric
         self.param_ranges = param_ranges or self._default_ranges()
 
-    def _default_ranges(self) -> Dict[str, Tuple[float, float]]:
+    def _default_ranges(self) -> dict[str, tuple[float, float]]:
         return {
             "entry_z": (-3.0, 3.0),
             "exit_z": (0.1, 1.5),
@@ -57,7 +57,7 @@ class BayesianOptimizer:
             "take_profit_pct": (0.5, 5.0),
         }
 
-    def _run_backtest(self, params: Dict[str, float]) -> float:
+    def _run_backtest(self, params: dict[str, float]) -> float:
         body = {
             "strategy_id": self.strategy_id,
             "symbols": [self.symbol],
@@ -86,7 +86,7 @@ class BayesianOptimizer:
         score = max(score, -999.0)
         return score
 
-    def run(self, progress_callback=None) -> Dict[str, Any]:
+    def run(self, progress_callback=None) -> dict[str, Any]:
         if optuna is None:
             return {"error": "optuna not installed. pip install optuna"}
 
@@ -126,7 +126,7 @@ class BayesianOptimizer:
         }
 
 
-def run_optimization(**kwargs) -> Dict[str, Any]:
+def run_optimization(**kwargs) -> dict[str, Any]:
     optimizer = BayesianOptimizer(**kwargs)
     return optimizer.run(progress_callback=lambda p: print(
         f"  [{p.get('current_trial',0)}/{p.get('total_trials',50)}] "

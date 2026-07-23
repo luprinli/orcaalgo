@@ -13,6 +13,12 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+type BatchTuple struct {
+	Strategy  string
+	Symbol    string
+	Timeframe string
+}
+
 type batchTuple struct {
 	Strategy  string
 	Symbol    string
@@ -50,6 +56,15 @@ func cartesianProduct(strategies, symbols, timeframes []string) []batchTuple {
 		}
 	}
 	return combos
+}
+
+func CartesianProduct(strategies, symbols, timeframes []string) []BatchTuple {
+	combos := cartesianProduct(strategies, symbols, timeframes)
+	result := make([]BatchTuple, len(combos))
+	for i, c := range combos {
+		result[i] = BatchTuple{Strategy: c.Strategy, Symbol: c.Symbol, Timeframe: c.Timeframe}
+	}
+	return result
 }
 
 func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConfig) ([]ComboResult, error) {
@@ -144,11 +159,13 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 	return results, nil
 }
 
-func RunMatrix(ctx context.Context, db Database, config MatrixBacktestConfig) (*MatrixResult, error) {
-	return RunMatrixConcurrent(ctx, db, config)
+type MatrixProgressFn func(index int, status string, errMsg string, result *ComboResult)
+
+func RunMatrix(ctx context.Context, db Database, config MatrixBacktestConfig, onProgress MatrixProgressFn) (*MatrixResult, error) {
+	return RunMatrixConcurrent(ctx, db, config, onProgress)
 }
 
-func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktestConfig) (*MatrixResult, error) {
+func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktestConfig, onProgress MatrixProgressFn) (*MatrixResult, error) {
 	combos := cartesianProduct(config.StrategyIDs, config.Symbols, config.Timeframes)
 
 	if len(combos) == 0 {
@@ -172,6 +189,16 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 	results := make([]ComboResult, len(combos))
 	var mu sync.Mutex
 
+	applyGate := config.GateProfile != "" && config.GateProfile != "none"
+	sizingPct := config.SizingPercent
+	if sizingPct <= 0 {
+		sizingPct = 0.02
+	}
+	kellyFrac := config.KellyFraction
+	if kellyFrac <= 0 {
+		kellyFrac = 0.25
+	}
+
 	for i, combo := range combos {
 		i, combo := i, combo
 		if err := sem.Acquire(ctx, 1); err != nil {
@@ -181,16 +208,33 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 			risk.DefaultHeapAdmission.ForceGC()
 			time.Sleep(100 * time.Millisecond)
 		}
+		if onProgress != nil {
+			onProgress(i, "running", "", nil)
+		}
 		g.Go(func() error {
 			defer sem.Release(1)
 			btConfig := BacktestConfig{
-				StrategyID:     combo.Strategy,
-				Symbols:        []string{combo.Symbol},
-				StartDate:      config.StartDate,
-				EndDate:        config.EndDate,
-				InitialCapital: config.InitialCapital,
-				Timeframe:      combo.Timeframe,
-				DataSource:     config.DataSource,
+				StrategyID:      combo.Strategy,
+				Symbols:         []string{combo.Symbol},
+				StartDate:       config.StartDate,
+				EndDate:         config.EndDate,
+				InitialCapital:  config.InitialCapital,
+				Timeframe:       combo.Timeframe,
+				DataSource:      config.DataSource,
+				PropFirmEnabled: config.PropFirmEnabled,
+				SizingPercent:   sizingPct,
+				KellyFraction:   kellyFrac,
+				ApplyGate:       applyGate,
+				GateProfile:     config.GateProfile,
+				StopLoss: &StopLossConfig{
+					Type:          "atr",
+					ATRPeriod:     14,
+					ATRMultiplier: 2.0,
+				},
+				TakeProfit: &TakeProfitConfig{
+					Type:    "risk_reward",
+					RRRatio: 2.0,
+				},
 			}
 			engine := NewEngine(db)
 			result, err := engine.Run(ctx, btConfig)
@@ -203,25 +247,31 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 					Timeframe:  combo.Timeframe,
 					Error:      err.Error(),
 				}
+				if onProgress != nil {
+					onProgress(i, "failed", err.Error(), nil)
+				}
 				return nil
 			}
 			results[i] = ComboResult{
-				Symbol:       combo.Symbol,
-				StrategyID:   combo.Strategy,
-				Timeframe:    combo.Timeframe,
-				SharpeRatio:  result.SharpeRatio,
-				SortinoRatio: result.SortinoRatio,
-				MaxDrawdown:  result.MaxDrawdown,
-				TotalReturn:  result.TotalReturnPct,
-				WinRate:      result.WinRate,
-				ProfitFactor: result.ProfitFactor,
-				AvgTrade:     result.AvgTrade,
-				AvgWin:       result.AvgWin,
-				AvgLoss:      result.AvgLoss,
-				NumTrades:    result.NumTrades,
-				Warnings:     result.Warnings,
-				GatePassed:   gateBool(result.MetricGateStatus),
+				Symbol:            combo.Symbol,
+				StrategyID:        combo.Strategy,
+				Timeframe:         combo.Timeframe,
+				SharpeRatio:       result.SharpeRatio,
+				SortinoRatio:      result.SortinoRatio,
+				MaxDrawdown:       result.MaxDrawdown,
+				TotalReturn:       result.TotalReturnPct,
+				WinRate:           result.WinRate,
+				ProfitFactor:      result.ProfitFactor,
+				AvgTrade:          result.AvgTrade,
+				AvgWin:            result.AvgWin,
+				AvgLoss:           result.AvgLoss,
+				NumTrades:         result.NumTrades,
+				Warnings:          result.Warnings,
+				GatePassed:        gateBool(result.MetricGateStatus),
 				AdverseSelectRate: result.AdverseSelectionRate,
+			}
+			if onProgress != nil {
+				onProgress(i, "completed", "", &results[i])
 			}
 			return nil
 		})

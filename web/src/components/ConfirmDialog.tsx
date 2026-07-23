@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+
 interface ConfirmDialogProps {
   title?: string
   message: string
@@ -9,14 +11,15 @@ interface ConfirmDialogProps {
 }
 
 export default function ConfirmDialog({
-  title = 'Confirm',
+  title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   danger = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation()
   return (
     <div
       style={{
@@ -34,18 +37,18 @@ export default function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-title"
       >
-        <h2 id="confirm-title" style={{ margin: '0 0 8px' }}>{title}</h2>
+        <h2 id="confirm-title" style={{ margin: '0 0 8px' }}>{title ?? t('components:confirmDialog.confirm', 'Confirm')}</h2>
         <p className="text-muted" style={{ margin: '0 0 20px' }}>{message}</p>
         <div className="flex gap-2" style={{ justifyContent: 'flex-end' }}>
           <button className="btn btn-outline" onClick={onCancel}>
-            {cancelLabel}
+            {cancelLabel ?? t('common:cancel', 'Cancel')}
           </button>
           <button
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
             autoFocus
           >
-            {confirmLabel}
+            {confirmLabel ?? t('common:confirm', 'Confirm')}
           </button>
         </div>
       </div>

@@ -80,12 +80,12 @@ def calibrate(
         Path(out_path).write_text(_json.dumps(report, indent=2, default=str))
 
         typer.echo(f"Calibration report written to {out_path}")
-    except ImportError:
+    except ImportError as e:
         if json_output:
             typer.echo(_json.dumps({"error": "Calibration module not available"}))
         else:
             typer.echo("Calibration module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command(name="hash")
@@ -170,7 +170,7 @@ def preflight(
             typer.echo("\nPre-flight FAILED. Do not deploy to production.", err=True)
             raise typer.Exit(code=1)
         typer.echo("\nPre-flight PASSED.")
-    except ImportError:
+    except ImportError as e:
         if json_output:
             import json as _json
 
@@ -193,7 +193,7 @@ def preflight(
             )
         else:
             typer.echo("Pre-flight module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -222,12 +222,12 @@ def attribute(
         Path(out_path).write_text(_json.dumps(report, indent=2, default=str))
 
         typer.echo(f"Attribution report written to {out_path}")
-    except ImportError:
+    except ImportError as e:
         if json_output:
             typer.echo(_json.dumps({"error": "Attribution module not available"}))
         else:
             typer.echo("Attribution module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -287,12 +287,12 @@ def data_validate(
             typer.echo(f"\n{report.warned} warning(s). Review before production deployment.")
         else:
             typer.echo("\nAll checks PASSED.")
-    except ImportError:
+    except ImportError as e:
         if json_output:
             typer.echo(_json.dumps({"passed": False, "failed_count": 1, "checks": [{"name": "data_quality", "status": "fail", "message": "Data quality module not available"}]}))
         else:
             typer.echo("Data quality module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -314,7 +314,7 @@ def ir_compile(
             typer.echo(_json.dumps(configs, indent=2))
     except ImportError as e:
         typer.echo(_json.dumps({"error": f"Compiler module not available: {e}"}), err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 simulate_app = typer.Typer(help="Synthetic data simulation pipeline")
@@ -353,9 +353,9 @@ def sim_calibrate(
         else:
             for sym, path in results.items():
                 typer.echo(f"  {sym}: {path}")
-    except ImportError:
+    except ImportError as e:
         typer.echo("Simulation calibration module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -408,9 +408,9 @@ def generate_1m(
         else:
             for sym, gen_id in results.items():
                 typer.echo(f"  {sym}: generation_id={gen_id}")
-    except ImportError:
+    except ImportError as e:
         typer.echo("Simulation generation module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -458,9 +458,9 @@ def ticks(
             typer.echo(_json.dumps(result, indent=2))
         else:
             typer.echo(f"  symbol={symbol} generation_id={generation_id} ticks={len(ticks_df)}")
-    except ImportError:
+    except ImportError as e:
         typer.echo("Tick disaggregation module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -489,9 +489,9 @@ def sim_validate(
 
         if not passed:
             raise typer.Exit(code=1)
-    except ImportError:
+    except ImportError as e:
         typer.echo("Simulation validation module not available.", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -562,7 +562,7 @@ def generate_regime(
                 typer.echo(f"  ticks={result['n_ticks']}")
     except ImportError as e:
         typer.echo(f"Regime generation module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -630,7 +630,7 @@ def inject_signal(
             typer.echo(_json.dumps({"generation_id": generation_id, "strategy": strategy, "files": results}, indent=2))
     except ImportError as e:
         typer.echo(f"Signal injector module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -663,7 +663,7 @@ def bootstrap(
             typer.echo(_json.dumps({"results": results}, indent=2))
     except ImportError as e:
         typer.echo(f"Bootstrap module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -700,7 +700,7 @@ def calibrate_regime(
                 typer.echo(f"  {sym}: {path}")
     except ImportError as e:
         typer.echo(f"Regime calibration module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -715,7 +715,7 @@ def validate_regime(
     import json as _json
 
     try:
-        from orca.simulation.regime import DEFAULT_TRANSITION_MATRIX, RegimeSequenceGenerator
+        from orca.simulation.regime import RegimeSequenceGenerator
 
         label_path = Path(f"data/synthetic/regime/{symbol}_{generation_id}_labels.npy")
         if not label_path.exists():
@@ -787,7 +787,7 @@ def validate_regime(
             raise typer.Exit(code=1)
     except ImportError as e:
         typer.echo(f"Regime validation module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -824,7 +824,7 @@ def status(
                     typer.echo("")
     except ImportError as e:
         typer.echo(f"Progress module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @simulate_app.command()
@@ -849,7 +849,7 @@ def halt(
                 raise typer.Exit(code=1)
     except ImportError as e:
         typer.echo(f"Progress module not available: {e}", err=True)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 def _print_progress(progress: dict, compact: bool = False) -> None:

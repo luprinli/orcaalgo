@@ -242,7 +242,6 @@ def generate_1m_candles(
 
         open_price = current_price
         for minute in range(TRADING_MINUTES_PER_DAY):
-            minute_prices = [open_price]
             t_now = market_open + timedelta(minutes=minute)
 
             if minute == 0:

@@ -35,11 +35,11 @@ def load_real_candles(
     """
     try:
         import psycopg2
-    except ImportError:
+    except ImportError as e:
         raise ImportError(
             "psycopg2 is required for database access. "
             "Install with: pip install psycopg2-binary"
-        )
+        ) from e
 
     conn = psycopg2.connect(_get_db_url())
     cur = conn.cursor()
@@ -310,7 +310,6 @@ def load_candles_from_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray,
         reader = csv.DictReader(f)
         for row in reader:
             try:
-                date_str = f"{row['<DATE>']}-{row['<TIME>']}"
                 ts = datetime(
                     int(row["<DATE>"][:4]),
                     int(row["<DATE>"][4:6]),

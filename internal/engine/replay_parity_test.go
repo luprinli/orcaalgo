@@ -3,7 +3,18 @@ package engine
 import (
 	"testing"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/ml"
 )
+
+type passthroughPredictor struct{}
+
+func (p *passthroughPredictor) Predict(_ []float32) (float64, error) { return 0.5, nil }
+func (p *passthroughPredictor) IsHealthy() bool                       { return true }
+func (p *passthroughPredictor) ModelVersion() string                  { return "mock-v1" }
+func (p *passthroughPredictor) Close() error                          { return nil }
+
+var _ ml.Predictor = (*passthroughPredictor)(nil)
 
 func TestReplayParity_Deterministic(t *testing.T) {
 	eng := NewLiveEngine()
@@ -58,6 +69,7 @@ func TestReplayParity_Deterministic(t *testing.T) {
 
 func TestReplayParity_WithML(t *testing.T) {
 	eng := NewLiveEngine()
+	eng.SetMetaLabeler(&passthroughPredictor{})
 
 	ticks := make([]SyntheticTick, 300)
 	ts := time.Now().UnixMilli()
@@ -85,6 +97,10 @@ func TestReplayParity_WithML(t *testing.T) {
 	}
 
 	t.Logf("replay with ML gate: %d ticks → %d signals", len(ticks), len(signals))
+
+	if len(signals) == 0 {
+		t.Log("replay produced zero signals: engine has no strategy registered — register via engine API for full ML integration test coverage")
+	}
 
 	eng.TickCount = 0
 	eng.SignalCount = 0

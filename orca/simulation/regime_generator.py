@@ -91,8 +91,6 @@ def generate_regime_aware(
     if n_trading_days < 1:
         n_trading_days = 252
 
-    n_minutes = n_trading_days * TRADING_MINUTES_PER_DAY
-
     gen = RegimeSequenceGenerator(
         transition_matrix=transition_matrix or DEFAULT_TRANSITION_MATRIX,
         seed=seed,

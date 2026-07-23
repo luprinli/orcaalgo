@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams } from 'react-router-dom'
 import { strategies } from '../api/client'
 import ParamEditor from '../components/ParamEditor'
@@ -31,6 +32,7 @@ function parseParamsJson(json: string): Record<string, number> {
 }
 
 export default function StrategyEditor() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const [form, setForm] = useState<StrategyFormData>({
     name: '',
@@ -76,8 +78,8 @@ export default function StrategyEditor() {
         paramsObj,
       })
       setCreatedId(s.id)
-      setMsg(`Loaded strategy: ${s.name}`)
-    }).catch(() => setMsg('Failed to load strategy'))
+      setMsg(t('strategyEditor:loadedStrategy', 'Loaded strategy: {{name}}', { name: s.name }))
+    }).catch(() => setMsg(t('strategyEditor:failedToLoad', 'Failed to load strategy')))
   }, [id])
 
   const handleLoadGkr = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,7 +100,7 @@ export default function StrategyEditor() {
           paramsObj: parseParamsJson(paramsStr),
         })
         setCreatedId(res.id)
-        setMsg(`Loaded from GKR: ${res.name} (${res.type})`)
+        setMsg(t('strategyEditor:loadedFromGkr', 'Loaded from GKR: {{name}} ({{type}})', { name: res.name, type: res.type }))
       } else if (res.strategy_type) {
         const paramsStr = JSON.stringify(res.parameters || {}, null, 2)
         setForm({
@@ -108,10 +110,10 @@ export default function StrategyEditor() {
           enabled: false,
           paramsObj: parseParamsJson(paramsStr),
         })
-        setMsg(`GKR compiled (no DB): ${res.strategy_type}`)
+        setMsg(t('strategyEditor:gkrCompiled', 'GKR compiled (no DB): {{type}}', { type: res.strategy_type }))
       }
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'GKR load failed')
+      setMsg(err instanceof Error ? err.message : t('strategyEditor:gkrLoadFailed', 'GKR load failed'))
     } finally {
       setGkrLoading(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -143,7 +145,7 @@ export default function StrategyEditor() {
       })
       setValidation(res)
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Validation failed')
+      setMsg(err instanceof Error ? err.message : t('strategyEditor:validationFailed', 'Validation failed'))
     } finally {
       setValidating(false)
     }
@@ -162,9 +164,9 @@ export default function StrategyEditor() {
         enabled: form.enabled,
       })
       setCreatedId(res.id)
-      setMsg(`Strategy "${res.name}" created (${res.id})`)
+      setMsg(t('strategyEditor:strategyCreated', 'Strategy "{{name}}" created ({{id}})', { name: res.name, id: res.id }))
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : 'Create failed')
+      setMsg(err instanceof Error ? err.message : t('strategyEditor:createFailed', 'Create failed'))
     } finally {
       setSaving(false)
     }
@@ -180,21 +182,21 @@ export default function StrategyEditor() {
   return (
     <div>
       <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>Strategy Editor</h1>
+        <h1 style={{ margin: 0 }}>{t('strategyEditor:title', 'Strategy Editor')}</h1>
         <div className="flex gap-2">
           <input type="file" ref={fileRef} accept=".yaml,.gkr.yaml" style={{ display: 'none' }} onChange={handleLoadGkr} />
           <button className="btn btn-outline" onClick={() => fileRef.current?.click()} disabled={gkrLoading}>
-            {gkrLoading ? 'Loading...' : 'Load GKR'}
+            {gkrLoading ? t('strategyEditor:loading', 'Loading...') : t('strategyEditor:loadGkr', 'Load GKR')}
           </button>
         </div>
       </div>
 
       <div className="grid-2 mb-4">
         <div className="card">
-          <h2>{createdId ? 'Edit Strategy' : 'New Strategy'}</h2>
+          <h2>{createdId ? t('strategyEditor:editStrategy', 'Edit Strategy') : t('strategyEditor:newStrategy', 'New Strategy')}</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
-              <label className="text-muted">Name</label>
+              <label className="text-muted">{t('strategyEditor:name', 'Name')}</label>
               <input
                 className="input"
                 placeholder="my_strategy"
@@ -203,26 +205,26 @@ export default function StrategyEditor() {
               />
             </div>
             <div>
-              <label className="text-muted">Type</label>
+              <label className="text-muted">{t('strategyEditor:type', 'Type')}</label>
               <select className="input" value={form.type} onChange={(e) => updateField('type', e.target.value)}>
-                <option value="intraday_mr">Intraday Mean Reversion</option>
-                <option value="opening_range_breakout">Opening Range Breakout</option>
-                <option value="trend_following">Trend Following</option>
-                <option value="grid_trading">Grid Trading</option>
-                <option value="session_scalp">Session Scalp</option>
-                <option value="ma_crossover">MA Crossover</option>
-                <option value="rsi2_reversion">RSI-2 Reversion</option>
-                <option value="donchian_breakout">Donchian Breakout</option>
-                <option value="keltner_macd">Keltner MACD</option>
-                <option value="ichimoku_cloud">Ichimoku Cloud</option>
+                <option value="intraday_mr">{t('strategyEditor:type:intradayMr', 'Intraday Mean Reversion')}</option>
+                <option value="opening_range_breakout">{t('strategyEditor:type:openingRangeBreakout', 'Opening Range Breakout')}</option>
+                <option value="trend_following">{t('strategyEditor:type:trendFollowing', 'Trend Following')}</option>
+                <option value="grid_trading">{t('strategyEditor:type:gridTrading', 'Grid Trading')}</option>
+                <option value="session_scalp">{t('strategyEditor:type:sessionScalp', 'Session Scalp')}</option>
+                <option value="ma_crossover">{t('strategyEditor:type:maCrossover', 'MA Crossover')}</option>
+                <option value="rsi2_reversion">{t('strategyEditor:type:rsi2Reversion', 'RSI-2 Reversion')}</option>
+                <option value="donchian_breakout">{t('strategyEditor:type:donchianBreakout', 'Donchian Breakout')}</option>
+                <option value="keltner_macd">{t('strategyEditor:type:keltnerMacd', 'Keltner MACD')}</option>
+                <option value="ichimoku_cloud">{t('strategyEditor:type:ichimokuCloud', 'Ichimoku Cloud')}</option>
               </select>
             </div>
             <div>
               <div className="flex-between" style={{ marginBottom: 6 }}>
-                <label className="text-muted">Parameters</label>
+                <label className="text-muted">{t('strategyEditor:parameters', 'Parameters')}</label>
                 {paramDefs.length > 0 && (
                   <button className="btn btn-outline" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => setShowRawJSON(v => !v)}>
-                    {showRawJSON ? 'Structured' : 'Raw JSON'}
+                    {showRawJSON ? t('strategyEditor:structured', 'Structured') : t('strategyEditor:rawJson', 'Raw JSON')}
                   </button>
                 )}
               </div>
@@ -245,23 +247,23 @@ export default function StrategyEditor() {
             </div>
             <label className="flex gap-2" style={{ alignItems: 'center' }}>
               <input type="checkbox" checked={form.enabled} onChange={(e) => updateField('enabled', e.target.checked)} />
-              Enable immediately
+              {t('strategyEditor:enableImmediately', 'Enable immediately')}
             </label>
           </div>
         </div>
 
         <div className="card">
-          <h2>Validation</h2>
+          <h2>{t('strategyEditor:validation', 'Validation')}</h2>
           <div className="flex gap-2 mb-3">
             <button className="btn btn-outline" onClick={handleValidate} disabled={validating || !form.name}>
-              {validating ? 'Validating...' : 'Validate'}
+              {validating ? t('strategyEditor:validating', 'Validating...') : t('strategyEditor:validate', 'Validate')}
             </button>
             <button className="btn btn-primary" onClick={handleCreate} disabled={saving || !form.name}>
-              {saving ? 'Saving...' : 'Create Strategy'}
+              {saving ? t('strategyEditor:saving', 'Saving...') : t('strategyEditor:createStrategy', 'Create Strategy')}
             </button>
             {createdId && (
               <button className="btn btn-outline" onClick={handleReset}>
-                New
+                {t('strategyEditor:new', 'New')}
               </button>
             )}
           </div>
@@ -283,7 +285,7 @@ export default function StrategyEditor() {
                   marginBottom: 8,
                 }}
               >
-                {validation.valid ? '✓ Strategy is valid' : `✗ ${validation.errors?.length ?? 0} error(s)`}
+                {validation.valid ? t('strategyEditor:strategyValid', '✓ Strategy is valid') : t('strategyEditor:errorsFound', '✗ {{n}} error(s)', { n: validation.errors?.length ?? 0 })}
               </div>
 
               {validation.errors && validation.errors.length > 0 && (
@@ -296,7 +298,7 @@ export default function StrategyEditor() {
 
               {validation.diagnostics && validation.diagnostics.length > 0 && (
                 <div className="mt-2">
-                  <span className="text-muted">Diagnostics:</span>
+                  <span className="text-muted">{t('strategyEditor:diagnostics', 'Diagnostics:')}</span>
                   <pre style={{ fontSize: 11, overflow: 'auto', maxHeight: 200 }}>
                     {JSON.stringify(validation.diagnostics, null, 2)}
                   </pre>
@@ -309,33 +311,33 @@ export default function StrategyEditor() {
 
       {createdId && (
         <div className="card">
-          <h2>Quick Actions</h2>
+          <h2>{t('strategyEditor:quickActions', 'Quick Actions')}</h2>
           <div className="flex gap-2">
             <button
               className="btn btn-outline"
               onClick={async () => {
                 try {
                   await strategies.reload(createdId)
-                  setMsg('Strategy reloaded')
+                  setMsg(t('strategyEditor:strategyReloaded', 'Strategy reloaded'))
                 } catch (err) {
-                  setMsg(err instanceof Error ? err.message : 'Reload failed')
+                  setMsg(err instanceof Error ? err.message : t('strategyEditor:reloadFailed', 'Reload failed'))
                 }
               }}
             >
-              Reload
+              {t('strategyEditor:reload', 'Reload')}
             </button>
             <button
               className="btn btn-outline"
               onClick={async () => {
                 try {
                   const clone = await strategies.clone(createdId)
-                  setMsg(`Cloned as "${clone.name}" (${clone.id})`)
+                  setMsg(t('strategyEditor:clonedAs', 'Cloned as "{{name}}" ({{id}})', { name: clone.name, id: clone.id }))
                 } catch (err) {
-                  setMsg(err instanceof Error ? err.message : 'Clone failed')
+                  setMsg(err instanceof Error ? err.message : t('strategyEditor:cloneFailed', 'Clone failed'))
                 }
               }}
             >
-              Clone
+              {t('strategyEditor:clone', 'Clone')}
             </button>
           </div>
         </div>

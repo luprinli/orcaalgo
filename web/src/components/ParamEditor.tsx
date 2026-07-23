@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { ParamDef } from '../types/api'
 
 interface ParamEditorProps {
@@ -19,6 +20,7 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Record<string, T[]>
 }
 
 export default function ParamEditor({ defs, initialParams = {}, onChange, compact = false }: ParamEditorProps) {
+  const { t } = useTranslation()
   const [params, setParams] = useState<Record<string, number>>(() => {
     const initial: Record<string, number> = {}
     for (const d of defs) {
@@ -92,7 +94,7 @@ export default function ParamEditor({ defs, initialParams = {}, onChange, compac
                       {!isDefault && (
                         <button
                           className="btn btn-outline"
-                          title="Reset to default"
+                          title={t('components:paramEditor.resetToDefault', 'Reset to default')}
                           style={{ fontSize: 9, padding: '1px 5px' }}
                           onClick={() => handleReset(d)}
                         >

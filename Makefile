@@ -50,14 +50,12 @@ lint-python:
 
 lint: lint-go lint-python
 
+lint-web:
+	@cd web && npx eslint src/ --max-warnings 0
+
 clean:
-	Remove-Item -Recurse -Force bin/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force .pytest_cache/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force orca/__pycache__/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force tests/__pycache__/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force .mypy_cache/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force .ruff_cache/ -ErrorAction SilentlyContinue
-	Remove-Item -Recurse -Force reports/ -ErrorAction SilentlyContinue
+	@rm -rf bin/ .pytest_cache/ orca/__pycache__/ tests/__pycache__/ .mypy_cache/ .ruff_cache/ reports/ 2>/dev/null || true
+	@if [ "$$OS" = "Windows_NT" ]; then cmd /c "if exist bin rmdir /s /q bin 2>nul"; fi
 
 docker-build:
 	docker build -t orca-core:latest .
