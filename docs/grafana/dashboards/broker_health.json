@@ -1,0 +1,34 @@
+{
+  "__inputs": [{ "name": "DS_PROMETHEUS", "type": "datasource", "label": "Prometheus", "pluginId": "prometheus" }],
+  "title": "OrcaAlgo — Broker Health",
+  "uid": "orca-broker",
+  "panels": [
+    {
+      "title": "DB Pool Usage",
+      "type": "gauge",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "orca_db_pool_in_use", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 20 } }
+    },
+    {
+      "title": "Heap Memory (MB)",
+      "type": "gauge",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "orca_heap_inuse_bytes / 1024 / 1024", "refId": "A" }]
+    },
+    {
+      "title": "WebSocket Connections",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "orca_ws_connections", "refId": "A" }]
+    },
+    {
+      "title": "Ring Buffer Overflows",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 6 },
+      "targets": [{ "expr": "increase(orca_ring_buffer_overflows_total[5m])", "refId": "A" }]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}

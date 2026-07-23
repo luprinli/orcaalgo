@@ -1,0 +1,44 @@
+{
+  "__inputs": [{ "name": "DS_PROMETHEUS", "type": "datasource", "label": "Prometheus", "pluginId": "prometheus" }],
+  "title": "OrcaAlgo — Equity Curve",
+  "uid": "orca-equity",
+  "panels": [
+    {
+      "title": "Paper Balance",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "orca_ticks_total", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" } }
+    },
+    {
+      "title": "Kill Switch Active",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "orca_kill_switch_active", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "bool" } }
+    },
+    {
+      "title": "Daily PnL %",
+      "type": "gauge",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "targets": [{ "expr": "orca_daily_pnl_pct", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": -5, "max": 10 } }
+    },
+    {
+      "title": "Orders Executed",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(orca_orders_total[1m])", "legendFormat": "{{status}}", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "ops" } }
+    },
+    {
+      "title": "Ticks Processed",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [{ "expr": "rate(orca_ticks_total[1m])", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "ticks/s" } }
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}

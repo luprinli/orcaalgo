@@ -1,0 +1,34 @@
+{
+  "__inputs": [{ "name": "DS_PROMETHEUS", "type": "datasource", "label": "Prometheus", "pluginId": "prometheus" }],
+  "title": "OrcaAlgo — Risk Status",
+  "uid": "orca-risk",
+  "panels": [
+    {
+      "title": "Kill Switch State",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+      "targets": [{ "expr": "orca_kill_switch_active", "refId": "A" }]
+    },
+    {
+      "title": "Max Drawdown %",
+      "type": "gauge",
+      "gridPos": { "x": 4, "y": 0, "w": 8, "h": 4 },
+      "targets": [{ "expr": "orca_daily_pnl_pct", "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "min": -100, "max": 0 } }
+    },
+    {
+      "title": "WebSocket Auth Failures",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(orca_ws_auth_failures_total[5m])", "refId": "A" }]
+    },
+    {
+      "title": "Broadcast Messages Dropped",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 10, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(orca_ws_broadcast_dropped_total[5m])", "legendFormat": "{{channel}}", "refId": "A" }]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}

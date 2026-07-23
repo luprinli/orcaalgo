@@ -1,4 +1,4 @@
-# OrcaAlgo — Polyglot Algorithmic Prop Trading System
+﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
 **Version**: 0.7.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 24 checks · **E2E**: 121/121 pass · **Guardrails**: pre-commit hook + change audit + env guard
 

@@ -1,0 +1,123 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Prometheus datasource scraping OrcaAlgo :9090/metrics",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    }
+  ],
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "OrcaAlgo — Backtest & Matrix Execution",
+  "description": "Live matrix-execution health: throughput, latency, concurrency, and resource pressure (execution-framework plan §5.5).",
+  "tags": ["orca", "backtest", "matrix"],
+  "timezone": "",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Combo throughput (/min)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "cpm", "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 10 }, { "color": "green", "value": 60 } ] } } },
+      "targets": [ { "expr": "sum(rate(orca_matrix_combos_completed_total[1m])) * 60", "legendFormat": "combos/min", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Active workers",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null } ] } } },
+      "targets": [ { "expr": "orca_matrix_active_workers", "legendFormat": "workers", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Heap in-use (MB)",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "decmbytes", "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1433 }, { "color": "red", "value": 1843 } ] } } },
+      "targets": [ { "expr": "orca_heap_inuse_bytes / (1024*1024)", "legendFormat": "heap MB", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "DB pool in-use",
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short", "max": 20, "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 14 }, { "color": "red", "value": 18 } ] } } },
+      "targets": [ { "expr": "orca_db_pool_in_use", "legendFormat": "conns", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Combo completion rate by status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "cps", "custom": { "drawStyle": "line", "fillOpacity": 15, "stacking": { "mode": "normal" } } } },
+      "targets": [ { "expr": "sum by (status) (rate(orca_matrix_combos_completed_total[1m]))", "legendFormat": "{{status}}", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Backtest duration percentiles (s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(orca_backtest_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(orca_backtest_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(orca_backtest_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Heap in-use vs budget (MB)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "decmbytes", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        { "expr": "orca_heap_inuse_bytes / (1024*1024)", "legendFormat": "heap in-use", "refId": "A" },
+        { "expr": "2048", "legendFormat": "budget (ORCA_MATRIX_MEM_BUDGET_MB)", "refId": "B" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Concurrency & DB pool",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } } },
+      "targets": [
+        { "expr": "orca_matrix_active_workers", "legendFormat": "active workers", "refId": "A" },
+        { "expr": "orca_db_pool_in_use", "legendFormat": "db pool in-use", "refId": "B" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Batches submitted (total)",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "expr": "orca_matrix_batches_total", "legendFormat": "batches", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Combos completed (total)",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short" } },
+      "targets": [ { "expr": "sum(orca_matrix_combos_completed_total)", "legendFormat": "combos", "refId": "A" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Failed combo ratio",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "color": { "mode": "thresholds" }, "thresholds": { "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.2 } ] } } },
+      "targets": [ { "expr": "sum(orca_matrix_combos_completed_total{status=\"failed\"}) / clamp_min(sum(orca_matrix_combos_completed_total), 1)", "legendFormat": "failed ratio", "refId": "A" } ]
+    }
+  ]
+}

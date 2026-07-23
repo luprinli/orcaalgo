@@ -1,0 +1,30 @@
+{
+  "__inputs": [{ "name": "DS_PROMETHEUS", "type": "datasource", "label": "Prometheus", "pluginId": "prometheus" }],
+  "title": "OrcaAlgo — Trade Log",
+  "uid": "orca-trade-log",
+  "panels": [
+    {
+      "title": "Order Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 6 },
+      "targets": [{ "expr": "rate(orca_orders_total[1m])", "legendFormat": "{{status}}", "refId": "A" }]
+    },
+    {
+      "title": "Matrix Backtests",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 6 },
+      "targets": [
+        { "expr": "orca_matrix_active_workers", "legendFormat": "active workers", "refId": "A" },
+        { "expr": "rate(orca_matrix_combos_completed[5m])", "legendFormat": "combos/s", "refId": "B" }
+      ]
+    },
+    {
+      "title": "Batch Submissions",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 12, "w": 6, "h": 3 },
+      "targets": [{ "expr": "increase(orca_matrix_batches_total[1h])", "refId": "A" }]
+    }
+  ],
+  "schemaVersion": 38,
+  "version": 1
+}
