@@ -1,0 +1,4 @@
+#!/bin/sh
+# Husky pre-commit hook — runs lint-staged on staged frontend files
+. "$(dirname "$0")/_/husky.sh"
+cd web && npx lint-staged

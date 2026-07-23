@@ -1,0 +1,229 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useForm } from 'react-hook-form'
+import { z } from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { accounts, brokers } from '../api/client'
+import ConfirmDialog from '../components/ConfirmDialog'
+import type { Account, CreateAccountRequest } from '../types/api'
+
+const accountSchema = z.object({
+  name: z.string().min(1, 'Account name is required').max(64),
+  broker_type: z.string().min(1),
+  is_default: z.boolean(),
+})
+
+type AccountFormData = z.infer<typeof accountSchema>
+
+export default function AccountsPage() {
+  const [list, setList] = useState<Account[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [brokerOptions, setBrokerOptions] = useState<{ id: string; label: string }[]>([])
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null)
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<AccountFormData>({
+    resolver: zodResolver(accountSchema),
+    defaultValues: { name: '', broker_type: 'paper', is_default: false },
+  })
+
+  const fetchAll = useCallback(async () => {
+    try {
+      setError(null)
+      const res = await accounts.list()
+      setList(Array.isArray(res) ? res : [])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load accounts')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAll()
+    brokers.list().then((res) => {
+      if (res.brokers?.length) {
+        setBrokerOptions(res.brokers)
+      }
+    }).catch(() => {
+      setBrokerOptions([
+        { id: 'paper', label: 'Paper' },
+        { id: 'alpaca', label: 'Alpaca Live' },
+        { id: 'ibkr', label: 'IBKR' },
+      ])
+    })
+  }, [fetchAll])
+
+  const onCreate = async (form: AccountFormData) => {
+    try {
+      const data: CreateAccountRequest = {
+        name: form.name,
+        broker_type: form.broker_type,
+        is_default: form.is_default,
+      }
+      await accounts.create(data)
+      setMsg(`Account "${form.name}" created`)
+      setShowCreate(false)
+      reset()
+      fetchAll()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Create failed')
+    }
+  }
+
+  const confirmDeleteAccount = async () => {
+    if (!confirmDelete) return
+    try {
+      await accounts.delete(confirmDelete.id)
+      setMsg(`Account "${confirmDelete.name}" deleted`)
+      setConfirmDelete(null)
+      fetchAll()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Delete failed')
+      setConfirmDelete(null)
+    }
+  }
+
+  const handleSetDefault = async (id: string) => {
+    try {
+      await accounts.setDefault(id)
+      setMsg('Default account updated')
+      fetchAll()
+    } catch (err) {
+      setMsg(err instanceof Error ? err.message : 'Failed to set default')
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="card">
+        <p className="text-muted">Loading accounts...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex-between mb-4">
+        <h1 style={{ margin: 0 }}>Accounts</h1>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+          + New Account
+        </button>
+      </div>
+
+      {error && (
+        <div className="card mb-4" style={{ background: 'rgba(218,54,51,.1)', border: '1px solid var(--danger)' }}>
+          <span style={{ color: 'var(--danger)' }}>{error}</span>
+        </div>
+      )}
+
+      {showCreate && (
+        <div className="card mb-4" style={{ maxWidth: 400 }}>
+          <h2>Create Account</h2>
+          <form onSubmit={handleSubmit(onCreate)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <input className="input" placeholder="Account name" {...register('name')} />
+              {errors.name && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.name.message}</p>}
+            </div>
+            <select className="input" {...register('broker_type')}>
+              {(brokerOptions.length > 0 ? brokerOptions : [{ id: 'paper', label: 'Paper' }]).map((b) => (
+                <option key={b.id} value={b.id}>{b.label}</option>
+              ))}
+            </select>
+            <label className="flex gap-2" style={{ alignItems: 'center' }}>
+              <input type="checkbox" {...register('is_default')} />
+              Set as default
+            </label>
+            <div className="flex gap-2">
+              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating...' : 'Create'}
+              </button>
+              <button className="btn btn-outline" type="button" onClick={() => setShowCreate(false)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {msg && (
+        <p className="text-muted mb-4" style={{ fontSize: 13, margin: '0 0 12px' }}>{msg}</p>
+      )}
+
+      {list.length === 0 ? (
+        <div className="card">
+          <p className="text-muted">No accounts configured. Create one to start trading.</p>
+        </div>
+      ) : (
+        <div className="card">
+          <div style={{ overflowX: 'auto' }}>
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Broker</th>
+                  <th>Default</th>
+                  <th>Balance</th>
+                  <th>Equity</th>
+                  <th>Daily P&L</th>
+                  <th>Buying Power</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((a) => (
+                  <tr key={a.id}>
+                    <td><strong>{a.label || a.id}</strong></td>
+                    <td>{a.broker_type}</td>
+                    <td>{a.is_default ? <span className="badge badge-ok">Default</span> : '—'}</td>
+                    <td>${a.balance?.toFixed(2) ?? '--'}</td>
+                    <td>${a.equity?.toFixed(2) ?? '--'}</td>
+                    <td style={{ color: (a.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      {a.daily_pnl_pct != null ? `${a.daily_pnl_pct.toFixed(2)}%` : '--'}
+                    </td>
+                    <td>${a.buying_power?.toFixed(2) ?? '--'}</td>
+                    <td>
+                      <span className={`badge ${a.halted ? 'badge-err' : 'badge-ok'}`}>
+                        {a.halted ? 'Halted' : 'Active'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="flex gap-1">
+                        {!a.is_default && (
+                          <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleSetDefault(a.id)}>
+                            Set Default
+                          </button>
+                        )}
+                        <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmDelete({ id: a.id, name: a.label || a.id })}>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Account"
+          message={`Delete account "${confirmDelete.name}"? This action cannot be undone.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDeleteAccount}
+          onCancel={() => setConfirmDelete(null)}
+        />
+      )}
+    </div>
+  )
+}
