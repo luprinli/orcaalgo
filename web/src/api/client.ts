@@ -5,7 +5,7 @@ import type {
   StrategyValidationRequest, StrategyValidationResponse,
   BacktestRequest, BacktestResponse, BacktestMetrics,
   EquityPoint, TradeSummary, DailyReturn, MonthlyReturn, RollingMetric,
-  RegimeStat, OptimizationFootprint, LiveComparisonResponse,
+  RegimeStat, OptimizationFootprint, WalkForwardResponse, LiveComparisonResponse,
   RiskStatus, PlaceOrderRequest, Order, Position, Account, CreateAccountRequest,
   CandleResponse, LiveMetrics, BacktestHistoryEntry, AppSettings,
   PropFirmProfile, PropFirmState, AuditLogEntry, ErrorLogEntry,
@@ -17,6 +17,16 @@ import type {
   SystemHealth,
 } from '../types/api'
 
+export interface Symbol {
+  id: string; ticker: string; name?: string; provider_id?: string; enabled?: boolean
+}
+export interface Provider {
+  id: string; name: string; type: string; status?: string
+}
+export interface Credential {
+  id: string; name: string; provider_type: string; api_key?: string; created_at?: string
+}
+
 interface AuthData {
   token: string
   refresh: string
@@ -27,7 +37,10 @@ function getAuth(): AuthData | null {
   try {
     const raw = localStorage.getItem('orca_auth')
     if (!raw) return null
-    return JSON.parse(raw)
+    const parsed = JSON.parse(raw)
+    // Handle both old format (plain JWT string) and new format ({ token, username, ... })
+    if (typeof parsed === 'string') return { token: parsed, refresh: '', roles: [] }
+    return parsed
   } catch {
     return null
   }
@@ -126,7 +139,7 @@ async function request<T>(
   return handleResponse().finally(() => markRequestComplete())
 }
 
-export { setAuth, clearAuth }
+export { setAuth, clearAuth, request }
 
 function get<T>(path: string): Promise<T> {
   return request<T>('GET', path)
@@ -147,6 +160,10 @@ function del<T = void>(path: string): Promise<T> {
 export const auth = {
   login: (data: LoginRequest) => post<LoginResponse>('/api/v1/auth/login', data),
   register: (data: LoginRequest) => post<LoginResponse>('/api/v1/auth/register', data),
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('POST', '/api/v1/auth/forgot-password', { email }),
+  resetPassword: (token: string, password: string) =>
+    request<{ message: string }>('POST', '/api/v1/auth/reset-password', { token, password }),
 }
 
 export const strategies = {
@@ -185,6 +202,8 @@ export const backtests = {
   dailyReturns: (id: string) => get<DailyReturn[]>(`/api/v1/backtests/${id}/daily-returns`),
   monthlyReturns: (id: string) => get<MonthlyReturn[]>(`/api/v1/backtests/${id}/monthly-returns`),
   optimization: (id: string) => get<OptimizationFootprint>(`/api/v1/backtests/${id}/optimization`),
+  walkForward: (id: string) =>
+    request<WalkForwardResponse>('GET', `/api/v1/backtests/${id}/walk-forward`),
   regimeStats: (id: string) => get<RegimeStat[]>(`/api/v1/backtests/${id}/regime-stats`),
   liveComparison: (id: string) => get<LiveComparisonResponse>(`/api/v1/backtests/${id}/live-comparison`),
   progress: (id: string) => get<{ progress: number; completed: number; total: number; status: string }>(`/api/v1/backtests/${id}/progress`),
@@ -256,7 +275,25 @@ export const candles = {
 }
 
 export const symbols = {
-  list: () => get<{ symbols: { id: string; ticker: string; exchange: string; asset_type: string; tick_size: string }[] }>('/api/v1/symbols'),
+  list: () => request<Symbol[]>('GET', '/api/v1/symbols'),
+  create: (data: { ticker: string; name?: string; provider_id?: string }) =>
+    request<Symbol>('POST', '/api/v1/symbols', data),
+  delete: (id: string) => request<void>('DELETE', `/api/v1/symbols/${id}`),
+}
+
+export const providers = {
+  list: () => request<Provider[]>('GET', '/api/v1/providers'),
+  create: (data: { name: string; type: string }) =>
+    request<Provider>('POST', '/api/v1/providers', data),
+  delete: (id: string) => request<void>('DELETE', `/api/v1/providers/${id}`),
+  test: (id: string) => request<{ success: boolean; latency_ms?: number }>('POST', `/api/v1/providers/${id}/test`),
+}
+
+export const credentials = {
+  list: () => request<Credential[]>('GET', '/api/v1/credentials'),
+  create: (data: { name: string; provider_type: string; api_key: string; secret_key?: string }) =>
+    request<Credential>('POST', '/api/v1/credentials', data),
+  rotate: (id: string) => request<Credential>('PUT', `/api/v1/credentials/${id}/rotate`),
 }
 
 export const propfirm = {

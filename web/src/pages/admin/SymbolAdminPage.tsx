@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
+import { symbols as apiSymbols, providers as apiProviders, credentials as apiCredentials } from '../../api/client'
 import ConfirmDialog from '../../components/ConfirmDialog'
 
 export default function SymbolAdminPage() {
@@ -22,21 +23,21 @@ export default function SymbolAdminPage() {
 
   const fetchSymbols = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/symbols').then(r => r.json())
+      const res = await apiSymbols.list() as unknown as { symbols: any[] }
       setSymbols(res.symbols ?? [])
     } catch { /* ignore */ }
   }, [])
 
   const fetchProviders = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/providers').then(r => r.json())
+      const res = await apiProviders.list() as unknown as { providers: any[] }
       setProviders(res.providers ?? [])
     } catch { /* ignore */ }
   }, [])
 
   const fetchCredentials = useCallback(async () => {
     try {
-      const res = await fetch('/api/v1/credentials').then(r => r.json())
+      const res = await apiCredentials.list() as unknown as { credentials: any[] }
       setCredentials(res.credentials ?? [])
     } catch { /* ignore */ }
   }, [])
@@ -49,7 +50,7 @@ export default function SymbolAdminPage() {
 
   const createSymbol = async () => {
     try {
-      await fetch('/api/v1/symbols', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(symbolForm) })
+      await apiSymbols.create(symbolForm as any)
       setMsg(t('admin:symbolAdmin.symbolCreated', 'Symbol {{ticker}} created', { ticker: symbolForm.ticker }))
       setShowSymbolForm(false)
       setSymbolForm({ ticker: '', exchange: 'NASDAQ', asset_type: 'equity', tick_size: 0.01, lot_size: 1 })
@@ -65,10 +66,10 @@ export default function SymbolAdminPage() {
     if (!confirmDelete) return
     try {
       if (confirmDelete.type === 'symbol') {
-        await fetch(`/api/v1/symbols/${confirmDelete.id}`, { method: 'DELETE' })
+        await apiSymbols.delete(String(confirmDelete.id))
         fetchSymbols()
       } else {
-        await fetch(`/api/v1/providers/${confirmDelete.id}`, { method: 'DELETE' })
+        await apiProviders.delete(String(confirmDelete.id))
         fetchProviders()
       }
       setConfirmDelete(null)
@@ -78,7 +79,7 @@ export default function SymbolAdminPage() {
   const createProvider = async () => {
     try {
       const config = JSON.parse(providerForm.config)
-      await fetch('/api/v1/providers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...providerForm, config }) })
+      await apiProviders.create({ ...providerForm, config } as any)
       setMsg(t('admin:symbolAdmin.providerCreated', 'Provider created'))
       setShowProviderForm(false)
       fetchProviders()
@@ -91,14 +92,14 @@ export default function SymbolAdminPage() {
 
   const testProvider = async (id: string) => {
     try {
-      const res = await fetch(`/api/v1/providers/${id}/test`, { method: 'POST' }).then(r => r.json())
-      setMsg(res.reachable ? t('admin:symbolAdmin.providerReachable', 'Provider {{id}} reachable ({{latency}}ms)', { id, latency: res.latency_ms }) : t('admin:symbolAdmin.providerUnreachable', 'Provider {{id}} unreachable: {{error}}', { id, error: res.error }))
+      const res = await apiProviders.test(id)
+      setMsg(res.success ? t('admin:symbolAdmin.providerReachable', 'Provider {{id}} reachable ({{latency}}ms)', { id, latency: res.latency_ms }) : t('admin:symbolAdmin.providerUnreachable', 'Provider {{id}} unreachable', { id }))
     } catch (err) { setMsg(err instanceof Error ? err.message : t('admin:symbolAdmin.testFailed', 'Test failed')) }
   }
 
   const createCredential = async () => {
     try {
-      await fetch('/api/v1/credentials', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(credForm) })
+      await apiCredentials.create(credForm as any)
       setMsg(t('admin:symbolAdmin.credentialStored', 'Credential stored'))
       setShowCredForm(false)
       setCredForm({ provider_id: '', key_label: '', api_key: '', api_secret: '' })
@@ -237,7 +238,7 @@ export default function SymbolAdminPage() {
                   {credentials.map((c: any) => (
                     <tr key={c.id}>
                       <td>{c.provider_id}</td><td>{c.key_label}</td>
-                      <td><button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={async () => { await fetch(`/api/v1/credentials/${c.id}/rotate`, { method: 'PUT' }); setMsg(t('admin:symbolAdmin.credentialRotated', 'Credential rotated')) }}>{t('admin:symbolAdmin.rotate', 'Rotate')}</button></td>
+                      <td><button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={async () => { await apiCredentials.rotate(c.id); setMsg(t('admin:symbolAdmin.credentialRotated', 'Credential rotated')) }}>{t('admin:symbolAdmin.rotate', 'Rotate')}</button></td>
                     </tr>
                   ))}
                 </tbody>
