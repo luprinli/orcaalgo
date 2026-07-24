@@ -1,5 +1,7 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 // IchimokuRunner implements a multi-timeframe trend strategy using Ichimoku Cloud.
 // Entry: tenkan crosses above kijun AND price is above cloud → BUY; tenkan crosses below AND price below cloud → SELL.
 // Exit: tenkan crosses back, price enters cloud, or Chandelier Exit stop is hit.
@@ -66,7 +68,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -90,7 +92,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if r.UseChandelier {
 			longExit, shortExit := ChandelierExit(r.PriceHistory, r.PriceHistory, r.PriceHistory, r.HistCount)
 			if longExit > 0 {
-				stopDist = price - longExit
+				stopDist = price.Float64() - longExit
 				if stopDist < 0 {
 					stopDist = atr * r.AtrMultiplier
 				}
@@ -103,7 +105,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
-			if sc.IsStopLossHit(price, price-stopDist, "BUY") {
+			if sc.IsStopLossHit(price, types.PriceFromFloat(price.Float64()-stopDist), "BUY") {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
@@ -112,7 +114,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
 			}
-			if sc.IsStopLossHit(price, price+stopDist, "SELL") {
+			if sc.IsStopLossHit(price, types.PriceFromFloat(price.Float64()+stopDist), "SELL") {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
 			}
@@ -145,18 +147,18 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 	stopDist := atr * r.AtrMultiplier
 
 	if tenkanCrossUp {
-		if r.CloudConfirm && price < cloudTop {
+		if r.CloudConfirm && price.Float64() < cloudTop {
 			return nil
 		}
-		r.OpenPosition("BUY", price, stopDist, price+stopDist*2, candle.Time)
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 	}
 
 	if tenkanCrossDown {
-		if r.CloudConfirm && price > cloudBottom {
+		if r.CloudConfirm && price.Float64() > cloudBottom {
 			return nil
 		}
-		r.OpenPosition("SELL", price, stopDist, price-stopDist*2, candle.Time)
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 	}
 

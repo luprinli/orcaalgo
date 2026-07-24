@@ -5,11 +5,12 @@ import (
 	"time"
 
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestBaseRunner_PushPrice(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
-	b.PushPrice(100.0, 101.0, 99.0, 1000.0)
+	b.PushPrice(types.PriceFromFloat(100.0), types.PriceFromFloat(101.0), types.PriceFromFloat(99.0), 1000.0)
 	if b.HistCount != 1 {
 		t.Errorf("HistCount = %d, want 1", b.HistCount)
 	}
@@ -30,7 +31,7 @@ func TestBaseRunner_PushPrice(t *testing.T) {
 func TestBaseRunner_RingBufferWrap(t *testing.T) {
 	b := strategy.NewBaseRunner(4)
 	for i := 0; i < 8; i++ {
-		b.PushPrice(float64(i), 0, 0, 0)
+		b.PushPrice(types.PriceFromFloat(float64(i)), 0, 0, 0)
 	}
 	if b.HistCount != 4 {
 		t.Errorf("HistCount = %d, want 4", b.HistCount)
@@ -45,7 +46,7 @@ func TestBaseRunner_RingBufferWrap(t *testing.T) {
 
 func TestBaseRunner_Reset(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
-	b.PushPrice(100.0, 101.0, 99.0, 1000.0)
+	b.PushPrice(types.PriceFromFloat(100.0), types.PriceFromFloat(101.0), types.PriceFromFloat(99.0), 1000.0)
 	b.Reset()
 	if b.HistCount != 0 {
 		t.Errorf("HistCount after reset = %d, want 0", b.HistCount)
@@ -58,15 +59,15 @@ func TestBaseRunner_Reset(t *testing.T) {
 func TestBaseRunner_OpenClosePosition(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	now := time.Now()
-	b.OpenPosition("BUY", 100.0, 95.0, 110.0, now)
+	b.OpenPosition("BUY", types.PriceFromFloat(100.0), types.PriceFromFloat(95.0), types.PriceFromFloat(110.0), now)
 	if !b.PositionOpen {
 		t.Fatal("Position should be open")
 	}
 	if b.CurrentSide != "BUY" {
 		t.Errorf("Side = %v, want BUY", b.CurrentSide)
 	}
-	if b.EntryPrice != 100.0 {
-		t.Errorf("EntryPrice = %v, want 100.0", b.EntryPrice)
+	if b.EntryPrice.Float64() != 100.0 {
+		t.Errorf("EntryPrice = %v, want 100.0", b.EntryPrice.Float64())
 	}
 
 	b.ClosePosition()
@@ -78,11 +79,11 @@ func TestBaseRunner_OpenClosePosition(t *testing.T) {
 func TestBaseRunner_StopLossHit_Long(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	now := time.Now()
-	b.OpenPosition("BUY", 100.0, 95.0, 110.0, now)
-	if !b.IsStopLossHit(94.0) {
+	b.OpenPosition("BUY", types.PriceFromFloat(100.0), types.PriceFromFloat(95.0), types.PriceFromFloat(110.0), now)
+	if !b.IsStopLossHit(types.PriceFromFloat(94.0)) {
 		t.Error("Stop loss should be hit at 94.0")
 	}
-	if b.IsStopLossHit(96.0) {
+	if b.IsStopLossHit(types.PriceFromFloat(96.0)) {
 		t.Error("Stop loss should NOT be hit at 96.0")
 	}
 }
@@ -90,11 +91,11 @@ func TestBaseRunner_StopLossHit_Long(t *testing.T) {
 func TestBaseRunner_StopLossHit_Short(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	now := time.Now()
-	b.OpenPosition("SELL", 100.0, 105.0, 90.0, now)
-	if !b.IsStopLossHit(106.0) {
+	b.OpenPosition("SELL", types.PriceFromFloat(100.0), types.PriceFromFloat(105.0), types.PriceFromFloat(90.0), now)
+	if !b.IsStopLossHit(types.PriceFromFloat(106.0)) {
 		t.Error("Stop loss should be hit at 106.0")
 	}
-	if b.IsStopLossHit(104.0) {
+	if b.IsStopLossHit(types.PriceFromFloat(104.0)) {
 		t.Error("Stop loss should NOT be hit at 104.0")
 	}
 }
@@ -102,8 +103,8 @@ func TestBaseRunner_StopLossHit_Short(t *testing.T) {
 func TestBaseRunner_TakeProfitHit_Long(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	now := time.Now()
-	b.OpenPosition("BUY", 100.0, 95.0, 110.0, now)
-	if !b.IsTakeProfitHit(111.0) {
+	b.OpenPosition("BUY", types.PriceFromFloat(100.0), types.PriceFromFloat(95.0), types.PriceFromFloat(110.0), now)
+	if !b.IsTakeProfitHit(types.PriceFromFloat(111.0)) {
 		t.Error("Take profit should be hit at 111.0")
 	}
 }
@@ -111,8 +112,8 @@ func TestBaseRunner_TakeProfitHit_Long(t *testing.T) {
 func TestBaseRunner_TakeProfitHit_Short(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	now := time.Now()
-	b.OpenPosition("SELL", 100.0, 105.0, 90.0, now)
-	if !b.IsTakeProfitHit(89.0) {
+	b.OpenPosition("SELL", types.PriceFromFloat(100.0), types.PriceFromFloat(105.0), types.PriceFromFloat(90.0), now)
+	if !b.IsTakeProfitHit(types.PriceFromFloat(89.0)) {
 		t.Error("Take profit should be hit at 89.0")
 	}
 }
@@ -120,7 +121,7 @@ func TestBaseRunner_TakeProfitHit_Short(t *testing.T) {
 func TestBaseRunner_TimeExit(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
 	entry := time.Now().Add(-10 * time.Minute)
-	b.OpenPosition("BUY", 100.0, 95.0, 110.0, entry)
+	b.OpenPosition("BUY", types.PriceFromFloat(100.0), types.PriceFromFloat(95.0), types.PriceFromFloat(110.0), entry)
 	if !b.IsTimeExit(5.0, time.Now()) {
 		t.Error("Time exit should trigger after 10 min with 5 min limit")
 	}
@@ -128,10 +129,10 @@ func TestBaseRunner_TimeExit(t *testing.T) {
 
 func TestBaseRunner_NoExitWhenClosed(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
-	if b.IsStopLossHit(1.0) {
+	if b.IsStopLossHit(types.PriceFromFloat(1.0)) {
 		t.Error("No exit when no position")
 	}
-	if b.IsTakeProfitHit(1.0) {
+	if b.IsTakeProfitHit(types.PriceFromFloat(1.0)) {
 		t.Error("No take profit when no position")
 	}
 	if b.IsTimeExit(1.0, time.Now()) {
@@ -141,7 +142,7 @@ func TestBaseRunner_NoExitWhenClosed(t *testing.T) {
 
 func TestBaseRunner_PushPriceOnly(t *testing.T) {
 	b := strategy.NewBaseRunner(64)
-	b.PushPriceOnly(50.0)
+	b.PushPriceOnly(types.PriceFromFloat(50.0))
 	if b.PriceHistory[0] != 50.0 {
 		t.Errorf("Price = %v, want 50.0", b.PriceHistory[0])
 	}

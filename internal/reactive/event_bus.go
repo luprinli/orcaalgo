@@ -4,6 +4,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type SignalState string
@@ -23,11 +25,11 @@ type Signal struct {
 	StrategyID  string      `json:"strategy_id"`
 	Side        string      `json:"side"`
 	Quantity    float64     `json:"quantity"`
-	LimitPrice  float64     `json:"limit_price"`
-	StopPrice   float64     `json:"stop_price"`
+	LimitPrice  types.Price `json:"limit_price"`
+	StopPrice   types.Price `json:"stop_price"`
 	State       SignalState `json:"state"`
-	EntryPrice  float64     `json:"entry_price,omitempty"`
-	ExitPrice   float64     `json:"exit_price,omitempty"`
+	EntryPrice  types.Price `json:"entry_price,omitempty"`
+	ExitPrice   types.Price `json:"exit_price,omitempty"`
 	PnL         float64     `json:"pnl,omitempty"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
@@ -118,17 +120,17 @@ type LegacyAdapter struct {
 		Type() string
 		Evaluate(candle struct {
 			Time   time.Time
-			Open   float64
-			High   float64
-			Low    float64
-			Close  float64
+			Open   types.Price
+			High   types.Price
+			Low    types.Price
+			Close  types.Price
 			Volume float64
 			Symbol string
 		}, regime int8) *struct {
 			Side     string
 			Quantity float64
-			Price    float64
-			StopLoss float64
+			Price    types.Price
+			StopLoss types.Price
 		}
 	}
 	signalCount int
@@ -139,17 +141,17 @@ func NewLegacyAdapter(runner interface {
 	Type() string
 	Evaluate(candle struct {
 		Time   time.Time
-		Open   float64
-		High   float64
-		Low    float64
-		Close  float64
+		Open   types.Price
+		High   types.Price
+		Low    types.Price
+		Close  types.Price
 		Volume float64
 		Symbol string
 	}, regime int8) *struct {
 		Side     string
 		Quantity float64
-		Price    float64
-		StopLoss float64
+		Price    types.Price
+		StopLoss types.Price
 	}
 }) *LegacyAdapter {
 	return &LegacyAdapter{runner: runner}
@@ -158,18 +160,18 @@ func NewLegacyAdapter(runner interface {
 func (la *LegacyAdapter) GenerateSignal(ctx context.Context, symbol string, price float64) (*Signal, error) {
 	candle := struct {
 		Time   time.Time
-		Open   float64
-		High   float64
-		Low    float64
-		Close  float64
+		Open   types.Price
+		High   types.Price
+		Low    types.Price
+		Close  types.Price
 		Volume float64
 		Symbol string
 	}{
 		Time:   time.Now(),
-		Open:   price,
-		High:   price,
-		Low:    price,
-		Close:  price,
+		Open:   types.PriceFromFloat(price),
+		High:   types.PriceFromFloat(price),
+		Low:    types.PriceFromFloat(price),
+		Close:  types.PriceFromFloat(price),
 		Volume: 0,
 		Symbol: symbol,
 	}

@@ -1,5 +1,7 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 // RSI2MeanReversionRunner implements Connors-style 2-period RSI mean reversion.
 // Entry: RSI(2) drops below oversold threshold (5) → BUY, rises above overbought (95) → SELL.
 // The 2-period RSI is extremely sensitive; values 0-5 signal capitulation, 95-100 signal exhaustion.
@@ -86,7 +88,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -100,7 +102,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		rsi2 := RSI2(r.PriceHistory, r.HistCount)
 
 		if r.CurrentSide == "BUY" {
-			if sc.IsStopLossHit(price, r.EntryPrice-stopDist, "BUY") || r.barsInTrade >= int(r.MaxHoldBars) {
+			if sc.IsStopLossHit(price, types.PriceFromFloat(r.EntryPrice.Float64()-stopDist), "BUY") || r.barsInTrade >= int(r.MaxHoldBars) {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
@@ -109,7 +111,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
 		} else {
-			if sc.IsStopLossHit(price, r.EntryPrice+stopDist, "SELL") || r.barsInTrade >= int(r.MaxHoldBars) {
+			if sc.IsStopLossHit(price, types.PriceFromFloat(r.EntryPrice.Float64()+stopDist), "SELL") || r.barsInTrade >= int(r.MaxHoldBars) {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
 			}
@@ -133,7 +135,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if rsi2 < r.Oversold {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, stopDist, price+stopDist*2, candle.Time)
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
 		r.barsInTrade = 0
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 	}
@@ -141,7 +143,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if rsi2 > r.Overbought {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, stopDist, price-stopDist*2, candle.Time)
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
 		r.barsInTrade = 0
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 	}

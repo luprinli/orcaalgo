@@ -1,5 +1,7 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 type TrendRunner struct {
 	*BaseRunner
 
@@ -13,7 +15,7 @@ type TrendRunner struct {
 	slowEMA       float64
 	prevFastEMA   float64
 	prevSlowEMA   float64
-	peakPrice     float64
+	peakPrice     types.Price
 	signalPending bool
 	pendingSide   string
 }
@@ -93,7 +95,7 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -101,13 +103,13 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 	r.prevSlowEMA = r.slowEMA
 
 	if r.fastEMA <= 0 && r.slowEMA <= 0 {
-		r.fastEMA = price
-		r.slowEMA = price
+		r.fastEMA = price.Float64()
+		r.slowEMA = price.Float64()
 	} else {
 		fastAlpha := 2.0 / (r.FastPeriod + 1.0)
 		slowAlpha := 2.0 / (r.SlowPeriod + 1.0)
-		r.fastEMA = price*fastAlpha + r.fastEMA*(1.0-fastAlpha)
-		r.slowEMA = price*slowAlpha + r.slowEMA*(1.0-slowAlpha)
+		r.fastEMA = price.Float64()*fastAlpha + r.fastEMA*(1.0-fastAlpha)
+		r.slowEMA = price.Float64()*slowAlpha + r.slowEMA*(1.0-slowAlpha)
 	}
 
 	r.PushPrice(price, candle.High, candle.Low, 0)
@@ -118,23 +120,23 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if r.PositionOpen {
 		if r.CurrentSide == "BUY" {
-			if price > r.peakPrice {
+			if price.Compare(r.peakPrice) > 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice - r.StopLoss
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - r.StopLoss.Float64())
 			crossDown := r.fastEMA < r.slowEMA && r.prevFastEMA >= r.prevSlowEMA
-			if tc.IsTakeProfitHit(price, r.TakeProfit, "BUY") || price <= trailingStop || crossDown {
+			if tc.IsTakeProfitHit(price, r.TakeProfit, "BUY") || price.Compare(trailingStop) <= 0 || crossDown {
 				r.ClosePosition()
 				r.signalPending = false
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
 		} else {
-			if price < r.peakPrice {
+			if price.Compare(r.peakPrice) < 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice + r.StopLoss
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + r.StopLoss.Float64())
 			crossUp := r.fastEMA > r.slowEMA && r.prevFastEMA <= r.prevSlowEMA
-			if tc.IsTakeProfitHit(price, r.TakeProfit, "SELL") || price >= trailingStop || crossUp {
+			if tc.IsTakeProfitHit(price, r.TakeProfit, "SELL") || price.Compare(trailingStop) >= 0 || crossUp {
 				r.ClosePosition()
 				r.signalPending = false
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
@@ -167,11 +169,11 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			r.peakPrice = price
 
 			if r.pendingSide == "BUY" {
-				r.OpenPosition("BUY", price, stopDist, price+profitDist, candle.Time)
+				r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 				r.signalPending = false
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 			}
-			r.OpenPosition("SELL", price, stopDist, price-profitDist, candle.Time)
+			r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 			r.signalPending = false
 			return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 		}

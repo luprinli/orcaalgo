@@ -1,6 +1,10 @@
 package strategy
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 const (
 	MaxBars1M  = 256
@@ -147,10 +151,10 @@ func BarToCandle(b Bar) Candle {
 	scale := float64(PriceScaleBar)
 	return Candle{
 		Time:   time.Unix(0, b.Timestamp),
-		Open:   float64(b.Open) / scale,
-		High:   float64(b.High) / scale,
-		Low:    float64(b.Low) / scale,
-		Close:  float64(b.Close) / scale,
+		Open:   types.PriceFromFloat(float64(b.Open) / scale),
+		High:   types.PriceFromFloat(float64(b.High) / scale),
+		Low:    types.PriceFromFloat(float64(b.Low) / scale),
+		Close:  types.PriceFromFloat(float64(b.Close) / scale),
 		Volume: float64(b.Volume),
 	}
 }

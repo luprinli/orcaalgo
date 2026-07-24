@@ -3,6 +3,8 @@ package ingest
 import (
 	"context"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type DataFetcher interface {
@@ -13,10 +15,10 @@ type DataFetcher interface {
 
 type CandleData struct {
 	Time   time.Time
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
+	Open   types.Price
+	High   types.Price
+	Low    types.Price
+	Close  types.Price
 	Volume float64
 }
 
@@ -26,5 +28,5 @@ type SymbolMetrics struct {
 	ATR14         float64
 	ATR14Pct      float64
 	RSI14         float64
-	Price         float64
+	Price         types.Price
 }

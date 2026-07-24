@@ -48,9 +48,9 @@ func NewFeatureStore(initialCloses, initialHighs, initialLows, initialVolumes []
 // Push adds a new bar to the ring buffer.
 func (fs *FeatureStore) Push(c strategy.Candle) {
 	idx := fs.count % 256
-	fs.prices[idx] = c.Close
-	fs.highs[idx] = c.High
-	fs.lows[idx] = c.Low
+	fs.prices[idx] = c.Close.Float64()
+	fs.highs[idx] = c.High.Float64()
+	fs.lows[idx] = c.Low.Float64()
 	fs.volumes[idx] = c.Volume
 	fs.count++
 }

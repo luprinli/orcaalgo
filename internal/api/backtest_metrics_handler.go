@@ -348,6 +348,60 @@ func (s *Server) getBacktestOptimization(c *gin.Context) {
 	c.JSON(200, footprint)
 }
 
+func (s *Server) getBacktestWalkForward(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "id is required"})
+		return
+	}
+
+	run, err := s.repo.GetBacktestRun(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": "backtest run not found"})
+		return
+	}
+
+	if run.RunType != "walk-forward" && run.RunType != "optimize" {
+		c.JSON(200, gin.H{
+			"windows":            []any{},
+			"passed_windows":     0,
+			"total_windows":      0,
+			"oos_avg_sharpe":     nil,
+			"sharpe_degradation": nil,
+			"overall_sharpe":     run.SharpeRatio,
+			"overall_win_rate":   run.WinRate,
+			"message":            "This run was not a walk-forward or optimization run.",
+		})
+		return
+	}
+
+	var wfData struct {
+		Windows           []any    `json:"windows"`
+		PassedWindows     int      `json:"passed_windows"`
+		TotalWindows      int      `json:"total_windows"`
+		OOSAverageSharpe  *float64 `json:"oos_avg_sharpe"`
+		SharpsDegradation *float64 `json:"sharpe_degradation"`
+		OverallSharpe     float64  `json:"overall_sharpe"`
+		OverallWinRate    float64  `json:"overall_win_rate"`
+	}
+
+	if len(run.ResultsJSON) > 0 {
+		if err := json.Unmarshal(run.ResultsJSON, &wfData); err != nil {
+			wfData.Windows = []any{}
+			wfData.PassedWindows = 0
+			wfData.TotalWindows = 0
+			wfData.OverallSharpe = run.SharpeRatio
+			wfData.OverallWinRate = run.WinRate
+		}
+	} else {
+		wfData.Windows = []any{}
+		wfData.OverallSharpe = run.SharpeRatio
+		wfData.OverallWinRate = run.WinRate
+	}
+
+	c.JSON(200, wfData)
+}
+
 func (s *Server) getBacktestHealth(c *gin.Context) {
 	checks := []gin.H{}
 	overall := "ok"

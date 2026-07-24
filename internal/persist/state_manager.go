@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 const defaultSnapshotDir = "data/snapshots"
@@ -75,12 +77,12 @@ type OrderSnapshot struct {
 	Symbol       string    `json:"symbol"`
 	Side         string    `json:"side"`
 	Quantity     float64   `json:"quantity"`
-	LimitPrice   float64   `json:"limit_price"`
-	StopPrice    float64   `json:"stop_price"`
-	Status       string    `json:"status"`
-	StrategyID   string    `json:"strategy_id"`
-	FilledQty    float64   `json:"filled_qty"`
-	AvgFillPrice float64   `json:"avg_fill_price"`
+	LimitPrice   types.Price `json:"limit_price"`
+	StopPrice    types.Price `json:"stop_price"`
+	Status       string      `json:"status"`
+	StrategyID   string      `json:"strategy_id"`
+	FilledQty    float64     `json:"filled_qty"`
+	AvgFillPrice types.Price `json:"avg_fill_price"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 

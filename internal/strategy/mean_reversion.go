@@ -1,6 +1,10 @@
 package strategy
 
-import "math"
+import (
+	"math"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type MeanReversionRunner struct {
 	Lookback    int
@@ -14,8 +18,8 @@ type MeanReversionRunner struct {
 	closeHistory []float64
 	histIndex    int
 	histCount    int
-	emaMean      float64
-	trendEMA     float64
+	emaMean      types.Price
+	trendEMA     types.Price
 	histVariance float64
 
 	openPosition *position
@@ -29,7 +33,7 @@ type MeanReversionRunner struct {
 type position struct {
 	Symbol     string
 	Side       string
-	EntryPrice float64
+	EntryPrice types.Price
 	EntryBar   int
 }
 
@@ -73,7 +77,7 @@ func (sr *MeanReversionRunner) Reset() {
 func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	_ = regime
 	idx := sr.histIndex % (sr.Lookback + 200)
-	sr.closeHistory[idx] = candle.Close
+	sr.closeHistory[idx] = candle.Close.Float64()
 	sr.histIndex++
 	if sr.histCount < sr.Lookback+200 {
 		sr.histCount++
@@ -88,25 +92,25 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	isTrendingUp := candle.Close > sr.trendEMA
-	isTrendingDown := candle.Close < sr.trendEMA
+	isTrendingUp := candle.Close.Compare(sr.trendEMA) > 0
+	isTrendingDown := candle.Close.Compare(sr.trendEMA) < 0
 
 	isHighVol := false
-	normStd := atrVol / candle.Close
-	if normStd > sr.VolMaxMult*sr.emaMean*0.01/candle.Close {
+	normStd := atrVol / candle.Close.Float64()
+	if normStd > sr.VolMaxMult*sr.emaMean.Float64()*0.01/candle.Close.Float64() {
 		isHighVol = true
 	}
 	_ = isHighVol
 
-	z := (candle.Close - mean) / std
+	z := (candle.Close.Float64() - mean) / std
 
 	if sr.openPosition != nil {
 		sr.barsHeld++
 		meanReversionComplete := false
-		if sr.openPosition.Side == "BUY" && candle.Close >= mean {
+		if sr.openPosition.Side == "BUY" && candle.Close.Float64() >= mean {
 			meanReversionComplete = true
 		}
-		if sr.openPosition.Side == "SELL" && candle.Close <= mean {
+		if sr.openPosition.Side == "SELL" && candle.Close.Float64() <= mean {
 			meanReversionComplete = true
 		}
 		if sr.barsHeld >= sr.MaxHold || meanReversionComplete || math.Abs(z) < sr.ExitZ {
@@ -180,16 +184,16 @@ func (sr *MeanReversionRunner) computeStats() (float64, float64, float64) {
 	simpleMean := sum / float64(nLB)
 
 	alpha := 2.0 / float64(sr.Lookback+1)
-	if sr.emaMean <= 0 {
-		sr.emaMean = simpleMean
+	if sr.emaMean.IsZero() {
+		sr.emaMean = types.PriceFromFloat(simpleMean)
 	}
-	sr.emaMean = alpha*lookbackPrices[nLB-1] + (1.0-alpha)*sr.emaMean
+	sr.emaMean = types.PriceFromFloat(alpha*lookbackPrices[nLB-1] + (1.0-alpha)*sr.emaMean.Float64())
 
 	trendAlpha := 2.0 / float64(sr.TrendPeriod+1)
-	if sr.trendEMA <= 0 {
-		sr.trendEMA = simpleMean
+	if sr.trendEMA.IsZero() {
+		sr.trendEMA = types.PriceFromFloat(simpleMean)
 	}
-	sr.trendEMA = trendAlpha*lookbackPrices[nLB-1] + (1.0-trendAlpha)*sr.trendEMA
+	sr.trendEMA = types.PriceFromFloat(trendAlpha*lookbackPrices[nLB-1] + (1.0-trendAlpha)*sr.trendEMA.Float64())
 
 	variance := 0.0
 	for _, p := range lookbackPrices {
@@ -217,7 +221,7 @@ func (sr *MeanReversionRunner) computeStats() (float64, float64, float64) {
 		atrVol = atrSum / float64(atrCount)
 	}
 
-	return sr.emaMean, math.Sqrt(variance), atrVol
+	return sr.emaMean.Float64(), math.Sqrt(variance), atrVol
 }
 
 func (sr *MeanReversionRunner) Params() map[string]float64 {
@@ -258,6 +262,6 @@ func (sr *MeanReversionRunner) ParamDefs() []ParamDef {
 	}
 }
 
-func (sr *MeanReversionRunner) OnFill(orderID string, symbol string, side string, entryPrice float64, fillPrice float64, quantity float64, filledQty float64) {}
+func (sr *MeanReversionRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
 func (sr *MeanReversionRunner) OnCancel(orderID string, reason string) {}
 func (sr *MeanReversionRunner) OnOrderRejected(orderID string, reason string) {}

@@ -2,6 +2,8 @@ package strategy
 
 import (
 	"math"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type SessionScalpRunner struct {
@@ -136,7 +138,7 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	idx := r.HistIdx % r.BufferSize
-	r.PriceHistory[idx] = candle.Close
+	r.PriceHistory[idx] = candle.Close.Float64()
 	r.volumeBuffer[idx] = candle.Volume
 	r.HistIdx++
 	if r.HistCount < r.BufferSize {
@@ -172,11 +174,11 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if !r.rangeSet {
 		r.barsInRange++
-		if candle.High > r.openingHigh {
-			r.openingHigh = candle.High
+		if candle.High.Float64() > r.openingHigh {
+			r.openingHigh = candle.High.Float64()
 		}
-		if candle.Low < r.openingLow {
-			r.openingLow = candle.Low
+		if candle.Low.Float64() < r.openingLow {
+			r.openingLow = candle.Low.Float64()
 		}
 		if float64(r.barsInRange) >= r.RangeMinutes {
 			r.rangeSet = true
@@ -208,13 +210,13 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 		qty *= 0.50
 	}
 
-	if candle.Close >= breakoutHigh {
-		r.OpenPosition("BUY", candle.Close, candle.Close-atr*r.StopLossAtrMult, candle.Close+atr*r.TakeProfitAtrMult, candle.Time)
+	if candle.Close.Float64() >= breakoutHigh {
+		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()+atr*r.TakeProfitAtrMult), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: qty}
 	}
 
-	if candle.Close <= breakoutLow {
-		r.OpenPosition("SELL", candle.Close, candle.Close+atr*r.StopLossAtrMult, candle.Close-atr*r.TakeProfitAtrMult, candle.Time)
+	if candle.Close.Float64() <= breakoutLow {
+		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()-atr*r.TakeProfitAtrMult), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: qty}
 	}
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type WSClient struct {
@@ -24,15 +25,15 @@ type WSClient struct {
 }
 
 type TickMessage struct {
-	Symbol   string  `json:"symbol"`
-	Price    float64 `json:"price"`
-	BidPrice float64 `json:"bid_price"`
-	AskPrice float64 `json:"ask_price"`
-	Volume   float64 `json:"volume"`
-	BidSize  float64 `json:"bid_size"`
-	AskSize  float64 `json:"ask_size"`
-	Side     string  `json:"side"`
-	Time     int64   `json:"timestamp"`
+	Symbol   string      `json:"symbol"`
+	Price    types.Price `json:"price"`
+	BidPrice types.Price `json:"bid_price"`
+	AskPrice types.Price `json:"ask_price"`
+	Volume   float64     `json:"volume"`
+	BidSize  float64     `json:"bid_size"`
+	AskSize  float64     `json:"ask_size"`
+	Side     string      `json:"side"`
+	Time     int64       `json:"timestamp"`
 }
 
 func (t *TickMessage) UnmarshalJSON(data []byte) error {
@@ -52,7 +53,7 @@ func (t *TickMessage) UnmarshalJSON(data []byte) error {
 			t.Symbol = s
 		}
 		if v, ok := arr[1].(float64); ok {
-			t.Price = v
+			t.Price = types.FromFloat64(v)
 		}
 	}
 	if len(arr) >= 3 {
@@ -62,12 +63,12 @@ func (t *TickMessage) UnmarshalJSON(data []byte) error {
 	}
 	if len(arr) >= 4 {
 		if v, ok := arr[3].(float64); ok {
-			t.BidPrice = v
+			t.BidPrice = types.FromFloat64(v)
 		}
 	}
 	if len(arr) >= 5 {
 		if v, ok := arr[4].(float64); ok {
-			t.AskPrice = v
+			t.AskPrice = types.FromFloat64(v)
 		}
 	}
 	if len(arr) >= 6 {
@@ -183,9 +184,9 @@ func (c *WSClient) ReadLoop(ctx context.Context) {
 
 		goTick := &GoMarketTick{
 			Timestamp: tick.Time,
-			PriceRaw:  int64(tick.Price * PRICE_SCALE),
-			BidPrice:  int64(tick.BidPrice * PRICE_SCALE),
-			AskPrice:  int64(tick.AskPrice * PRICE_SCALE),
+			PriceRaw:  tick.Price.Int64(),
+			BidPrice:  tick.BidPrice.Int64(),
+			AskPrice:  tick.AskPrice.Int64(),
 			VolumeRaw: uint64(tick.Volume),
 			BidSize:   uint64(tick.BidSize),
 			AskSize:   uint64(tick.AskSize),

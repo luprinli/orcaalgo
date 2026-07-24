@@ -1,5 +1,7 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 // KeltnerMACDRunner combines Keltner Channel volatility bands with MACD momentum.
 // Entry: price breaks above Keltner upper with MACD bullish → BUY; breaks below lower with MACD bearish → SELL.
 // Exit: price reverts to middle band or MACD signal flips.
@@ -9,7 +11,7 @@ type KeltnerMACDRunner struct {
 	KeltnerPeriod   float64
 	MacdRequirement bool
 	AtrMultiplier   float64
-	peakPrice       float64
+	peakPrice       types.Price
 }
 
 func NewKeltnerMACDRunner() *KeltnerMACDRunner {
@@ -64,7 +66,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -90,11 +92,11 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier
 
 		if r.CurrentSide == "BUY" {
-			if price > r.peakPrice {
+			if price.Compare(r.peakPrice) > 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice - stopDist
-			middleRevert := price <= middleKC
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - stopDist)
+			middleRevert := price.Float64() <= middleKC
 			macdFlip := r.MacdRequirement && !macdBullish
 
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || middleRevert || macdFlip {
@@ -102,11 +104,11 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
 		} else {
-			if price < r.peakPrice {
+			if price.Compare(r.peakPrice) < 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice + stopDist
-			middleRevert := price >= middleKC
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + stopDist)
+			middleRevert := price.Float64() >= middleKC
 			macdFlip := r.MacdRequirement && macdBullish
 
 			if sc.IsStopLossHit(price, trailingStop, "SELL") || middleRevert || macdFlip {
@@ -119,21 +121,21 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	r.peakPrice = price
 
-	if price > upperKC {
+	if price.Float64() > upperKC {
 		if r.MacdRequirement && !macdBullish {
 			return nil
 		}
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, stopDist, price+stopDist*2, candle.Time)
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 	}
 
-	if price < lowerKC {
+	if price.Float64() < lowerKC {
 		if r.MacdRequirement && macdBullish {
 			return nil
 		}
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, stopDist, price-stopDist*2, candle.Time)
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 	}
 

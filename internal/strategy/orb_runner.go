@@ -1,6 +1,10 @@
 package strategy
 
-import "math"
+import (
+	"math"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type OrbRunner struct {
 	*BaseRunner
@@ -87,11 +91,11 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if !r.rangeSet {
 		r.barsInRange++
-		if candle.High > r.openingHigh {
-			r.openingHigh = candle.High
+		if candle.High.Float64() > r.openingHigh {
+			r.openingHigh = candle.High.Float64()
 		}
-		if candle.Low < r.openingLow {
-			r.openingLow = candle.Low
+		if candle.Low.Float64() < r.openingLow {
+			r.openingLow = candle.Low.Float64()
 		}
 		if float64(r.barsInRange) >= r.RangeMinutes {
 			r.rangeSet = true
@@ -109,13 +113,13 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if r.CurrentSide == "BUY" {
 			if tc.IsTakeProfitHit(candle.Close, r.TakeProfit, "BUY") || sc.IsStopLossHit(candle.Close, r.StopLoss, "BUY") {
 				exitSide = "SELL"
-			} else if candle.Close < r.openingHigh && candle.Low < r.openingHigh {
+			} else if candle.Close.Float64() < r.openingHigh && candle.Low.Float64() < r.openingHigh {
 				exitSide = "SELL"
 			}
 		} else {
 			if tc.IsTakeProfitHit(candle.Close, r.TakeProfit, "SELL") || sc.IsStopLossHit(candle.Close, r.StopLoss, "SELL") {
 				exitSide = "BUY"
-			} else if candle.Close > r.openingLow && candle.High > r.openingLow {
+			} else if candle.Close.Float64() > r.openingLow && candle.High.Float64() > r.openingLow {
 				exitSide = "BUY"
 			}
 		}
@@ -145,12 +149,12 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 	profitDist := rangeHeight * r.TargetMultiplier
 
-	if candle.Close >= r.openingHigh*(1.0+bufferPct) {
-		r.OpenPosition("BUY", candle.Close, candle.Close-stopDist, candle.Close+profitDist, candle.Time)
+	if candle.Close.Float64() >= r.openingHigh*(1.0+bufferPct) {
+		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-stopDist), types.PriceFromFloat(candle.Close.Float64()+profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 	}
-	if candle.Close <= r.openingLow*(1.0-bufferPct) {
-		r.OpenPosition("SELL", candle.Close, candle.Close+stopDist, candle.Close-profitDist, candle.Time)
+	if candle.Close.Float64() <= r.openingLow*(1.0-bufferPct) {
+		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+stopDist), types.PriceFromFloat(candle.Close.Float64()-profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 	}
 

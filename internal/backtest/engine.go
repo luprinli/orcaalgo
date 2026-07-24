@@ -104,25 +104,22 @@ type Trade struct {
 	Symbol           string
 	Side             string
 	Quantity         float64
-	EntryPrice       float64
-	ExitPrice        float64
+	EntryPrice       types.Price
+	ExitPrice        types.Price
 	EntryTime        time.Time
 	ExitTime         time.Time
 	PnL              float64
 	PnLPct           float64
 	HMMRegime        int8
 	StrategyID       string
-	StopPrice        float64
-	TakePrice        float64
+	StopPrice        types.Price
+	TakePrice        types.Price
 	ExitReason       string
 	BrokerFee        float64
 	SlippageMidBps   float64
 	SlippageLastBps  float64
 	AdverseSelection bool
 }
-
-func (t *Trade) EntryPriceFixed() types.Price { return types.PriceFromFloat(t.EntryPrice) }
-func (t *Trade) ExitPriceFixed() types.Price  { return types.PriceFromFloat(t.ExitPrice) }
 
 type BacktestResult struct {
 	Config         BacktestConfig
@@ -538,10 +535,10 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		sentiment := getSentimentAt(candle.Time, sentimentLogs)
 		e.positionSizer.UpdateMarketState(vix, sentiment, regime)
 		if pendingTrade, ok := pendingAS[candle.Symbol]; ok {
-			if pendingTrade.Side == "BUY" && candle.Close < pendingTrade.EntryPrice {
+			if pendingTrade.Side == "BUY" && candle.Close.Float64() < pendingTrade.EntryPrice.Float64() {
 				pendingTrade.AdverseSelection = true
 			}
-			if pendingTrade.Side == "SELL" && candle.Close > pendingTrade.EntryPrice {
+			if pendingTrade.Side == "SELL" && candle.Close.Float64() > pendingTrade.EntryPrice.Float64() {
 				pendingTrade.AdverseSelection = true
 			}
 			delete(pendingAS, candle.Symbol)
@@ -565,7 +562,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 
 			// ML dynamic exit: adjust stop based on exit urgency model
 			if e.exitOrch != nil && e.exitOrch.IsHealthy() {
-				if stop, ok := activeStops[sym]; ok && stop.StopPrice > 0 {
+				if stop, ok := activeStops[sym]; ok && stop.StopPrice.Float64() > 0 {
 					exitCtx := ml.ExitContext{
 						EntryPrice:     stop.EntryPrice,
 						CurrentPrice:   candle.Close,
@@ -581,29 +578,29 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 						Hour:           float64(candle.Time.Hour()),
 					}
 					_, mult := e.exitOrch.Evaluate(exitCtx)
-					if mult > 0 && stop.EntryPrice > 0 {
+					if mult > 0 && stop.EntryPrice.Float64() > 0 {
 						if stop.Side == "BUY" {
-							dynamicStop := candle.Close - mult*stop.ATRValue
-							if dynamicStop < stop.EntryPrice*0.80 {
-								dynamicStop = stop.EntryPrice * 0.80
+							dynamicStop := candle.Close.Float64() - mult*stop.ATRValue
+							if dynamicStop < stop.EntryPrice.Float64()*0.80 {
+								dynamicStop = stop.EntryPrice.Float64() * 0.80
 							}
-							if dynamicStop > stop.StopPrice && stop.StopType == StopLossTrail {
+							if dynamicStop > stop.StopPrice.Float64() && stop.StopType == StopLossTrail {
 							} else {
-								stop.StopPrice = dynamicStop
+								stop.StopPrice = types.PriceFromFloat(dynamicStop)
 							}
 						} else {
-							dynamicStop := candle.Close + mult*stop.ATRValue
-							if dynamicStop > stop.EntryPrice*1.20 {
-								dynamicStop = stop.EntryPrice * 1.20
+							dynamicStop := candle.Close.Float64() + mult*stop.ATRValue
+							if dynamicStop > stop.EntryPrice.Float64()*1.20 {
+								dynamicStop = stop.EntryPrice.Float64() * 1.20
 							}
-							stop.StopPrice = dynamicStop
+							stop.StopPrice = types.PriceFromFloat(dynamicStop)
 						}
 					}
 				}
 			}
 
 			exitReason := ""
-			exitPrice := candle.Close
+			exitPrice := candle.Close.Float64()
 			fillQty := ot.Quantity
 			shouldExit := false
 
@@ -628,26 +625,26 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 			}
 
 			if shouldExit {
-				midPrice := (candle.High + candle.Low) / 2.0
-				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice, fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close)
-				if simulatedExit.FillPrice > 0 {
-					exitPrice = simulatedExit.FillPrice
+				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
+				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64())
+				if simulatedExit.FillPrice.Float64() > 0 {
+					exitPrice = simulatedExit.FillPrice.Float64()
 				}
 				if simulatedExit.FillQuantity > 0 {
 					fillQty = simulatedExit.FillQuantity
 				}
 
-				commission := ot.EntryPrice * fillQty * config.CommissionBps / 10000.0 * 2
-				brokerFee := config.BrokerFee.CalculateFee(fillQty, ot.EntryPrice) +
+				commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
+				brokerFee := config.BrokerFee.CalculateFee(fillQty, ot.EntryPrice.Float64()) +
 					config.BrokerFee.CalculateFee(fillQty, exitPrice)
 
 				if ot.Side == "BUY" {
-					ot.PnL = (exitPrice-ot.EntryPrice)*fillQty - commission - brokerFee
+					ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
 				} else {
-					ot.PnL = (ot.EntryPrice-exitPrice)*fillQty - commission - brokerFee
+					ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
 				}
 				ot.PnLPct = ot.PnL / config.InitialCapital * 100
-				ot.ExitPrice = exitPrice
+				ot.ExitPrice = types.PriceFromFloat(exitPrice)
 				ot.ExitTime = candle.Time
 				ot.Quantity = fillQty
 				ot.HMMRegime = regime
@@ -672,14 +669,14 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 			signal := e.generateSignal(candle, regime, config, capital)
 			if signal != nil {
 			e.signalDiag.TradesOpened++
-			midPrice := (candle.High + candle.Low) / 2.0
-			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close, signal.Quantity, signal.Side, candle.Close, candle.Time, midPrice, candle.Close)
-			entryPrice := simulatedEntry.FillPrice
+			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
+			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64(), signal.Quantity, signal.Side, candle.Close.Float64(), candle.Time, midPrice, candle.Close.Float64())
+			entryPrice := simulatedEntry.FillPrice.Float64()
 			entryQty := simulatedEntry.FillQuantity
 			entrySlippageMid := simulatedEntry.SlippageMidBps
 			entrySlippageLast := simulatedEntry.SlippageLastBps
 			if entryPrice <= 0 {
-				entryPrice = candle.Close
+				entryPrice = candle.Close.Float64()
 			}
 			if entryQty <= 0 {
 				entryQty = signal.Quantity
@@ -695,17 +692,17 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 			var stop *ActiveStop
 
 			if config.StopLoss != nil && config.StopLoss.Type != StopLossNone {
-				stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High)
+				stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High.Float64())
 				if config.TakeProfit != nil && config.TakeProfit.Type != TakeProfitNone {
 					takePrice = CalculateTakeProfitPrice(entryPrice, signal.Side, config.TakeProfit, stopPrice, atrVal)
 				}
 				stop = &ActiveStop{
 					TradeID:    len(trades) + 1,
-					EntryPrice: entryPrice,
+					EntryPrice: types.PriceFromFloat(entryPrice),
 					Side:       signal.Side,
-					StopPrice:  stopPrice,
-					TakePrice:  takePrice,
-					PeakPrice:  entryPrice,
+					StopPrice:  types.PriceFromFloat(stopPrice),
+					TakePrice:  types.PriceFromFloat(takePrice),
+					PeakPrice:  types.PriceFromFloat(entryPrice),
 					ATRValue:   atrVal,
 					StopType:   config.StopLoss.Type,
 				}
@@ -719,12 +716,12 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				Symbol:           candle.Symbol,
 				Side:             signal.Side,
 				Quantity:         entryQty,
-				EntryPrice:       entryPrice,
+				EntryPrice:       types.PriceFromFloat(entryPrice),
 				EntryTime:        candle.Time,
 				HMMRegime:        regime,
 				StrategyID:       config.StrategyID,
-				StopPrice:        stopPrice,
-				TakePrice:        takePrice,
+				StopPrice:        types.PriceFromFloat(stopPrice),
+				TakePrice:        types.PriceFromFloat(takePrice),
 				SlippageMidBps:   entrySlippageMid,
 				SlippageLastBps:  entrySlippageLast,
 			}
@@ -734,7 +731,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		}
 
 		if i > 0 && allCandles[i-1].Close > 0 && candle.Close > 0 {
-			ret := (candle.Close - allCandles[i-1].Close) / allCandles[i-1].Close
+			ret := (candle.Close.Float64() - allCandles[i-1].Close.Float64()) / allCandles[i-1].Close.Float64()
 			e.volHalt.UpdateReturn(ret)
 		}
 
@@ -745,12 +742,12 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		})
 
 		if e.recorder != nil {
-			midPrice := (candle.High + candle.Low) / 2.0
+			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
 			var position, volume, value float64
 			for _, ot := range openTrades {
 				position += ot.Quantity
 				volume += ot.Quantity
-				value += ot.EntryPrice * ot.Quantity
+				value += ot.EntryPrice.Float64() * ot.Quantity
 			}
 			e.recorder.Record(&model.TradingState{
 				Timestamp:     candle.Time,
@@ -781,7 +778,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 
 	lastCandle := allCandles[len(allCandles)-1]
 	for _, ot := range openTrades {
-		exitPrice := lastCandle.Close
+		exitPrice := lastCandle.Close.Float64()
 		exitReason := "end_of_data"
 		if stop, ok := activeStops[ot.Symbol]; ok {
 			if stopHit, sp := CheckStopHit(lastCandle, stop); stopHit {
@@ -792,16 +789,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				exitReason = "take_profit"
 			}
 		}
-		commission := ot.EntryPrice * ot.Quantity * config.CommissionBps / 10000.0 * 2
-		brokerFee := config.BrokerFee.CalculateFee(ot.Quantity, ot.EntryPrice) +
+		commission := ot.EntryPrice.Float64() * ot.Quantity * config.CommissionBps / 10000.0 * 2
+		brokerFee := config.BrokerFee.CalculateFee(ot.Quantity, ot.EntryPrice.Float64()) +
 			config.BrokerFee.CalculateFee(ot.Quantity, exitPrice)
 		if ot.Side == "BUY" {
-			ot.PnL = (exitPrice-ot.EntryPrice)*ot.Quantity - commission - brokerFee
+			ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
 		} else {
-			ot.PnL = (ot.EntryPrice-exitPrice)*ot.Quantity - commission - brokerFee
+			ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*ot.Quantity - commission - brokerFee
 		}
 		ot.PnLPct = ot.PnL / config.InitialCapital * 100
-		ot.ExitPrice = exitPrice
+		ot.ExitPrice = types.PriceFromFloat(exitPrice)
 		ot.ExitTime = lastCandle.Time
 		ot.ExitReason = exitReason
 		ot.BrokerFee = brokerFee
@@ -977,7 +974,7 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 	if positionPct > 0.03 {
 		positionPct = 0.03
 	}
-	quantity := (c * positionPct) / candle.Close
+	quantity := (c * positionPct) / candle.Close.Float64()
 	if e.ftmo != nil && config.PropFirmEnabled {
 		quantity = e.ftmo.GetPositionSize(quantity)
 	}
@@ -997,7 +994,7 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		return nil
 	}
 
-	notional := quantity * candle.Close
+	notional := quantity * candle.Close.Float64()
 	if ok, _ := e.exposure.CheckOrder(candle.Symbol, raw.Side, notional); !ok {
 		e.signalDiag.ExposureBlocked++
 		return nil
@@ -1506,14 +1503,14 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		}
 
 		for sid, op := range openPositions {
-			exitPrice := candle.Close
-			commission := op.Trade.EntryPrice * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
+			exitPrice := candle.Close.Float64()
+			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
 
 			var pnl float64
 			if op.Trade.Side == "BUY" {
-				pnl = (exitPrice-op.Trade.EntryPrice)*op.Trade.Quantity - commission
+				pnl = (exitPrice-op.Trade.EntryPrice.Float64())*op.Trade.Quantity - commission
 			} else {
-				pnl = (op.Trade.EntryPrice-exitPrice)*op.Trade.Quantity - commission
+				pnl = (op.Trade.EntryPrice.Float64()-exitPrice)*op.Trade.Quantity - commission
 			}
 
 			pnlPct := 0.0
@@ -1522,7 +1519,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 			}
 			op.Trade.PnL = pnl
 			op.Trade.PnLPct = pnlPct
-			op.Trade.ExitPrice = exitPrice
+			op.Trade.ExitPrice = types.PriceFromFloat(exitPrice)
 			op.Trade.ExitTime = candle.Time
 			op.Trade.HMMRegime = regime
 
@@ -1546,12 +1543,12 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 	if len(allCandles) > 0 {
 		for sid, op := range openPositions {
 			lastCandle := allCandles[len(allCandles)-1]
-			commission := op.Trade.EntryPrice * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
+			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
 			var pnl float64
 			if op.Trade.Side == "BUY" {
-				pnl = (lastCandle.Close-op.Trade.EntryPrice)*op.Trade.Quantity - commission
+				pnl = (lastCandle.Close.Float64()-op.Trade.EntryPrice.Float64())*op.Trade.Quantity - commission
 			} else {
-				pnl = (op.Trade.EntryPrice-lastCandle.Close)*op.Trade.Quantity - commission
+				pnl = (op.Trade.EntryPrice.Float64()-lastCandle.Close.Float64())*op.Trade.Quantity - commission
 			}
 			op.Trade.PnL = pnl
 			op.Trade.ExitPrice = lastCandle.Close
@@ -1753,7 +1750,7 @@ func addToPeriod(m map[string]*PeriodStat, key string, trade Trade) {
 	ps.NumTrades++
 	ps.NetPnL += trade.PnL
 	ps.BrokerFees += trade.BrokerFee
-	ps.Commission += trade.EntryPrice * trade.Quantity * 0.005 / 10000.0 * 2
+	ps.Commission += trade.EntryPrice.Float64() * trade.Quantity * 0.005 / 10000.0 * 2
 	if trade.PnL > 0 {
 		ps.GrossProfit += trade.PnL
 	}

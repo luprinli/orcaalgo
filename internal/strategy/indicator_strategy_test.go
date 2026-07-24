@@ -1,6 +1,10 @@
 package strategy
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 func TestRSI2(t *testing.T) {
 	prices := make([]float64, 50)
@@ -202,9 +206,9 @@ func TestCMF(t *testing.T) {
 func TestRSI2Runner_SignalGeneration(t *testing.T) {
 	r := NewRSI2MeanReversionRunner()
 	for i := 0; i < 40; i++ {
-		r.Evaluate(Candle{Symbol: "T", Close: 100.0 + float64(i)*0.5}, 0)
+		r.Evaluate(Candle{Symbol: "T", Close: types.PriceFromFloat(100.0 + float64(i)*0.5)}, 0)
 	}
-	sig := r.Evaluate(Candle{Symbol: "T", Close: 100 + 40*0.5}, 0)
+	sig := r.Evaluate(Candle{Symbol: "T", Close: types.PriceFromFloat(100 + 40*0.5)}, 0)
 	if sig != nil {
 		t.Logf("RSI2 signal: %s", sig.Side)
 	}

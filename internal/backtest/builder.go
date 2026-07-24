@@ -125,10 +125,4 @@ func (b *BacktestBuilder) Build() (*BacktestConfig, error) {
 	return cfg, nil
 }
 
-func (b *BacktestBuilder) MustBuild() *BacktestConfig {
-	cfg, err := b.Build()
-	if err != nil {
-		panic(fmt.Sprintf("backtest builder: %v", err))
-	}
-	return cfg
-}
+

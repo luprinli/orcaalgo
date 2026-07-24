@@ -1,6 +1,10 @@
 package strategy
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type Strategy interface {
 	Name() string
@@ -14,7 +18,7 @@ type Strategy interface {
 	Params() map[string]float64
 	SetParams(params map[string]float64)
 	ParamDefs() []ParamDef
-	OnFill(orderID string, symbol string, side string, entryPrice float64, fillPrice float64, quantity float64, filledQty float64)
+	OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64)
 	OnCancel(orderID string, reason string)
 	OnOrderRejected(orderID string, reason string)
 }

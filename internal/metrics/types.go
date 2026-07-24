@@ -1,6 +1,10 @@
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type PerformanceSnapshot struct {
 	Timestamp      time.Time `json:"timestamp"`
@@ -36,8 +40,8 @@ type TradeSummary struct {
 	Symbol       string    `json:"symbol"`
 	Side         string    `json:"side"`
 	Quantity     float64   `json:"quantity"`
-	EntryPrice   float64   `json:"entry_price"`
-	ExitPrice    float64   `json:"exit_price"`
+	EntryPrice   types.Price `json:"entry_price"`
+	ExitPrice    types.Price `json:"exit_price"`
 	PnL          float64   `json:"pnl"`
 	PnLPct       float64   `json:"pnl_pct"`
 	EntryTime    time.Time `json:"entry_time"`

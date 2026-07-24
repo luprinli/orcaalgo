@@ -1,6 +1,10 @@
 package strategy
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type BaseRunner struct {
 	PriceHistory  []float64
@@ -13,9 +17,9 @@ type BaseRunner struct {
 	BufferSize int
 
 	PositionOpen bool
-	EntryPrice   float64
-	StopLoss     float64
-	TakeProfit   float64
+	EntryPrice   types.Price
+	StopLoss     types.Price
+	TakeProfit   types.Price
 	CurrentSide  string
 	EntryTime    time.Time
 
@@ -53,11 +57,11 @@ func (b *BaseRunner) InstanceHash() string {
 	return b.instanceHash
 }
 
-func (b *BaseRunner) PushPrice(price, high, low, volume float64) {
+func (b *BaseRunner) PushPrice(price, high, low types.Price, volume float64) {
 	idx := b.HistIdx % b.BufferSize
-	b.PriceHistory[idx] = price
-	b.HighHistory[idx] = high
-	b.LowHistory[idx] = low
+	b.PriceHistory[idx] = price.Float64()
+	b.HighHistory[idx] = high.Float64()
+	b.LowHistory[idx] = low.Float64()
 	b.VolumeHistory[idx] = volume
 	b.HistIdx++
 	if b.HistCount < b.BufferSize {
@@ -65,7 +69,7 @@ func (b *BaseRunner) PushPrice(price, high, low, volume float64) {
 	}
 }
 
-func (b *BaseRunner) PushPriceOnly(price float64) {
+func (b *BaseRunner) PushPriceOnly(price types.Price) {
 	b.PushPrice(price, 0, 0, 0)
 }
 
@@ -91,7 +95,7 @@ func (b *BaseRunner) ResetPosition() {
 	b.CurrentSide = ""
 }
 
-func (b *BaseRunner) OpenPosition(side string, entryPrice, stopLoss, takeProfit float64, entryTime time.Time) {
+func (b *BaseRunner) OpenPosition(side string, entryPrice, stopLoss, takeProfit types.Price, entryTime time.Time) {
 	b.PositionOpen = true
 	b.CurrentSide = side
 	b.EntryPrice = entryPrice
@@ -104,30 +108,30 @@ func (b *BaseRunner) ClosePosition() {
 	b.PositionOpen = false
 }
 
-func (b *BaseRunner) OnFill(orderID string, symbol string, side string, entryPrice float64, fillPrice float64, quantity float64, filledQty float64) {}
+func (b *BaseRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
 
 func (b *BaseRunner) OnCancel(orderID string, reason string) {}
 
 func (b *BaseRunner) OnOrderRejected(orderID string, reason string) {}
 
-func (b *BaseRunner) IsStopLossHit(price float64) bool {
+func (b *BaseRunner) IsStopLossHit(price types.Price) bool {
 	if !b.PositionOpen {
 		return false
 	}
 	if b.CurrentSide == "BUY" {
-		return price <= b.StopLoss
+		return price.Compare(b.StopLoss) <= 0
 	}
-	return price >= b.StopLoss
+	return price.Compare(b.StopLoss) >= 0
 }
 
-func (b *BaseRunner) IsTakeProfitHit(price float64) bool {
+func (b *BaseRunner) IsTakeProfitHit(price types.Price) bool {
 	if !b.PositionOpen {
 		return false
 	}
 	if b.CurrentSide == "BUY" {
-		return price >= b.TakeProfit
+		return price.Compare(b.TakeProfit) >= 0
 	}
-	return price <= b.TakeProfit
+	return price.Compare(b.TakeProfit) <= 0
 }
 
 func (b *BaseRunner) IsTimeExit(maxMinutes float64, currentTime time.Time) bool {

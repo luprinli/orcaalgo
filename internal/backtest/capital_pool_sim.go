@@ -109,10 +109,10 @@ func (c *CapitalPoolSim) EvaluateAll(candle Candle, regime int8) map[string]*Sig
 			regimeMult = p.RegimeMultipliers[regime]
 		}
 
-		quantity := (c.TotalBalance * positionPct * regimeMult * correlationMult) / candle.Close
+		quantity := (c.TotalBalance * positionPct * regimeMult * correlationMult) / candle.Close.Float64()
 		maxSize := c.TotalBalance * p.MaxPositionPct / 100.0
-		if quantity > maxSize/candle.Close {
-			quantity = maxSize / candle.Close
+		if quantity > maxSize/candle.Close.Float64() {
+			quantity = maxSize / candle.Close.Float64()
 		}
 		if quantity < 1 {
 			continue
@@ -120,7 +120,7 @@ func (c *CapitalPoolSim) EvaluateAll(candle Candle, regime int8) map[string]*Sig
 
 		signal.Quantity *= (1.0 - bufferPct)
 
-		strat.Allocated += signal.Quantity * candle.Close
+		strat.Allocated += signal.Quantity * candle.Close.Float64()
 		if signal.Side == "BUY" {
 			strat.OpenLong[candle.Symbol] += signal.Quantity
 		} else {

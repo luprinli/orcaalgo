@@ -1,13 +1,17 @@
 package strategy
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type Candle struct {
 	Time   time.Time
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
+	Open   types.Price
+	High   types.Price
+	Low    types.Price
+	Close  types.Price
 	Volume float64
 	Symbol string
 }

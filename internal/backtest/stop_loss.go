@@ -1,6 +1,10 @@
 package backtest
 
-import "math"
+import (
+	"math"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type StopLossType string
 
@@ -22,17 +26,17 @@ const (
 
 type StopLossConfig struct {
 	Type          StopLossType
-	StopPoints    float64
+	StopPoints    types.Price
 	StopPercent   float64
 	ATRPeriod     int
 	ATRMultiplier float64
 	TrailActivation float64
-	TrailDistance   float64
+	TrailDistance   types.Price
 }
 
 type TakeProfitConfig struct {
 	Type           TakeProfitType
-	TakePoints     float64
+	TakePoints     types.Price
 	TakePercent    float64
 	ATRMultiplier  float64
 	RRRatio        float64
@@ -40,11 +44,11 @@ type TakeProfitConfig struct {
 
 type ActiveStop struct {
 	TradeID        int
-	EntryPrice     float64
+	EntryPrice     types.Price
 	Side           string
-	StopPrice      float64
-	TakePrice      float64
-	PeakPrice      float64
+	StopPrice      types.Price
+	TakePrice      types.Price
+	PeakPrice      types.Price
 	ATRValue       float64
 	StopType       StopLossType
 	TakeType       TakeProfitType
@@ -80,8 +84,8 @@ func CalculateStopPrice(entryPrice float64, side string, cfg *StopLossConfig, at
 	case StopLossFixed:
 		if cfg.StopPercent > 0 {
 			stopOffset = entryPrice * cfg.StopPercent / 100.0
-		} else if cfg.StopPoints > 0 {
-			stopOffset = cfg.StopPoints
+		} else if cfg.StopPoints.Float64() > 0 {
+			stopOffset = cfg.StopPoints.Float64()
 		} else {
 			return 0
 		}
@@ -92,8 +96,8 @@ func CalculateStopPrice(entryPrice float64, side string, cfg *StopLossConfig, at
 			return 0
 		}
 	case StopLossTrail:
-		if cfg.TrailDistance > 0 {
-			stopOffset = cfg.TrailDistance
+		if cfg.TrailDistance.Float64() > 0 {
+			stopOffset = cfg.TrailDistance.Float64()
 		} else if cfg.ATRMultiplier > 0 && atrValue > 0 {
 			stopOffset = cfg.ATRMultiplier * atrValue
 		} else {
@@ -120,8 +124,8 @@ func CalculateTakeProfitPrice(entryPrice float64, side string, cfg *TakeProfitCo
 	case TakeProfitFixed:
 		if cfg.TakePercent > 0 {
 			takeOffset = entryPrice * cfg.TakePercent / 100.0
-		} else if cfg.TakePoints > 0 {
-			takeOffset = cfg.TakePoints
+		} else if cfg.TakePoints.Float64() > 0 {
+			takeOffset = cfg.TakePoints.Float64()
 		} else {
 			return 0
 		}
@@ -151,31 +155,31 @@ func CalculateTakeProfitPrice(entryPrice float64, side string, cfg *TakeProfitCo
 }
 
 func CheckStopHit(candle Candle, stop *ActiveStop) (bool, float64) {
-	if stop == nil || stop.StopPrice <= 0 {
+	if stop == nil || stop.StopPrice.Float64() <= 0 {
 		return false, 0
 	}
 
 	if stop.Side == "BUY" {
-		if candle.Low > 0 && candle.Low <= stop.StopPrice {
-			exitPrice := stop.StopPrice
-			if candle.Open < stop.StopPrice {
-				exitPrice = candle.Open
+		if candle.Low > 0 && candle.Low.Float64() <= stop.StopPrice.Float64() {
+			exitPrice := stop.StopPrice.Float64()
+			if candle.Open.Float64() < stop.StopPrice.Float64() {
+				exitPrice = candle.Open.Float64()
 			}
 			return true, exitPrice
 		}
-		if candle.Open > 0 && candle.Open <= stop.StopPrice {
-			return true, candle.Open
+		if candle.Open > 0 && candle.Open.Float64() <= stop.StopPrice.Float64() {
+			return true, candle.Open.Float64()
 		}
 	} else {
-		if candle.High > 0 && candle.High >= stop.StopPrice {
-			exitPrice := stop.StopPrice
-			if candle.Open > stop.StopPrice {
-				exitPrice = candle.Open
+		if candle.High > 0 && candle.High.Float64() >= stop.StopPrice.Float64() {
+			exitPrice := stop.StopPrice.Float64()
+			if candle.Open.Float64() > stop.StopPrice.Float64() {
+				exitPrice = candle.Open.Float64()
 			}
 			return true, exitPrice
 		}
-		if candle.Open > 0 && candle.Open >= stop.StopPrice {
-			return true, candle.Open
+		if candle.Open > 0 && candle.Open.Float64() >= stop.StopPrice.Float64() {
+			return true, candle.Open.Float64()
 		}
 	}
 
@@ -183,31 +187,31 @@ func CheckStopHit(candle Candle, stop *ActiveStop) (bool, float64) {
 }
 
 func CheckTakeProfitHit(candle Candle, stop *ActiveStop) (bool, float64) {
-	if stop == nil || stop.TakePrice <= 0 {
+	if stop == nil || stop.TakePrice.Float64() <= 0 {
 		return false, 0
 	}
 
 	if stop.Side == "BUY" {
-		if candle.High > 0 && candle.High >= stop.TakePrice {
-			exitPrice := stop.TakePrice
-			if candle.Open > stop.TakePrice {
-				exitPrice = candle.Open
+		if candle.High > 0 && candle.High.Float64() >= stop.TakePrice.Float64() {
+			exitPrice := stop.TakePrice.Float64()
+			if candle.Open.Float64() > stop.TakePrice.Float64() {
+				exitPrice = candle.Open.Float64()
 			}
 			return true, exitPrice
 		}
-		if candle.Open > 0 && candle.Open >= stop.TakePrice {
-			return true, candle.Open
+		if candle.Open > 0 && candle.Open.Float64() >= stop.TakePrice.Float64() {
+			return true, candle.Open.Float64()
 		}
 	} else {
-		if candle.Low > 0 && candle.Low <= stop.TakePrice {
-			exitPrice := stop.TakePrice
-			if candle.Open < stop.TakePrice {
-				exitPrice = candle.Open
+		if candle.Low > 0 && candle.Low.Float64() <= stop.TakePrice.Float64() {
+			exitPrice := stop.TakePrice.Float64()
+			if candle.Open.Float64() < stop.TakePrice.Float64() {
+				exitPrice = candle.Open.Float64()
 			}
 			return true, exitPrice
 		}
-		if candle.Open > 0 && candle.Open <= stop.TakePrice {
-			return true, candle.Open
+		if candle.Open > 0 && candle.Open.Float64() <= stop.TakePrice.Float64() {
+			return true, candle.Open.Float64()
 		}
 	}
 
@@ -215,28 +219,28 @@ func CheckTakeProfitHit(candle Candle, stop *ActiveStop) (bool, float64) {
 }
 
 func UpdateTrailingStop(stop *ActiveStop, candle Candle) {
-	if stop == nil || stop.StopType != StopLossTrail || stop.StopPrice <= 0 {
+	if stop == nil || stop.StopType != StopLossTrail || stop.StopPrice.Float64() <= 0 {
 		return
 	}
 
 	if stop.Side == "BUY" {
-		if candle.High > stop.PeakPrice {
+		if candle.High.Float64() > stop.PeakPrice.Float64() {
 			stop.PeakPrice = candle.High
-			delta := stop.PeakPrice - stop.EntryPrice
+			delta := stop.PeakPrice.Float64() - stop.EntryPrice.Float64()
 			if delta > 0 {
-				stop.StopPrice = stop.PeakPrice - (stop.StopPrice - stop.EntryPrice)
-				if stop.StopPrice < stop.EntryPrice {
+				stop.StopPrice = types.PriceFromFloat(stop.PeakPrice.Float64() - (stop.StopPrice.Float64() - stop.EntryPrice.Float64()))
+				if stop.StopPrice.Float64() < stop.EntryPrice.Float64() {
 					stop.StopPrice = stop.EntryPrice
 				}
 			}
 		}
 	} else {
-		if candle.Low > 0 && candle.Low < stop.PeakPrice {
+		if candle.Low > 0 && candle.Low.Float64() < stop.PeakPrice.Float64() {
 			stop.PeakPrice = candle.Low
-			delta := stop.EntryPrice - stop.PeakPrice
+			delta := stop.EntryPrice.Float64() - stop.PeakPrice.Float64()
 			if delta > 0 {
-				stop.StopPrice = stop.PeakPrice + (stop.EntryPrice - stop.StopPrice)
-				if stop.StopPrice > stop.EntryPrice {
+				stop.StopPrice = types.PriceFromFloat(stop.PeakPrice.Float64() + (stop.EntryPrice.Float64() - stop.StopPrice.Float64()))
+				if stop.StopPrice.Float64() > stop.EntryPrice.Float64() {
 					stop.StopPrice = stop.EntryPrice
 				}
 			}
@@ -259,13 +263,13 @@ func ComputeATR(candles []Candle, period int) float64 {
 
 	for i := start; i < end; i++ {
 		c := candles[i]
-		high := c.High
-		low := c.Low
+		high := c.High.Float64()
+		low := c.Low.Float64()
 		prevClose := 0.0
 		if i > 0 {
-			prevClose = candles[i-1].Close
+			prevClose = candles[i-1].Close.Float64()
 		} else {
-			prevClose = c.Close
+			prevClose = c.Close.Float64()
 		}
 
 		tr := high - low

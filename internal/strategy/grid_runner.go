@@ -2,6 +2,8 @@ package strategy
 
 import (
 	"math"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type GridRunner struct {
@@ -13,8 +15,8 @@ type GridRunner struct {
 	StopLossPct    float64
 	openCount      int
 	openPositions  map[int]*gridPosition
-	lastPrice      float64
-	referencePrice float64
+	lastPrice      types.Price
+	referencePrice types.Price
 	priceInit      bool
 
 	irVersion        string
@@ -25,10 +27,10 @@ type GridRunner struct {
 type gridPosition struct {
 	Side       string
 	Quantity   float64
-	EntryPrice float64
+	EntryPrice types.Price
 	GridLevel  int
-	TakePrice  float64
-	StopPrice  float64
+	TakePrice  types.Price
+	StopPrice  types.Price
 }
 
 func NewGridRunner() *GridRunner {
@@ -116,7 +118,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -142,27 +144,27 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 		levels = 2
 	}
 
-	prices := make([]float64, levels*2+1)
+	prices := make([]types.Price, levels*2+1)
 	prices[levels] = r.referencePrice
 	for i := 1; i <= levels; i++ {
-		prices[levels+i] = r.referencePrice * (1.0 + spacing*float64(i))
-		prices[levels-i] = r.referencePrice * (1.0 - spacing*float64(i))
+		prices[levels+i] = r.referencePrice.MulFloat(1.0 + spacing*float64(i))
+		prices[levels-i] = r.referencePrice.MulFloat(1.0 - spacing*float64(i))
 	}
 
 	closedAny := false
 	exitSide := ""
 	for level, pos := range r.openPositions {
 		shouldClose := false
-		if pos.Side == "BUY" && price >= pos.TakePrice {
+		if pos.Side == "BUY" && price.Compare(pos.TakePrice) >= 0 {
 			shouldClose = true
 			exitSide = "SELL"
-		} else if pos.Side == "SELL" && price <= pos.TakePrice {
+		} else if pos.Side == "SELL" && price.Compare(pos.TakePrice) <= 0 {
 			shouldClose = true
 			exitSide = "BUY"
-		} else if pos.Side == "BUY" && price <= pos.StopPrice {
+		} else if pos.Side == "BUY" && price.Compare(pos.StopPrice) <= 0 {
 			shouldClose = true
 			exitSide = "SELL"
-		} else if pos.Side == "SELL" && price >= pos.StopPrice {
+		} else if pos.Side == "SELL" && price.Compare(pos.StopPrice) >= 0 {
 			shouldClose = true
 			exitSide = "BUY"
 		}
@@ -182,8 +184,8 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	priceCrossedDown := r.lastPrice > price
-	priceCrossedUp := r.lastPrice < price
+	priceCrossedDown := r.lastPrice.Compare(price) > 0
+	priceCrossedUp := r.lastPrice.Compare(price) < 0
 
 	nearestGridAbove := -1
 	nearestGridBelow := -1
@@ -191,12 +193,14 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	minDistBelow := math.MaxFloat64
 
 	for i, gp := range prices {
-		if gp > price && gp-price < minDistAbove {
-			minDistAbove = gp - price
+		gpF := gp.Float64()
+		priceF := price.Float64()
+		if gpF > priceF && gpF-priceF < minDistAbove {
+			minDistAbove = gpF - priceF
 			nearestGridAbove = i - levels
 		}
-		if gp < price && price-gp < minDistBelow {
-			minDistBelow = price - gp
+		if gpF < priceF && priceF-gpF < minDistBelow {
+			minDistBelow = priceF - gpF
 			nearestGridBelow = i - levels
 		}
 	}
@@ -206,8 +210,8 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if priceCrossedDown && nearestGridBelow != -1 {
 		if _, exists := r.openPositions[nearestGridBelow]; !exists {
 			entryPrice := prices[nearestGridBelow+levels]
-			takePrice := entryPrice * (1.0 + tpPct)
-			stopPrice := entryPrice * (1.0 - slPct)
+			takePrice := entryPrice.MulFloat(1.0 + tpPct)
+			stopPrice := entryPrice.MulFloat(1.0 - slPct)
 			r.openPositions[nearestGridBelow] = &gridPosition{
 				Side:       "BUY",
 				Quantity:   100 * r.PositionScale,
@@ -224,8 +228,8 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if priceCrossedUp && nearestGridAbove != -1 && signal == nil {
 		if _, exists := r.openPositions[nearestGridAbove]; !exists {
 			entryPrice := prices[nearestGridAbove+levels]
-			takePrice := entryPrice * (1.0 - tpPct)
-			stopPrice := entryPrice * (1.0 + slPct)
+			takePrice := entryPrice.MulFloat(1.0 - tpPct)
+			stopPrice := entryPrice.MulFloat(1.0 + slPct)
 			r.openPositions[nearestGridAbove] = &gridPosition{
 				Side:       "SELL",
 				Quantity:   100 * r.PositionScale,
@@ -243,6 +247,6 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	return signal
 }
 
-func (r *GridRunner) OnFill(orderID string, symbol string, side string, entryPrice float64, fillPrice float64, quantity float64, filledQty float64) {}
+func (r *GridRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
 func (r *GridRunner) OnCancel(orderID string, reason string) {}
 func (r *GridRunner) OnOrderRejected(orderID string, reason string) {}

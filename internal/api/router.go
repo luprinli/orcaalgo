@@ -174,6 +174,7 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/daily-returns", s.getBacktestDailyReturns)
 		protected.GET("/backtests/:id/monthly-returns", s.getBacktestMonthlyReturns)
 		protected.GET("/backtests/:id/optimization", s.getBacktestOptimization)
+		protected.GET("/backtests/:id/walk-forward", s.getBacktestWalkForward)
 
 		protected.GET("/live/metrics", s.getLiveMetrics)
 		protected.GET("/live/equity", s.getLiveEquity)

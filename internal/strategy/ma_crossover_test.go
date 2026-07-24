@@ -1,6 +1,10 @@
 package strategy
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 func TestRSI(t *testing.T) {
 	prices := make([]float64, 100)
@@ -103,10 +107,10 @@ func TestMACrossoverRunner_CrossoverDetection(t *testing.T) {
 	r := NewMACrossoverRunner()
 	candle := Candle{Symbol: "TEST"}
 	for i := 0; i < 80; i++ {
-		candle.Close = 100.0 + float64(i)*0.02
+		candle.Close = types.PriceFromFloat(100.0 + float64(i)*0.02)
 		r.Evaluate(candle, 0)
 	}
-	sig := r.Evaluate(Candle{Symbol: "TEST", Close: 101.5}, 0)
+	sig := r.Evaluate(Candle{Symbol: "TEST", Close: types.PriceFromFloat(101.5)}, 0)
 	if sig != nil {
 		t.Logf("signal generated: %s at iteration 80", sig.Side)
 	}
@@ -117,7 +121,7 @@ func TestMACrossoverRunner_RSIFilterSuppressesSignal(t *testing.T) {
 	r.UseMacdFilter = false
 	candle := Candle{Symbol: "TEST"}
 	for i := 0; i < 80; i++ {
-		candle.Close = 100.0 + float64(i)*0.02
+		candle.Close = types.PriceFromFloat(100.0 + float64(i)*0.02)
 		r.Evaluate(candle, 0)
 	}
 	rsiBefore := RSI(r.PriceHistory, r.HistCount, 14)

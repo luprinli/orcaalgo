@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestGlobalRegistry_HasAllStrategies(t *testing.T) {
@@ -72,7 +73,7 @@ func TestMeanReversionRunner_ImplementsStrategy(t *testing.T) {
 
 func TestMeanReversionRunner_Reset(t *testing.T) {
 	s := strategy.NewMeanReversionRunner(14, 2.0, 0.5, 60)
-	candle := strategy.Candle{Close: 100.0, Symbol: "TEST"}
+	candle := strategy.Candle{Close: types.PriceFromFloat(100.0), Symbol: "TEST"}
 	s.Evaluate(candle, 0)
 	s.Reset()
 	params := s.Params()

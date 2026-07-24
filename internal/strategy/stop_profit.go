@@ -1,19 +1,21 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 type StopLossChecker struct{}
 
-func (StopLossChecker) IsStopLossHit(price, stopLoss float64, side string) bool {
+func (StopLossChecker) IsStopLossHit(price, stopLoss types.Price, side string) bool {
 	if side == "BUY" {
-		return price <= stopLoss
+		return price.Compare(stopLoss) <= 0
 	}
-	return price >= stopLoss
+	return price.Compare(stopLoss) >= 0
 }
 
 type TakeProfitChecker struct{}
 
-func (TakeProfitChecker) IsTakeProfitHit(price, takeProfit float64, side string) bool {
+func (TakeProfitChecker) IsTakeProfitHit(price, takeProfit types.Price, side string) bool {
 	if side == "BUY" {
-		return price >= takeProfit
+		return price.Compare(takeProfit) >= 0
 	}
-	return price <= takeProfit
+	return price.Compare(takeProfit) <= 0
 }

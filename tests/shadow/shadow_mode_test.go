@@ -9,6 +9,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/engine"
 	"github.com/lee-econ/orca-core/internal/risk"
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestShadowModeSignalParity(t *testing.T) {
@@ -34,10 +35,10 @@ func TestShadowModeSignalParity(t *testing.T) {
 		price := float64(prices[i]) / 100000.0
 		candles[i] = strategy.Candle{
 			Time:   baseTime.Add(time.Duration(i) * time.Minute),
-			Open:   price,
-			High:   price * 1.01,
-			Low:    price * 0.99,
-			Close:  price,
+			Open:   types.FromFloat64(price),
+			High:   types.FromFloat64(price * 1.01),
+			Low:    types.FromFloat64(price * 0.99),
+			Close:  types.FromFloat64(price),
 			Volume: 1000,
 			Symbol: symbolName,
 		}
@@ -121,10 +122,10 @@ func TestShadowModeBacktestEngine(t *testing.T) {
 		price := float64(prices[i]) / 100000.0
 		candleList[i] = strategy.Candle{
 			Time:   baseTime.Add(time.Duration(i) * 24 * time.Hour),
-			Open:   price,
-			High:   price * 1.02,
-			Low:    price * 0.98,
-			Close:  price,
+			Open:   types.FromFloat64(price),
+			High:   types.FromFloat64(price * 1.02),
+			Low:    types.FromFloat64(price * 0.98),
+			Close:  types.FromFloat64(price),
 			Volume: 1000,
 			Symbol: symbolName,
 		}

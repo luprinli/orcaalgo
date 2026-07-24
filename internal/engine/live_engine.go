@@ -13,6 +13,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/model"
 	"github.com/lee-econ/orca-core/internal/risk"
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type LiveEngine struct {
@@ -190,7 +191,7 @@ func (e *LiveEngine) Halt(reason string) {
 }
 
 func (e *LiveEngine) CheckOpenStops(symbolID uint32, s *SymbolState, goCandle strategy.Candle, approvedSignals *[]*strategy.Signal) {
-	price := goCandle.Close
+	price := goCandle.Close.Float64()
 	if price <= 0 {
 		return
 	}
@@ -205,11 +206,11 @@ func (e *LiveEngine) CheckOpenStops(symbolID uint32, s *SymbolState, goCandle st
 				stopPrice = price * 1.02
 			}
 			e.openPositions[sig.Symbol] = &backtest.ActiveStop{
-				EntryPrice: price,
+				EntryPrice: types.PriceFromFloat(price),
 				Side:       side,
-				StopPrice:  stopPrice,
+				StopPrice:  types.PriceFromFloat(stopPrice),
 				StopType:   stopType,
-				PeakPrice:  price,
+				PeakPrice:  types.PriceFromFloat(price),
 			}
 		}
 	}
@@ -232,11 +233,11 @@ func (e *LiveEngine) CheckOpenStops(symbolID uint32, s *SymbolState, goCandle st
 			}
 			newStop := e.exitOrch.ComputeNewStop(stop.Side, stop.EntryPrice, goCandle.Close, 1.0, ctx)
 			// Only ratchet: tighten stops, never widen
-			if stop.Side == "BUY" && newStop > stop.StopPrice {
-				stop.StopPrice = newStop
+			if stop.Side == "BUY" && newStop > stop.StopPrice.Float64() {
+				stop.StopPrice = types.PriceFromFloat(newStop)
 			}
-			if stop.Side == "SELL" && newStop < stop.StopPrice {
-				stop.StopPrice = newStop
+			if stop.Side == "SELL" && newStop < stop.StopPrice.Float64() {
+				stop.StopPrice = types.PriceFromFloat(newStop)
 			}
 		}
 

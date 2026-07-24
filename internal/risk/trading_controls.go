@@ -4,6 +4,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type OrderRateLimiter struct {
@@ -68,22 +70,23 @@ func NewVolatilityHalt(zThreshold float64) *VolatilityHalt {
 	}
 }
 
-func (v *VolatilityHalt) Update(price float64) {
+func (v *VolatilityHalt) Update(price types.Price) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 
+	priceF := price.Float64()
 	if len(v.returns) >= 2 {
 		prev := v.returns[len(v.returns)-1]
 		prevPrice := 0.0
 		for i := len(v.returns) - 1; i >= 0; i-- {
 			if v.returns[i] != 0 {
-				prevPrice = price / (1 + v.returns[i])
+				prevPrice = priceF / (1 + v.returns[i])
 				break
 			}
 		}
 		_ = prev
 		if prevPrice > 0 {
-			ret := (price - prevPrice) / prevPrice
+			ret := (priceF - prevPrice) / prevPrice
 			v.returns = append(v.returns, ret)
 		}
 	}

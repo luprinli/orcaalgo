@@ -1,5 +1,7 @@
 package strategy
 
+import "github.com/lee-econ/orca-core/internal/types"
+
 // DonchianBreakoutRunner implements a Donchian Channel breakout strategy.
 // Entry: price breaks above Donchian upper band → BUY, breaks below lower band → SELL.
 // Exit: reverse breakout, trailing stop, or price crosses back inside channel.
@@ -11,7 +13,7 @@ type DonchianBreakoutRunner struct {
 	AtrPeriod       float64
 	AtrMultiplier   float64
 	MinRangePct     float64
-	peakPrice       float64
+	peakPrice       types.Price
 }
 
 func NewDonchianBreakoutRunner() *DonchianBreakoutRunner {
@@ -78,7 +80,7 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	price := candle.Close
-	if price <= 0 {
+	if price.IsZero() {
 		return nil
 	}
 
@@ -107,22 +109,22 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier
 
 		if r.CurrentSide == "BUY" {
-			if price > r.peakPrice {
+			if price.Compare(r.peakPrice) > 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice - stopDist
-			reversal := price < lowerDC
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - stopDist)
+			reversal := price.Float64() < lowerDC
 
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || reversal {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
 		} else {
-			if price < r.peakPrice {
+			if price.Compare(r.peakPrice) < 0 {
 				r.peakPrice = price
 			}
-			trailingStop := r.peakPrice + stopDist
-			reversal := price > upperDC
+			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + stopDist)
+			reversal := price.Float64() > upperDC
 
 			if sc.IsStopLossHit(price, trailingStop, "SELL") || reversal {
 				r.ClosePosition()
@@ -134,15 +136,15 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	r.peakPrice = price
 
-	if price >= upperDC*(1.0+entryBuffer) {
+	if price.Float64() >= upperDC*(1.0+entryBuffer) {
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, stopDist, price+stopDist*2, candle.Time)
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
 	}
 
-	if price <= lowerDC*(1.0-entryBuffer) {
+	if price.Float64() <= lowerDC*(1.0-entryBuffer) {
 		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, stopDist, price-stopDist*2, candle.Time)
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
 	}
 

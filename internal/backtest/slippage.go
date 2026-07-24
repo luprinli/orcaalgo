@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type SlippageModel struct {
@@ -35,7 +37,7 @@ func NewFillSimulatorWithSeed(model SlippageModel, seed int64) *FillSimulator {
 type SimulatedFill struct {
 	OrderID       uint32
 	Symbol        string
-	FillPrice     float64
+	FillPrice     types.Price
 	FillQuantity  float64
 	SlippageBps   float64
 	LatencyMs     float64
@@ -91,7 +93,7 @@ func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limit
 	return &SimulatedFill{
 		OrderID:         orderID,
 		Symbol:          symbol,
-		FillPrice:       math.Round(fillPrice*10000) / 10000,
+		FillPrice:       types.FromFloat64(math.Round(fillPrice*10000) / 10000),
 		FillQuantity:    math.Round(fillQuantity*10000) / 10000,
 		SlippageBps:     slippageBps,
 		LatencyMs:       s.model.LatencyMs,

@@ -1,6 +1,10 @@
 package universe
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 type MarketDataSnapshot struct {
 	Timestamp      time.Time
@@ -15,7 +19,7 @@ type SymbolSnapshotMetric struct {
 	ATR14         float64
 	ATR14Pct      float64
 	RSI14         float64
-	Price         float64
+	Price         types.Price
 	MarketCap     int64
 	NewsSentiment float64
 }

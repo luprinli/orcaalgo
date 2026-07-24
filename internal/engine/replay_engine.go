@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type ReplayConfig struct {
@@ -23,12 +24,12 @@ type ReplayConfig struct {
 }
 
 type SyntheticTick struct {
-	TimestampMS int64   `json:"timestamp_ms"`
-	Price       float64 `json:"price"`
-	Bid         float64 `json:"bid"`
-	Ask         float64 `json:"ask"`
-	Volume      int     `json:"volume"`
-	Symbol      string  `json:"symbol"`
+	TimestampMS int64       `json:"timestamp_ms"`
+	Price       types.Price `json:"price"`
+	Bid         types.Price `json:"bid"`
+	Ask         types.Price `json:"ask"`
+	Volume      int         `json:"volume"`
+	Symbol      string      `json:"symbol"`
 }
 
 type ReplayEngine struct {
@@ -126,7 +127,7 @@ func (r *ReplayEngine) Replay(ticks []SyntheticTick) ([]*strategy.Signal, error)
 			r.cfg.SymbolMap[t.Symbol] = symbolID
 		}
 
-		priceRaw := uint64(t.Price * 100_000)
+		priceRaw := uint64(t.Price.Int64())
 		volumeRaw := uint64(t.Volume)
 
 		signals := r.engine.ProcessTick(
@@ -143,7 +144,7 @@ func (r *ReplayEngine) Replay(ticks []SyntheticTick) ([]*strategy.Signal, error)
 					"symbol", t.Symbol,
 					"side", sig.Side,
 					"quantity", sig.Quantity,
-					"price", t.Price,
+					"price", t.Price.Float64(),
 					"tick_index", i,
 				)
 			}
