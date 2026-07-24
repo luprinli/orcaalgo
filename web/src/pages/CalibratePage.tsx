@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { calibrate } from '../api/client'
-import ErrorCard from '../components/ErrorCard'
+import { ErrorBanner } from '../components/layout'
 import type { CalibrationReportResponse, CalibrationSegmentReport } from '../types/api'
 
 export default function CalibratePage() {
@@ -50,7 +50,7 @@ export default function CalibratePage() {
         </button>
       </div>
 
-      {error && <ErrorCard message={error} />}
+      {error && <ErrorBanner error={error} onDismiss={() => setError(null)} />}
 
       {!report && !loading && (
         <div className="card">

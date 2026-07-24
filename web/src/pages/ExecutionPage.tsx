@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
+import toast from 'react-hot-toast'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { orders } from '../api/client'
@@ -57,10 +58,13 @@ export default function ExecutionPage() {
       })
       setMsg(t('execution:orderPlaced', 'Order placed: {{id}}', { id: res.state ?? res.order_id }))
       showToast('success', t('execution:orderPlaced', 'Order placed: {{id}}', { id: res.order_id?.slice(0, 8) }))
+      toast.success(`Order placed: ${data.side} ${data.quantity} ${data.symbol}`)
       reset()
       fetchOrders()
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : t('execution:orderFailed', 'Order failed'))
+      const errMsg = err instanceof Error ? err.message : t('execution:orderFailed', 'Order failed')
+      setMsg(errMsg)
+      toast.error(`Order failed: ${errMsg}`)
     } finally {
       setLoading(false)
     }

@@ -248,6 +248,31 @@ export interface RegimeStat {
   profit_factor: number
 }
 
+export interface WalkForwardWindow {
+  window?: number
+  train_start?: string
+  test_start?: string
+  test_end?: string
+  in_sample_sharpe?: number
+  out_sample_sharpe?: number
+  oos_win_rate?: number
+  oos_return_pct?: number
+  oos_profit_factor?: number
+  oos_trades?: number
+  passed_compliance?: boolean
+}
+
+export interface WalkForwardResponse {
+  windows: WalkForwardWindow[]
+  passed_windows: number
+  total_windows: number
+  oos_avg_sharpe?: number
+  sharpe_degradation?: number
+  overall_sharpe: number
+  overall_win_rate: number
+  message?: string
+}
+
 export interface OptimizationFootprint {
   deflated_sharpe: number
   conventional_sharpe: number
