@@ -25,7 +25,7 @@ except ImportError:
     HAS_LIGHTGBM = False
 
 
-@dataclass
+@dataclass(frozen=True)
 class ExitTrainingResult:
     model: object | None
     mse: float

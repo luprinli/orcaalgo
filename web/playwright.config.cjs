@@ -5,4 +5,15 @@ module.exports = defineConfig({
     baseURL: 'http://localhost:5173',
     headless: true,
   },
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        browserName: 'chromium',
+        launchOptions: {
+          args: ['--disable-extensions'],
+        },
+      },
+    },
+  ],
 });

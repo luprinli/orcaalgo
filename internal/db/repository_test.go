@@ -3,28 +3,27 @@ package db
 import (
 	"testing"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 // TestCandleStructFields verifies the Candle type fields.
 func TestCandleStructFields(t *testing.T) {
 	c := Candle{
 		Time:   time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		Open:   100.0,
-		High:   101.0,
-		Low:    99.0,
-		Close:  100.5,
+		Open:   types.PriceFromFloat(100.0),
+		High:   types.PriceFromFloat(101.0),
+		Low:    types.PriceFromFloat(99.0),
+		Close:  types.PriceFromFloat(100.5),
 		Volume: 1000,
 		Symbol: "TEST",
 	}
-	if c.Open != 100.0 {
-		t.Fatalf("Open field broken: got %f, want 100.0", c.Open)
+	if c.Open.Float64() != 100.0 {
+		t.Fatalf("Open field broken: got %f, want 100.0", c.Open.Float64())
 	}
 	if c.Symbol != "TEST" {
 		t.Fatalf("Symbol field broken: got %s, want TEST", c.Symbol)
 	}
-
-	// TODO: RegimeLabel field to be added for synthetic regime label propagation
-	// TODO: Migrate Open/High/Low/Close to fixed.Price (github.com/lee-econ/orca-core/internal/fixed)
 }
 
 // TestRepositoryMethodsExist verifies core repository methods exist.

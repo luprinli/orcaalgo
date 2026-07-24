@@ -53,7 +53,7 @@ func MatchReconciliation(internal []db.TradeExecution, brokerFills []broker.Trad
 			}
 
 			fillPrice := fill.FillPrice.Float64()
-			diffBps := math.Abs(execPrice-fillPrice) / math.Max(math.Abs(execPrice), math.Abs(fillPrice)) * 10000
+			diffBps := math.Abs(execPrice.Float64()-fillPrice) / math.Max(math.Abs(execPrice.Float64()), math.Abs(fillPrice)) * 10000
 			if diffBps <= priceMatchToleranceBps {
 				matched = j
 				result.Matched++
@@ -63,7 +63,7 @@ func MatchReconciliation(internal []db.TradeExecution, brokerFills []broker.Trad
 			result.PriceDiscrepancies++
 			result.Discrepancies = append(result.Discrepancies, DiscrepancyDetail{
 				OrderID:    exec.ID,
-				Internal:   execPrice,
+				Internal:   execPrice.Float64(),
 				Broker:     fillPrice,
 				DiffBps:    diffBps,
 			})

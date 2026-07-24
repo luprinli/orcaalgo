@@ -20,11 +20,11 @@ func NewWebhookHandlerWithAdapter(adapter broker.Adapter) *WebhookHandler {
 
 func (h *WebhookHandler) HandleTradingView(c *gin.Context) {
 	var req struct {
-		Ticker   string  `json:"ticker" binding:"required"`
-		Action   string  `json:"action" binding:"required"`
-		Price    float64 `json:"price"`
-		Quantity float64 `json:"quantity"`
-		Strategy string  `json:"strategy"`
+		Ticker   string      `json:"ticker" binding:"required"`
+		Action   string      `json:"action" binding:"required"`
+		Price    types.Price `json:"price"`
+		Quantity float64     `json:"quantity"`
+		Strategy string      `json:"strategy"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -45,9 +45,9 @@ func (h *WebhookHandler) HandleTradingView(c *gin.Context) {
 			Quantity:   req.Quantity,
 			StrategyID: req.Strategy,
 		}
-		if req.Price > 0 {
+		if !req.Price.IsZero() {
 			orderReq.Type = broker.Limit
-			orderReq.LimitPrice = types.FromFloat64(req.Price)
+			orderReq.LimitPrice = req.Price
 		}
 		resp, err := h.adapter.PlaceOrder(c.Request.Context(), orderReq)
 		if err != nil {

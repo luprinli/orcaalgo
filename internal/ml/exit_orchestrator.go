@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 // ExitOrchestrator manages ML-based dynamic exit for all strategy runners.
@@ -88,16 +90,18 @@ func (eo *ExitOrchestrator) Evaluate(ctx ExitContext) (urgency float64, multipli
 // The multiplier is the ML-adjusted dynamic stop multiplier.
 func (eo *ExitOrchestrator) ComputeNewStop(
 	side string,
-	entryPrice float64,
-	currentPrice float64,
+	entryPrice types.Price,
+	currentPrice types.Price,
 	atr float64,
 	ctx ExitContext,
 ) float64 {
 	_, mult := eo.Evaluate(ctx)
+	entryP := entryPrice.Float64()
+	currP := currentPrice.Float64()
 	if side == "BUY" {
-		return math.Max(entryPrice*0.8, currentPrice-mult*atr)
+		return math.Max(entryP*0.8, currP-mult*atr)
 	}
-	return math.Min(entryPrice*1.2, currentPrice+mult*atr)
+	return math.Min(entryP*1.2, currP+mult*atr)
 }
 
 // predict calls the Python inference subprocess.

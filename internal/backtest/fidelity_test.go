@@ -7,6 +7,7 @@ import (
 
 	"github.com/lee-econ/orca-core/internal/model"
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestMidPriceFillMatchesBaseline(t *testing.T) {
@@ -115,9 +116,9 @@ func TestMetricsComputation(t *testing.T) {
 	}
 
 	trades := []Trade{
-		{Symbol: "SPY", Side: "BUY", PnL: 100, Quantity: 100, EntryPrice: 450},
-		{Symbol: "SPY", Side: "SELL", PnL: -50, Quantity: 100, EntryPrice: 450},
-		{Symbol: "SPY", Side: "BUY", PnL: 200, Quantity: 100, EntryPrice: 450},
+		{Symbol: "SPY", Side: "BUY", PnL: 100, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
+		{Symbol: "SPY", Side: "SELL", PnL: -50, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
+		{Symbol: "SPY", Side: "BUY", PnL: 200, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
 	}
 
 	results := ComputeAllMetrics(equity, trades)

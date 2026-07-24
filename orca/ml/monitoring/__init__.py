@@ -53,7 +53,7 @@ class Alert:
     timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
-@dataclass
+@dataclass(frozen=True)
 class PredictionDistribution:
     model_name: str
     bucket_counts: dict[str, int] = field(default_factory=dict)
@@ -66,7 +66,7 @@ class PredictionDistribution:
     acceptance_rate: float = 0.0
 
 
-@dataclass
+@dataclass(frozen=True)
 class ModelHealthReport:
     model_name: str
     model_version: str
@@ -85,7 +85,7 @@ class ModelHealthReport:
 
 # ─── Monitoring Configuration ─────────────────────────────────────────────────
 
-@dataclass
+@dataclass(frozen=True)
 class MonitorConfig:
     staleness_days_warn: int = 30
     staleness_days_critical: int = 90

@@ -14,7 +14,7 @@ class DataQualityCheck:
     timeframe: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class DataQualityReport:
     checks: list[DataQualityCheck] = field(default_factory=list)
     passed: int = 0
@@ -34,9 +34,11 @@ TIMEFRAME_INTERVALS = {
 def run_data_quality_checks(
     candles_by_symbol: dict | None = None,
 ) -> DataQualityReport:
-    report = DataQualityReport()
-
     import numpy as np
+
+    checks: list[DataQualityCheck] = []
+    warned = 0
+    failed = 0
 
     if candles_by_symbol is None:
         try:
@@ -49,31 +51,31 @@ def run_data_quality_checks(
             )
 
     if not candles_by_symbol:
-        report.checks.append(DataQualityCheck("data_exists", "warn", "No candle data found"))
-        report.warned += 1
-        return report
+        checks.append(DataQualityCheck("data_exists", "warn", "No candle data found"))
+        warned += 1
+        return DataQualityReport(checks=checks, warned=warned, failed=failed)
 
     total_symbols = len(candles_by_symbol)
-    report.checks.append(DataQualityCheck("data_exists", "pass", f"Found data for {total_symbols} symbols"))
+    checks.append(DataQualityCheck("data_exists", "pass", f"Found data for {total_symbols} symbols"))
 
     for symbol, candles in candles_by_symbol.items():
         if not candles:
-            report.checks.append(DataQualityCheck(
+            checks.append(DataQualityCheck(
                 "empty_data", "warn", "No candles for symbol",
                 symbol=symbol,
             ))
-            report.warned += 1
+            warned += 1
             continue
 
         closes = np.array([getattr(c, "close", 0) or 0 for c in candles])
         volumes = np.array([getattr(c, "volume", 0) or 0 for c in candles])
 
         if len(closes) < 2:
-            report.checks.append(DataQualityCheck(
+            checks.append(DataQualityCheck(
                 "insufficient_data", "warn", f"Only {len(closes)} candles",
                 symbol=symbol,
             ))
-            report.warned += 1
+            warned += 1
             continue
 
         returns = np.diff(closes) / closes[:-1]
@@ -89,32 +91,33 @@ def run_data_quality_checks(
                 consecutive_zeros = 0
 
         if max_gap > 5:
-            report.checks.append(DataQualityCheck(
+            checks.append(DataQualityCheck(
                 "gap_detected", "warn", f"Up to {max_gap} consecutive identical closes",
                 symbol=symbol,
             ))
-            report.warned += 1
+            warned += 1
 
         max_ret = np.max(np.abs(returns)) * 100 if len(returns) > 0 else 0
         if max_ret > 50:
-            report.checks.append(DataQualityCheck(
+            checks.append(DataQualityCheck(
                 "outlier_detected", "warn", f"Max daily return {max_ret:.1f}% exceeds 50% threshold",
                 symbol=symbol,
             ))
-            report.warned += 1
+            warned += 1
 
         zero_vol = np.sum(volumes <= 0) if len(volumes) > 0 else 0
         if zero_vol > 0:
-            report.checks.append(DataQualityCheck(
+            checks.append(DataQualityCheck(
                 "zero_volume", "warn", f"{zero_vol} candles with zero volume (stale data)",
                 symbol=symbol,
             ))
-            report.warned += 1
+            warned += 1
 
-    report.passed = total_symbols
-    report.checks.append(DataQualityCheck(
-        "summary", "pass" if report.warned == 0 and report.failed == 0 else "warn",
-        f"Checked {total_symbols} symbols: {report.passed} pass, {report.warned} warn, {report.failed} fail",
+    passed = total_symbols
+    summary_status = "pass" if warned == 0 and failed == 0 else "warn"
+    checks.append(DataQualityCheck(
+        "summary", summary_status,
+        f"Checked {total_symbols} symbols: {passed} pass, {warned} warn, {failed} fail",
     ))
 
-    return report
+    return DataQualityReport(checks=checks, passed=passed, warned=warned, failed=failed)

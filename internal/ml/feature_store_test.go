@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestNewFeatureStore(t *testing.T) {
@@ -97,9 +98,9 @@ func TestFeatureStorePush(t *testing.T) {
 
 	// Push new data
 	fs.Push(strategy.Candle{
-		Close:  100.5,
-		High:   100.8,
-		Low:    100.2,
+		Close:  types.PriceFromFloat(100.5),
+		High:   types.PriceFromFloat(100.8),
+		Low:    types.PriceFromFloat(100.2),
 		Volume: 1200,
 		Symbol: "TEST",
 		Time:   time.Now(),

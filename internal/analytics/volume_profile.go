@@ -4,14 +4,16 @@ import (
 	"math"
 	"sort"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type VolumeLevel struct {
-	Price      float64
-	BuyVolume  float64
-	SellVolume float64
+	Price       types.Price
+	BuyVolume   float64
+	SellVolume  float64
 	TotalVolume float64
-	Delta      float64
+	Delta       float64
 }
 
 type VolumeProfile struct {
@@ -52,7 +54,7 @@ func ComputeVolumeProfile(prices []float64, volumes []float64, sides []uint8, nu
 
 	levels := make([]VolumeLevel, numBins)
 	for i := range levels {
-		levels[i].Price = minPrice + float64(i)*binSize + binSize/2
+		levels[i].Price = types.FromFloat64(minPrice + float64(i)*binSize + binSize/2)
 	}
 
 	if len(volumes) == len(prices) && len(sides) == len(prices) {
@@ -96,7 +98,7 @@ func ComputeVolumeProfile(prices []float64, volumes []float64, sides []uint8, nu
 		vp.TotalVolume += l.TotalVolume
 		if l.TotalVolume > maxVol {
 			maxVol = l.TotalVolume
-			vp.POC = l.Price
+			vp.POC = l.Price.Float64()
 		}
 	}
 
@@ -161,7 +163,7 @@ func computeValueArea(levels []VolumeLevel, areaPct float64, maxVol float64) (fl
 		maxIdx = minIdx
 	}
 
-	return levels[maxIdx].Price, levels[minIdx].Price
+	return levels[maxIdx].Price.Float64(), levels[minIdx].Price.Float64()
 }
 
 type ValueAreaLevels struct {

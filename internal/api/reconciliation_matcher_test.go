@@ -10,7 +10,7 @@ import (
 )
 
 func makeExec(id string, symbol string, side string, qty, price float64, t time.Time) db.TradeExecution {
-	return db.TradeExecution{ID: id, Symbol: symbol, Side: side, Quantity: qty, Price: price, ExecutedAt: t}
+	return db.TradeExecution{ID: id, Symbol: symbol, Side: side, Quantity: qty, Price: types.FromFloat64(price), ExecutedAt: t}
 }
 
 func makeFill(symbol string, side broker.OrderSide, qty float64, price types.Price, t time.Time) broker.TradeFill {

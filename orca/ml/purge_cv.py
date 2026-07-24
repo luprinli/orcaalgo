@@ -21,7 +21,7 @@ from orca.ml.config import CV_EMBARGO_PCT, CV_N_SPLITS
 logger = logging.getLogger("orca.ml.purge_cv")
 
 
-@dataclass
+@dataclass(frozen=True)
 class PurgedFold:
     train_indices: np.ndarray
     test_indices: np.ndarray
@@ -31,7 +31,7 @@ class PurgedFold:
     test_end: datetime | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class PurgedKFold:
     """Purged K-Fold cross-validator for time-series data.
 

@@ -24,14 +24,14 @@ type AlpacaAdapter struct {
 }
 
 type alpacaOrderRequest struct {
-	Symbol      string  `json:"symbol"`
-	Qty         float64 `json:"qty,omitempty"`
-	Notional    float64 `json:"notional,omitempty"`
-	Side        string  `json:"side"`
-	Type        string  `json:"type"`
-	TimeInForce string  `json:"time_in_force"`
-	LimitPrice  float64 `json:"limit_price,omitempty"`
-	StopPrice   float64 `json:"stop_price,omitempty"`
+	Symbol      string      `json:"symbol"`
+	Qty         float64     `json:"qty,omitempty"`
+	Notional    float64     `json:"notional,omitempty"`
+	Side        string      `json:"side"`
+	Type        string      `json:"type"`
+	TimeInForce string      `json:"time_in_force"`
+	LimitPrice  types.Price `json:"limit_price,omitempty"`
+	StopPrice   types.Price `json:"stop_price,omitempty"`
 }
 
 type alpacaOrder struct {
@@ -168,10 +168,10 @@ func (a *AlpacaAdapter) PlaceOrder(ctx context.Context, req *broker.OrderRequest
 	}
 
 	if req.Type == broker.Limit || req.Type == broker.Stop {
-		alpacaReq.LimitPrice = req.LimitPrice.Float64()
+		alpacaReq.LimitPrice = req.LimitPrice
 	}
 	if req.Type == broker.Stop {
-		alpacaReq.StopPrice = req.StopPrice.Float64()
+		alpacaReq.StopPrice = req.StopPrice
 	}
 
 	data, err := a.doRequest(ctx, "POST", "/v2/orders", alpacaReq)

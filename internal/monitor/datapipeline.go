@@ -7,6 +7,7 @@ import (
 
 	"github.com/lee-econ/orca-core/internal/analytics"
 	"github.com/lee-econ/orca-core/internal/ingest"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type DataPipeline struct {
@@ -58,7 +59,7 @@ func (p *DataPipeline) drainAndBroadcast() {
 		drained++
 		p.tickCount++
 
-		price := float64(tick.PriceRaw) / 100_000.0
+		price := types.PriceFromInt64(int64(tick.PriceRaw))
 		volume := float64(tick.VolumeRaw)
 
 		side := p.classifier.Classify(price, "")

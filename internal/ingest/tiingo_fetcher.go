@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type TiingoDataFetcher struct {
@@ -92,10 +94,10 @@ func (f *TiingoDataFetcher) FetchCandles(ctx context.Context, ticker string, sta
 		}
 		candles = append(candles, CandleData{
 			Time:   t,
-			Open:   c.Open,
-			High:   c.High,
-			Low:    c.Low,
-			Close:  c.Close,
+			Open:   types.FromFloat64(c.Open),
+			High:   types.FromFloat64(c.High),
+			Low:    types.FromFloat64(c.Low),
+			Close:  types.FromFloat64(c.Close),
 			Volume: c.Volume,
 		})
 	}

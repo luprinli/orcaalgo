@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/ml"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type passthroughPredictor struct{}
@@ -20,11 +21,11 @@ func TestReplayParity_Deterministic(t *testing.T) {
 	eng := NewLiveEngine()
 
 	ticks := []SyntheticTick{
-		{TimestampMS: 0, Price: 100.0, Bid: 99.99, Ask: 100.01, Volume: 100, Symbol: "TEST"},
-		{TimestampMS: 500, Price: 100.5, Bid: 100.49, Ask: 100.51, Volume: 200, Symbol: "TEST"},
-		{TimestampMS: 1000, Price: 101.0, Bid: 100.99, Ask: 101.01, Volume: 150, Symbol: "TEST"},
-		{TimestampMS: 1500, Price: 100.8, Bid: 100.79, Ask: 100.81, Volume: 300, Symbol: "TEST"},
-		{TimestampMS: 2000, Price: 101.2, Bid: 101.19, Ask: 101.21, Volume: 250, Symbol: "TEST"},
+		{TimestampMS: 0, Price: types.FromFloat64(100.0), Bid: types.FromFloat64(99.99), Ask: types.FromFloat64(100.01), Volume: 100, Symbol: "TEST"},
+		{TimestampMS: 500, Price: types.FromFloat64(100.5), Bid: types.FromFloat64(100.49), Ask: types.FromFloat64(100.51), Volume: 200, Symbol: "TEST"},
+		{TimestampMS: 1000, Price: types.FromFloat64(101.0), Bid: types.FromFloat64(100.99), Ask: types.FromFloat64(101.01), Volume: 150, Symbol: "TEST"},
+		{TimestampMS: 1500, Price: types.FromFloat64(100.8), Bid: types.FromFloat64(100.79), Ask: types.FromFloat64(100.81), Volume: 300, Symbol: "TEST"},
+		{TimestampMS: 2000, Price: types.FromFloat64(101.2), Bid: types.FromFloat64(101.19), Ask: types.FromFloat64(101.21), Volume: 250, Symbol: "TEST"},
 	}
 
 	cfg := ReplayConfig{
@@ -77,9 +78,9 @@ func TestReplayParity_WithML(t *testing.T) {
 		price := 100.0 + float64(i)*0.1
 		ticks[i] = SyntheticTick{
 			TimestampMS: ts + int64(i*1000),
-			Price:       price,
-			Bid:         price - 0.01,
-			Ask:         price + 0.01,
+			Price:       types.FromFloat64(price),
+			Bid:         types.FromFloat64(price - 0.01),
+			Ask:         types.FromFloat64(price + 0.01),
 			Volume:      500,
 			Symbol:      "TEST",
 		}

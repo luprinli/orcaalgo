@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type YahooDataFetcher struct {
@@ -73,17 +75,17 @@ func (f *YahooDataFetcher) FetchCandles(ctx context.Context, ticker string, star
 	for i, ts := range r.Timestamp {
 		candles[i] = CandleData{
 			Time:   time.Unix(ts, 0).UTC(),
-			Open:   safeIndex(quotes.Open, i),
-			High:   safeIndex(quotes.High, i),
-			Low:    safeIndex(quotes.Low, i),
-			Close:  safeIndex(quotes.Close, i),
+			Open:   types.FromFloat64(safeIndex(quotes.Open, i)),
+			High:   types.FromFloat64(safeIndex(quotes.High, i)),
+			Low:    types.FromFloat64(safeIndex(quotes.Low, i)),
+			Close:  types.FromFloat64(safeIndex(quotes.Close, i)),
 			Volume: safeIndex(quotes.Volume, i),
 		}
 	}
 
 	cleaned := make([]CandleData, 0, len(candles))
 	for _, c := range candles {
-		if c.Open == 0 && c.Close == 0 {
+		if c.Open.IsZero() && c.Close.IsZero() {
 			continue
 		}
 		cleaned = append(cleaned, c)

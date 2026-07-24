@@ -3,15 +3,17 @@ package ml
 import (
 	"math"
 	"testing"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestBuildExitFeatures(t *testing.T) {
 	ctx := ExitContext{
-		EntryPrice:     100.0,
-		CurrentPrice:   102.0,
-		CurrentStop:    98.0,
-		HighSinceEntry: 103.0,
-		LowSinceEntry:  97.0,
+		EntryPrice:     types.FromFloat64(100.0),
+		CurrentPrice:   types.FromFloat64(102.0),
+		CurrentStop:    types.FromFloat64(98.0),
+		HighSinceEntry: types.FromFloat64(103.0),
+		LowSinceEntry:  types.FromFloat64(97.0),
 		BarsSinceEntry: 5,
 		ATR:            1.0,
 		VolAtEntry:     0.01,
@@ -51,11 +53,11 @@ func TestBuildExitFeatures(t *testing.T) {
 
 func TestBuildExitFeaturesLosingTrade(t *testing.T) {
 	ctx := ExitContext{
-		EntryPrice:     100.0,
-		CurrentPrice:   98.0,
-		CurrentStop:    97.0,
-		HighSinceEntry: 101.0,
-		LowSinceEntry:  97.0,
+		EntryPrice:     types.FromFloat64(100.0),
+		CurrentPrice:   types.FromFloat64(98.0),
+		CurrentStop:    types.FromFloat64(97.0),
+		HighSinceEntry: types.FromFloat64(101.0),
+		LowSinceEntry:  types.FromFloat64(97.0),
 		BarsSinceEntry: 10,
 		ATR:            1.0,
 		VolAtEntry:     0.01,
@@ -114,12 +116,12 @@ func TestExitOrchestratorComputeNewStop(t *testing.T) {
 	eo.Disable()
 
 	ctx := ExitContext{
-		EntryPrice:   100.0,
-		CurrentPrice: 102.0,
+		EntryPrice:   types.FromFloat64(100.0),
+		CurrentPrice: types.FromFloat64(102.0),
 		ATR:          1.0,
 	}
 
-	newStop := eo.ComputeNewStop("BUY", 100.0, 102.0, 1.0, ctx)
+	newStop := eo.ComputeNewStop("BUY", types.FromFloat64(100.0), types.FromFloat64(102.0), 1.0, ctx)
 	// With disabled model: base_multiplier=2.0, stop = 102 - 2*1 = 100
 	if newStop > 102.0 || newStop < 80.0 {
 		t.Errorf("unexpected stop price: %f", newStop)

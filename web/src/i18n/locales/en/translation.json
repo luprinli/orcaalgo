@@ -688,6 +688,8 @@
   "auth": {
     "login": "Login",
     "register": "Register",
+    "username": "Username",
+    "invalidCredentials": "Invalid credentials",
     "forgotPassword": "Forgot Password",
     "resetPassword": "Reset Password",
     "email": "Email",

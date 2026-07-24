@@ -81,10 +81,10 @@ func (a *IBKRAdapter) PlaceOrder(ctx context.Context, req *broker.OrderRequest) 
 		Tif:       "DAY",
 	}
 	if req.Type == broker.Limit {
-		ibReq.Price = req.LimitPrice.Float64()
+		ibReq.Price = req.LimitPrice
 	}
 	if req.Type == broker.Stop {
-		ibReq.AuxPrice = req.StopPrice.Float64()
+		ibReq.AuxPrice = req.StopPrice
 	}
 	switch req.TimeInForce {
 	case broker.GTC:
@@ -292,7 +292,7 @@ func (a *IBKRAdapter) PrepareOrder(ctx context.Context, req *broker.OrderRequest
 		Tif:       "DAY",
 	}
 	if req.Type == broker.Limit {
-		ibReq.Price = req.LimitPrice.Float64()
+		ibReq.Price = req.LimitPrice
 	}
 
 	respBody, err := a.client.request(ctx, "POST", "/iserver/account/"+a.cfg.AccountID+"/orders", map[string]interface{}{

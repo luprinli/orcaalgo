@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type RestClient struct {
@@ -90,16 +92,16 @@ func (c *RestClient) request(ctx context.Context, method, path string, body inte
 }
 
 type ibkrOrderRequest struct {
-	AcctID     string  `json:"acctId"`
-	Conid      int     `json:"conid"`
-	SecType    string  `json:"secType"`
-	OrderType  string  `json:"orderType"`
-	Side       string  `json:"side"`
-	Quantity   float64 `json:"quantity"`
-	Price      float64 `json:"price,omitempty"`
-	AuxPrice   float64 `json:"auxPrice,omitempty"`
-	Tif        string  `json:"tif"`
-	OutsideRTH bool    `json:"outsideRTH"`
+	AcctID     string      `json:"acctId"`
+	Conid      int         `json:"conid"`
+	SecType    string      `json:"secType"`
+	OrderType  string      `json:"orderType"`
+	Side       string      `json:"side"`
+	Quantity   float64     `json:"quantity"`
+	Price      types.Price `json:"price,omitempty"`
+	AuxPrice   types.Price `json:"auxPrice,omitempty"`
+	Tif        string      `json:"tif"`
+	OutsideRTH bool        `json:"outsideRTH"`
 }
 
 type ibkrOrderResponse struct {

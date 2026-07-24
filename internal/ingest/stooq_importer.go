@@ -178,10 +178,10 @@ func (s *StooqImporter) bulkUpsert(ctx context.Context, symbolID int32, ticker, 
 
 	rows := make([][]interface{}, len(candles))
 	for i, c := range candles {
-		openRaw := int64(c.Open * PRICE_SCALE_I)
-		highRaw := int64(c.High * PRICE_SCALE_I)
-		lowRaw := int64(c.Low * PRICE_SCALE_I)
-		closeRaw := int64(c.Close * PRICE_SCALE_I)
+		openRaw := c.Open.Int64()
+		highRaw := c.High.Int64()
+		lowRaw := c.Low.Int64()
+		closeRaw := c.Close.Int64()
 		volume := int64(c.Volume)
 
 		rows[i] = []interface{}{
@@ -207,7 +207,7 @@ func (s *StooqImporter) bulkUpsert(ctx context.Context, symbolID int32, ticker, 
 	if err != nil {
 		cleanCount := 0
 		for _, c := range candles {
-			if c.Time.IsZero() || c.Close <= 0 {
+			if c.Time.IsZero() || c.Close.IsZero() {
 				continue
 			}
 			cleanCount++

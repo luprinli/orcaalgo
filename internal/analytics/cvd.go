@@ -3,6 +3,8 @@ package analytics
 import (
 	"sync"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type TickSide uint8
@@ -14,7 +16,7 @@ const (
 
 type TickClassifier struct {
 	mu          sync.Mutex
-	prevPrice   float64
+	prevPrice   types.Price
 	prevSymbol  string
 	prevSide    TickSide
 }
@@ -23,15 +25,15 @@ func NewTickClassifier() *TickClassifier {
 	return &TickClassifier{}
 }
 
-func (c *TickClassifier) Classify(price float64, symbol string) TickSide {
+func (c *TickClassifier) Classify(price types.Price, symbol string) TickSide {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	var side TickSide
 	switch {
-	case price > c.prevPrice:
+	case price.Float64() > c.prevPrice.Float64():
 		side = TickBuy
-	case price < c.prevPrice:
+	case price.Float64() < c.prevPrice.Float64():
 		side = TickSell
 	default:
 		side = c.prevSide
@@ -72,7 +74,7 @@ func NewDeltaAccumulator(barDuration time.Duration) *DeltaAccumulator {
 	}
 }
 
-func (a *DeltaAccumulator) AddTick(timestamp time.Time, price float64, volume float64, side TickSide) {
+func (a *DeltaAccumulator) AddTick(timestamp time.Time, price types.Price, volume float64, side TickSide) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -86,14 +88,14 @@ func (a *DeltaAccumulator) AddTick(timestamp time.Time, price float64, volume fl
 	}
 
 	if a.currentBar.Open == 0 {
-		a.currentBar.Open = price
+		a.currentBar.Open = price.Float64()
 	}
-	a.currentBar.Close = price
-	if price > a.currentBar.High || a.currentBar.High == 0 {
-		a.currentBar.High = price
+	a.currentBar.Close = price.Float64()
+	if price.Float64() > a.currentBar.High || a.currentBar.High == 0 {
+		a.currentBar.High = price.Float64()
 	}
-	if price < a.currentBar.Low || a.currentBar.Low == 0 {
-		a.currentBar.Low = price
+	if price.Float64() < a.currentBar.Low || a.currentBar.Low == 0 {
+		a.currentBar.Low = price.Float64()
 	}
 
 	if side == TickBuy {
@@ -175,7 +177,7 @@ const (
 type DivergenceSignal struct {
 	Type       DivergenceType
 	BarTime    time.Time
-	Price      float64
+	Price      types.Price
 	CVDValue   float64
 	Confidence float64
 }
@@ -191,11 +193,12 @@ func NewDivergenceDetector(windowSize int) *DivergenceDetector {
 	return &DivergenceDetector{windowSize: windowSize}
 }
 
-func (d *DivergenceDetector) Detect(price, cvdValue float64) *DivergenceSignal {
+func (d *DivergenceDetector) Detect(price types.Price, cvdValue float64) *DivergenceSignal {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	d.prices = append(d.prices, price)
+	priceF := price.Float64()
+	d.prices = append(d.prices, priceF)
 	d.cvdValues = append(d.cvdValues, cvdValue)
 	if len(d.prices) > d.windowSize {
 		d.prices = d.prices[len(d.prices)-d.windowSize:]
@@ -217,6 +220,7 @@ func (d *DivergenceDetector) Detect(price, cvdValue float64) *DivergenceSignal {
 	if currPrice > prevPrice && currCVD < prevCVD {
 		return &DivergenceSignal{
 			Type:       DivExhaustion,
+			Price:      price,
 			Confidence: (currPrice - prevPrice) / prevPrice * 100,
 		}
 	}
@@ -224,6 +228,7 @@ func (d *DivergenceDetector) Detect(price, cvdValue float64) *DivergenceSignal {
 	if currPrice < prevPrice && currCVD > prevCVD {
 		return &DivergenceSignal{
 			Type:       DivAbsorption,
+			Price:      price,
 			Confidence: (prevPrice - currPrice) / currPrice * 100,
 		}
 	}

@@ -1,14 +1,18 @@
 package ml
 
-import "time"
+import (
+	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
+)
 
 // ExitContext captures the trade state needed for exit model feature computation.
 type ExitContext struct {
-	EntryPrice     float64
-	CurrentPrice   float64
-	CurrentStop    float64
-	HighSinceEntry float64
-	LowSinceEntry  float64
+	EntryPrice     types.Price
+	CurrentPrice   types.Price
+	CurrentStop    types.Price
+	HighSinceEntry types.Price
+	LowSinceEntry  types.Price
 	BarsSinceEntry int
 	ATR            float64
 	VolAtEntry     float64
@@ -28,11 +32,17 @@ const ExitFeaturesDim = 12
 func BuildExitFeatures(ctx ExitContext) [ExitFeaturesDim]float64 {
 	var f [ExitFeaturesDim]float64
 
-	if ctx.EntryPrice > 0 && ctx.ATR > 0 {
-		atrPct := ctx.ATR / ctx.EntryPrice
-		pnl := (ctx.CurrentPrice - ctx.EntryPrice) / ctx.EntryPrice
+	entryP := ctx.EntryPrice.Float64()
+	currP := ctx.CurrentPrice.Float64()
+	stopP := ctx.CurrentStop.Float64()
+	highP := ctx.HighSinceEntry.Float64()
+	lowP := ctx.LowSinceEntry.Float64()
+
+	if entryP > 0 && ctx.ATR > 0 {
+		atrPct := ctx.ATR / entryP
+		pnl := (currP - entryP) / entryP
 		f[0] = pnl / max(atrPct, 1e-6)
-		f[1] = (ctx.CurrentStop - ctx.EntryPrice) / ctx.EntryPrice / max(atrPct, 1e-6)
+		f[1] = (stopP - entryP) / entryP / max(atrPct, 1e-6)
 	}
 	f[2] = float64(ctx.BarsSinceEntry) / 100.0
 	if ctx.VolAtEntry > 1e-6 {
@@ -42,10 +52,10 @@ func BuildExitFeatures(ctx ExitContext) [ExitFeaturesDim]float64 {
 	f[5] = ctx.CVDTrend
 	f[6] = ctx.VolumeTrend
 	f[7] = ctx.ADX / 50.0
-	if ctx.EntryPrice > 0 && ctx.ATR > 0 {
-		atrPct := ctx.ATR / ctx.EntryPrice
-		mae := (ctx.EntryPrice - ctx.LowSinceEntry) / ctx.EntryPrice
-		mfe := (ctx.HighSinceEntry - ctx.EntryPrice) / ctx.EntryPrice
+	if entryP > 0 && ctx.ATR > 0 {
+		atrPct := ctx.ATR / entryP
+		mae := (entryP - lowP) / entryP
+		mfe := (highP - entryP) / entryP
 		f[8] = mae / max(atrPct, 1e-6)
 		f[9] = mfe / max(atrPct, 1e-6)
 	}

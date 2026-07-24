@@ -123,7 +123,14 @@ class WSConnectionManager {
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = import.meta.env.DEV ? 'localhost:8080' : window.location.host
-    const token = localStorage.getItem('token') || ''
+    const raw = localStorage.getItem('orca_auth') || ''
+    let token = ''
+    try {
+      const parsed = JSON.parse(raw)
+      token = parsed.token || parsed.access_token || raw
+    } catch {
+      token = raw
+    }
     const wsURL = `${protocol}//${host}/ws${token ? '?token=' + token : ''}`
     const ws = new WebSocket(wsURL)
 

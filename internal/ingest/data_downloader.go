@@ -79,10 +79,10 @@ func (d *DataDownloader) DownloadSymbols(ctx context.Context, tickers []string, 
 
 func (d *DataDownloader) upsertCandles(ctx context.Context, ticker, timeframe string, candles []CandleData) (stored int, skipped int, err error) {
 	for _, c := range candles {
-		openRaw := int64(c.Open * PRICE_SCALE_I)
-		highRaw := int64(c.High * PRICE_SCALE_I)
-		lowRaw := int64(c.Low * PRICE_SCALE_I)
-		closeRaw := int64(c.Close * PRICE_SCALE_I)
+		openRaw := c.Open.Int64()
+		highRaw := c.High.Int64()
+		lowRaw := c.Low.Int64()
+		closeRaw := c.Close.Int64()
 		volume := int64(c.Volume)
 
 		tag, execErr := d.pool.Exec(ctx,

@@ -128,10 +128,10 @@ func (f AssetClassFilter) Apply(s db.Symbol) bool {
 	if eff.MinMarketCap > 0 && s.MarketCap > 0 && s.MarketCap < eff.MinMarketCap {
 		return false
 	}
-	if eff.MinPrice > 0 && s.LastPrice > 0 && s.LastPrice < eff.MinPrice {
+	if eff.MinPrice > 0 && !s.LastPrice.IsZero() && s.LastPrice.Float64() < eff.MinPrice {
 		return false
 	}
-	if eff.MaxPrice > 0 && s.LastPrice > eff.MaxPrice {
+	if eff.MaxPrice > 0 && s.LastPrice.Float64() > eff.MaxPrice {
 		return false
 	}
 	if eff.MinATRPercent > 0 && s.LastATRPct > 0 && s.LastATRPct < eff.MinATRPercent {

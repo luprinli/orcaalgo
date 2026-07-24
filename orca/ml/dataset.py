@@ -53,7 +53,7 @@ class TrainingSample:
         return d
 
 
-@dataclass
+@dataclass(frozen=True)
 class FeatureDataset:
     """Container for a complete training dataset."""
     samples: list[TrainingSample] = field(default_factory=list)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestMLEndToEndPipeline(t *testing.T) {
@@ -44,18 +45,18 @@ func TestMLEndToEndPipeline(t *testing.T) {
 
 	candle := strategy.Candle{
 		Time:   ts,
-		Open:   100.0,
-		High:   100.5,
-		Low:    99.5,
-		Close:  100.0,
+		Open:   types.PriceFromFloat(100.0),
+		High:   types.PriceFromFloat(100.5),
+		Low:    types.PriceFromFloat(99.5),
+		Close:  types.PriceFromFloat(100.0),
 		Volume: 1000.0,
 		Symbol: "TEST",
 	}
 
 	exitCtx := ExitContext{
-		EntryPrice:     100.0,
+		EntryPrice:     types.FromFloat64(100.0),
 		CurrentPrice:   candle.Close,
-		CurrentStop:    98.0,
+		CurrentStop:    types.FromFloat64(98.0),
 		HighSinceEntry: candle.High,
 		LowSinceEntry:  candle.Low,
 		BarsSinceEntry: 10,
@@ -100,10 +101,10 @@ func TestPointInTimeFeatureIntegrity(t *testing.T) {
 
 	fs.Push(strategy.Candle{
 		Time:   ts.Add(time.Minute),
-		Open:   closes[60],
-		High:   closes[60] + 0.5,
-		Low:    closes[60] - 0.5,
-		Close:  closes[60],
+		Open:   types.PriceFromFloat(closes[60]),
+		High:   types.PriceFromFloat(closes[60] + 0.5),
+		Low:    types.PriceFromFloat(closes[60] - 0.5),
+		Close:  types.PriceFromFloat(closes[60]),
 		Volume: 1000,
 		Symbol: "TEST",
 	})

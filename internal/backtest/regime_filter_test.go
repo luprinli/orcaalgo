@@ -3,6 +3,8 @@ package backtest
 import (
 	"testing"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestFilterByRegime_EmptyTrades(t *testing.T) {
@@ -22,9 +24,9 @@ func TestFilterByRegime_EmptyTrades(t *testing.T) {
 func TestFilterByRegime_AllSameRegime(t *testing.T) {
 	now := time.Now()
 	trades := []Trade{
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 105, PnL: 50, HMMRegime: 1},
-		{Symbol: "SPY", Side: "SELL", Quantity: 10, EntryPrice: 105, ExitPrice: 103, PnL: 20, HMMRegime: 1},
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 98, PnL: -20, HMMRegime: 1},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(105), PnL: 50, HMMRegime: 1},
+		{Symbol: "SPY", Side: "SELL", Quantity: 10, EntryPrice: types.PriceFromFloat(105), ExitPrice: types.PriceFromFloat(103), PnL: 20, HMMRegime: 1},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(98), PnL: -20, HMMRegime: 1},
 	}
 	equity := []EquityPoint{
 		{Time: now, Value: 100000, Regime: 1},
@@ -42,7 +44,7 @@ func TestFilterByRegime_AllSameRegime(t *testing.T) {
 
 func TestFilterByRegime_NoTradesForRegime(t *testing.T) {
 	trades := []Trade{
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 105, PnL: 50, HMMRegime: 0},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(105), PnL: 50, HMMRegime: 0},
 	}
 	result := &BacktestResult{Trades: trades, EquityCurve: []EquityPoint{}, NumTrades: 1}
 
@@ -55,10 +57,10 @@ func TestFilterByRegime_NoTradesForRegime(t *testing.T) {
 func TestFilterByRegime_MixedRegimes(t *testing.T) {
 	now := time.Now()
 	trades := []Trade{
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 105, PnL: 50, HMMRegime: 0},
-		{Symbol: "QQQ", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 108, PnL: 80, HMMRegime: 1},
-		{Symbol: "AAPL", Side: "SELL", Quantity: 10, EntryPrice: 100, ExitPrice: 95, PnL: 50, HMMRegime: 0},
-		{Symbol: "SPY", Side: "SELL", Quantity: 10, EntryPrice: 100, ExitPrice: 97, PnL: 30, HMMRegime: 1},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(105), PnL: 50, HMMRegime: 0},
+		{Symbol: "QQQ", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(108), PnL: 80, HMMRegime: 1},
+		{Symbol: "AAPL", Side: "SELL", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(95), PnL: 50, HMMRegime: 0},
+		{Symbol: "SPY", Side: "SELL", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(97), PnL: 30, HMMRegime: 1},
 	}
 	equity := []EquityPoint{
 		{Time: now, Value: 100000, Regime: 0},
@@ -81,7 +83,7 @@ func TestFilterByRegime_MixedRegimes(t *testing.T) {
 }
 
 func TestFilterByRegime_InvalidRegime(t *testing.T) {
-	trades := []Trade{{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 105, PnL: 50, HMMRegime: 0}}
+	trades := []Trade{{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(105), PnL: 50, HMMRegime: 0}}
 	result := &BacktestResult{Trades: trades, EquityCurve: []EquityPoint{EquityPoint{Time: time.Now(), Value: 100000, Regime: 0}}}
 
 	filtered := FilterByRegime(result, 5)
@@ -92,10 +94,10 @@ func TestFilterByRegime_InvalidRegime(t *testing.T) {
 
 func TestFilterByRegime_WinRate(t *testing.T) {
 	trades := []Trade{
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 105, PnL: 50, HMMRegime: 0},
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 98, PnL: -20, HMMRegime: 0},
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 107, PnL: 70, HMMRegime: 0},
-		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: 100, ExitPrice: 103, PnL: 30, HMMRegime: 0},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(105), PnL: 50, HMMRegime: 0},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(98), PnL: -20, HMMRegime: 0},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(107), PnL: 70, HMMRegime: 0},
+		{Symbol: "SPY", Side: "BUY", Quantity: 10, EntryPrice: types.PriceFromFloat(100), ExitPrice: types.PriceFromFloat(103), PnL: 30, HMMRegime: 0},
 	}
 	result := &BacktestResult{
 		Trades:      trades,

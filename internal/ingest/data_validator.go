@@ -27,19 +27,19 @@ func ValidateCandles(candles []CandleData, symbol string, expectedFrequency stri
 	}
 
 	for i, c := range candles {
-		if math.IsNaN(c.Open) || math.IsNaN(c.High) || math.IsNaN(c.Low) || math.IsNaN(c.Close) || math.IsNaN(c.Volume) {
+		if math.IsNaN(c.Open.Float64()) || math.IsNaN(c.High.Float64()) || math.IsNaN(c.Low.Float64()) || math.IsNaN(c.Close.Float64()) || math.IsNaN(c.Volume) {
 			r.NullRows++
 			continue
 		}
-		if c.Open <= 0 || c.High <= 0 || c.Low <= 0 || c.Close <= 0 {
+		if c.Open.IsZero() || c.High.IsZero() || c.Low.IsZero() || c.Close.IsZero() {
 			r.NullRows++
 			continue
 		}
 
-		if c.High < c.Open || c.High < c.Close || c.Low > c.Open || c.Low > c.Close {
+		if c.High.Float64() < c.Open.Float64() || c.High.Float64() < c.Close.Float64() || c.Low.Float64() > c.Open.Float64() || c.Low.Float64() > c.Close.Float64() {
 			r.OHLCErrors++
 		}
-		if c.High < c.Low {
+		if c.High.Float64() < c.Low.Float64() {
 			r.OHLCErrors++
 		}
 		if c.Volume < 0 {

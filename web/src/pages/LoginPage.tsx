@@ -16,7 +16,7 @@ export default function LoginPage({ onLogin }: { onLogin: (t: string) => void })
       })
       const d = await r.json()
       if (d.access_token) {
-        onLogin(d.access_token)
+        onLogin(JSON.stringify({ token: d.access_token, username: d.username, expires_at: Date.now() + 86400000 }))
       } else {
         setErr(t('auth:invalidCredentials', 'Invalid credentials'))
       }

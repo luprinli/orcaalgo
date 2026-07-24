@@ -112,7 +112,7 @@ func (s *Seeder) seedMarketData(ctx context.Context, ticks []MarketTickSeed) err
 	for _, t := range ticks {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO market_ticks (time, symbol_id, price_raw, volume_raw, bid_price, ask_price, bid_size, ask_size) SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM symbols WHERE ticker=$2)",
-			t.Time, t.Symbol, int64(t.Price*100000), int64(t.Volume), int64(t.BidPrice*100000), int64(t.AskPrice*100000), int64(t.BidSize), int64(t.AskSize)); err != nil { return fmt.Errorf("tick %s: %w", t.Symbol, err) }
+			t.Time, t.Symbol, t.Price.Int64(), int64(t.Volume), t.BidPrice.Int64(), t.AskPrice.Int64(), int64(t.BidSize), int64(t.AskSize)); err != nil { return fmt.Errorf("tick %s: %w", t.Symbol, err) }
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func (s *Seeder) seedTradeHistory(ctx context.Context, trades []TradeHistorySeed
 	for _, t := range trades {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO trade_executions (strategy_id, symbol, side, quantity, price, hmm_regime, executed_at) SELECT id, $1, $2, $3, $4, $5, $6 FROM strategies WHERE name=$7 LIMIT 1",
-			t.Symbol, t.Side, t.Quantity, t.Price, t.HMMRegime, t.Time, t.StrategyID); err != nil { return fmt.Errorf("trade %s: %w", t.Symbol, err) }
+			t.Symbol, t.Side, t.Quantity, t.Price.Int64(), t.HMMRegime, t.Time, t.StrategyID); err != nil { return fmt.Errorf("trade %s: %w", t.Symbol, err) }
 	}
 	return nil
 }
@@ -140,10 +140,10 @@ func (s *Seeder) seedCandles(ctx context.Context, candles []CandleSeed) error {
 		return nil
 	}
 	for _, c := range candles {
-		openRaw := int64(c.Open * PRICE_SCALE_F)
-		highRaw := int64(c.High * PRICE_SCALE_F)
-		lowRaw := int64(c.Low * PRICE_SCALE_F)
-		closeRaw := int64(c.Close * PRICE_SCALE_F)
+		openRaw := c.Open.Int64()
+		highRaw := c.High.Int64()
+		lowRaw := c.Low.Int64()
+		closeRaw := c.Close.Int64()
 		volume := int64(c.Volume)
 		if _, err := s.repo.pool.Exec(ctx,
 			`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume)

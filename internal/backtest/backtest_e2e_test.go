@@ -7,6 +7,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/backtest"
 	"github.com/lee-econ/orca-core/internal/model"
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func generateTestCandles(n int, startPrice float64) []strategy.Candle {
@@ -28,10 +29,10 @@ func generateTestCandles(n int, startPrice float64) []strategy.Candle {
 		open := low + (high-low)*0.35
 		candles[i] = strategy.Candle{
 			Time:   base.AddDate(0, 0, i),
-			Open:   open,
-			High:   high,
-			Low:    low,
-			Close:  price,
+			Open:   types.PriceFromFloat(open),
+			High:   types.PriceFromFloat(high),
+			Low:    types.PriceFromFloat(low),
+			Close:  types.PriceFromFloat(price),
 			Volume: float64(5000000 + i%20*100000),
 			Symbol: "TEST",
 		}
@@ -85,7 +86,7 @@ func TestE2E_ProbabilisticFill(t *testing.T) {
 				Symbol:     "TEST",
 				Side:       "BUY",
 				PnL:        5.0,
-				EntryPrice: float64(fillPrice) / 100000.0,
+				EntryPrice: types.PriceFromFloat(float64(fillPrice) / 100000.0),
 				Quantity:   100,
 			})
 		}
@@ -208,7 +209,7 @@ func TestE2E_EquityCurveValidation(t *testing.T) {
 	for _, c := range candles {
 		sig := runner.Evaluate(c, 0)
 		if sig != nil && sig.Side == "BUY" && sig.Quantity > 0 {
-			entry := c.Close
+			entry := c.Close.Float64()
 			capital -= entry * sig.Quantity * 0.001
 		}
 		if sig != nil && sig.Side == "SELL" && sig.Quantity == 0 {
@@ -248,10 +249,10 @@ func TestE2E_MetricsPipeline(t *testing.T) {
 	}
 
 	trades := []backtest.Trade{
-		{Symbol: "T", Side: "BUY", PnL: 100, Quantity: 100, EntryPrice: 450},
-		{Symbol: "T", Side: "SELL", PnL: -30, Quantity: 100, EntryPrice: 450},
-		{Symbol: "T", Side: "BUY", PnL: 200, Quantity: 100, EntryPrice: 450},
-		{Symbol: "T", Side: "SELL", PnL: -50, Quantity: 100, EntryPrice: 450},
+		{Symbol: "T", Side: "BUY", PnL: 100, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
+		{Symbol: "T", Side: "SELL", PnL: -30, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
+		{Symbol: "T", Side: "BUY", PnL: 200, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
+		{Symbol: "T", Side: "SELL", PnL: -50, Quantity: 100, EntryPrice: types.PriceFromFloat(450)},
 	}
 
 	metrics := backtest.ComputeAllMetrics(equity, trades)
@@ -281,14 +282,14 @@ func TestE2E_EmptyDataHandling(t *testing.T) {
 	}
 
 	runner2 := strategy.NewMACrossoverRunner()
-	sig2 := runner2.Evaluate(strategy.Candle{Symbol: "T", Close: -1.0}, 0)
+	sig2 := runner2.Evaluate(strategy.Candle{Symbol: "T", Close: types.PriceFromFloat(-1.0)}, 0)
 	if sig2 != nil {
 		t.Error("negative price should not produce signal")
 	}
 
 	runner3 := strategy.NewRSI2MeanReversionRunner()
 	for i := 0; i < 5; i++ {
-		sig3 := runner3.Evaluate(strategy.Candle{Symbol: "T", Close: 100.0}, 0)
+		sig3 := runner3.Evaluate(strategy.Candle{Symbol: "T", Close: types.PriceFromFloat(100.0)}, 0)
 		if sig3 != nil {
 			t.Log("unexpected signal with insufficient data")
 		}

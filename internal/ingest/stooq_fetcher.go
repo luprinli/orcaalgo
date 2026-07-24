@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type StooqFileFetcher struct {
@@ -237,10 +239,10 @@ func (f *StooqFileFetcher) readCSV(path string, start, end time.Time, ticker str
 
 		candles = append(candles, CandleData{
 			Time:   t,
-			Open:   open,
-			High:   high,
-			Low:    low,
-			Close:  close_,
+			Open:   types.FromFloat64(open),
+			High:   types.FromFloat64(high),
+			Low:    types.FromFloat64(low),
+			Close:  types.FromFloat64(close_),
 			Volume: volume,
 		})
 	}

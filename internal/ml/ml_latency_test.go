@@ -3,6 +3,8 @@ package ml
 import (
 	"testing"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func TestMetaLabelerConfigDefaults(t *testing.T) {
@@ -108,11 +110,11 @@ func TestExitOrchComputeNewStopBounds(t *testing.T) {
 	eo.Disable()
 
 	ctx := ExitContext{
-		EntryPrice:     100.0,
-		CurrentPrice:   102.0,
-		CurrentStop:    99.0,
-		HighSinceEntry: 103.0,
-		LowSinceEntry:  98.0,
+		EntryPrice:     types.FromFloat64(100.0),
+		CurrentPrice:   types.FromFloat64(102.0),
+		CurrentStop:    types.FromFloat64(99.0),
+		HighSinceEntry: types.FromFloat64(103.0),
+		LowSinceEntry:  types.FromFloat64(98.0),
 		BarsSinceEntry: 10,
 		ATR:            1.0,
 		VolAtEntry:     0.01,
@@ -123,13 +125,13 @@ func TestExitOrchComputeNewStopBounds(t *testing.T) {
 	}
 
 	longStop := eo.ComputeNewStop("BUY", ctx.EntryPrice, ctx.CurrentPrice, ctx.ATR, ctx)
-	if longStop <= ctx.EntryPrice*0.7 {
-		t.Errorf("long stop %.2f is too far below entry (floor is 80%% of entry = %.2f)", longStop, ctx.EntryPrice*0.8)
+	if longStop <= ctx.EntryPrice.Float64()*0.7 {
+		t.Errorf("long stop %.2f is too far below entry (floor is 80%% of entry = %.2f)", longStop, ctx.EntryPrice.Float64()*0.8)
 	}
 
 	shortStop := eo.ComputeNewStop("SELL", ctx.EntryPrice, ctx.CurrentPrice, ctx.ATR, ctx)
-	if shortStop >= ctx.EntryPrice*1.3 {
-		t.Errorf("short stop %.2f is too far above entry (cap is 120%% of entry = %.2f)", shortStop, ctx.EntryPrice*1.2)
+	if shortStop >= ctx.EntryPrice.Float64()*1.3 {
+		t.Errorf("short stop %.2f is too far above entry (cap is 120%% of entry = %.2f)", shortStop, ctx.EntryPrice.Float64()*1.2)
 	}
 }
 
@@ -141,11 +143,11 @@ func BenchmarkUrgencyToStopMultiplier(b *testing.B) {
 
 func BenchmarkBuildExitFeatures(b *testing.B) {
 	ctx := ExitContext{
-		EntryPrice:     100.0,
-		CurrentPrice:   102.0,
-		CurrentStop:    99.0,
-		HighSinceEntry: 103.0,
-		LowSinceEntry:  98.0,
+		EntryPrice:     types.FromFloat64(100.0),
+		CurrentPrice:   types.FromFloat64(102.0),
+		CurrentStop:    types.FromFloat64(99.0),
+		HighSinceEntry: types.FromFloat64(103.0),
+		LowSinceEntry:  types.FromFloat64(98.0),
 		BarsSinceEntry: 10,
 		ATR:            1.0,
 		VolAtEntry:     0.01,

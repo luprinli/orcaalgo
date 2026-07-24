@@ -32,11 +32,11 @@ func TestSimulateFill_Basic(t *testing.T) {
 	if fill.FillQuantity <= 0 {
 		t.Error("Expected positive fill quantity")
 	}
-	if fill.FillPrice <= 0 {
+	if fill.FillPrice.Float64() <= 0 {
 		t.Error("Expected positive fill price")
 	}
-	if fill.FillPrice < 500.0*(1-(m.SpreadBps+m.MaxSlippage)/10000.0) {
-		t.Errorf("Slippage too extreme: price=%f", fill.FillPrice)
+	if fill.FillPrice.Float64() < 500.0*(1-(m.SpreadBps+m.MaxSlippage)/10000.0) {
+		t.Errorf("Slippage too extreme: price=%f", fill.FillPrice.Float64())
 	}
 }
 
@@ -47,8 +47,8 @@ func TestSimulateFill_BUYvsSELL(t *testing.T) {
 	buy := fs.SimulateFill(1, "SPY", 500.0, 100.0, "BUY", 500.0, time.Now())
 	sell := fs.SimulateFill(2, "SPY", 500.0, 100.0, "SELL", 500.0, time.Now())
 
-	if buy.FillPrice < sell.FillPrice {
-		t.Logf("BUY price %f < SELL price %f (spread effect)", buy.FillPrice, sell.FillPrice)
+	if buy.FillPrice.Float64() < sell.FillPrice.Float64() {
+		t.Logf("BUY price %f < SELL price %f (spread effect)", buy.FillPrice.Float64(), sell.FillPrice.Float64())
 	}
 }
 
@@ -71,8 +71,8 @@ func TestSimulateFill_ExtremeSlippage(t *testing.T) {
 		if fill.FillQuantity <= 0 {
 			t.Error("Expected positive quantity even with extreme slippage")
 		}
-		if math.Abs(fill.FillPrice-500.0) > 500.0*0.05 {
-			t.Errorf("Slippage > 5%%: price=%f", fill.FillPrice)
+		if math.Abs(fill.FillPrice.Float64()-500.0) > 500.0*0.05 {
+			t.Errorf("Slippage > 5%%: price=%f", fill.FillPrice.Float64())
 		}
 	}
 }
