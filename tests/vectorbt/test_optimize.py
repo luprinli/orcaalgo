@@ -1,7 +1,5 @@
 """Tests for orca.vectorbt.optimize — parameter sweep with fallback."""
 
-import os
-import tempfile
 from pathlib import Path
 
 import pandas as pd

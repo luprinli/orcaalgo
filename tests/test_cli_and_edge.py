@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
@@ -47,6 +45,7 @@ class TestCLIValidate:
         }))
 
         from typer.testing import CliRunner
+
         from orca.cli import app
 
         runner = CliRunner()
@@ -70,6 +69,7 @@ class TestCLIValidate:
         }))
 
         from typer.testing import CliRunner
+
         from orca.cli import app
 
         runner = CliRunner()
@@ -78,6 +78,7 @@ class TestCLIValidate:
 
     def test_validate_file_not_found(self):
         from typer.testing import CliRunner
+
         from orca.cli import app
 
         runner = CliRunner()
@@ -88,6 +89,7 @@ class TestCLIValidate:
 class TestCLIPreflight:
     def test_preflight_runs(self):
         from typer.testing import CliRunner
+
         from orca.cli import app
 
         runner = CliRunner()
@@ -132,15 +134,15 @@ class TestKellyEdgeCases:
 
     def test_price_edge_cases(self):
         from orca.sizing.kelly import kelly_fraction_binary
-        import pytest
         with pytest.raises(ValueError):
             kelly_fraction_binary(0.6, 1.0, "yes")
         with pytest.raises(ValueError):
             kelly_fraction_binary(0.6, 0.0, "yes")
 
     def test_attenuators_never_produce_nan(self):
-        from orca.sizing.kelly import kelly_with_attenuators
         import math
+
+        from orca.sizing.kelly import kelly_with_attenuators
         result = kelly_with_attenuators(0.99, 0.01, "yes")
         assert not math.isnan(result.final_allocation)
         assert result.final_allocation >= 0
@@ -149,6 +151,7 @@ class TestKellyEdgeCases:
 class TestVolatilityEdgeCases:
     def test_all_zeros_vol_is_zero(self):
         import numpy as np
+
         from orca.sizing.volatility import ewma_volatility
         returns = np.zeros(100)
         vol = ewma_volatility(returns)
@@ -156,6 +159,7 @@ class TestVolatilityEdgeCases:
 
     def test_constant_positive_return(self):
         import numpy as np
+
         from orca.sizing.volatility import ewma_volatility
         returns = np.full(50, 0.01)
         vol = ewma_volatility(returns)

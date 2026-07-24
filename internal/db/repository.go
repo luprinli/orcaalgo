@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lee-econ/orca-core/internal/types"
 	"github.com/lee-econ/orca-core/pkg/temporal"
 )
 
@@ -103,7 +104,7 @@ func (r *Repository) InsertTradeExecution(ctx context.Context, t *TradeExecution
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO trade_executions (strategy_id, symbol, side, quantity, price, hmm_regime, risk_approved, consistency_multiplier, rejected_reason, broker_order_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		t.StrategyID, t.Symbol, t.Side, t.Quantity, t.Price,
+		t.StrategyID, t.Symbol, t.Side, t.Quantity, t.Price.Int64(),
 		t.HMMRegime, t.RiskApproved, t.ConsistencyMultiplier, t.RejectedReason, t.BrokerOrderID,
 	)
 	return err
@@ -141,13 +142,13 @@ func (r *Repository) LoadCandles(ctx context.Context, symbols []string, start, e
 				rowErrors++
 				continue
 			}
-			c.Open = float64(openRaw) / PRICE_SCALE_F
-			c.High = float64(highRaw) / PRICE_SCALE_F
-			c.Low = float64(lowRaw) / PRICE_SCALE_F
-			c.Close = float64(closeRaw) / PRICE_SCALE_F
-			c.Volume = float64(vol)
-			c.Symbol = sym
-			candles = append(candles, c)
+		c.Open = types.PriceFromFloat(float64(openRaw) / PRICE_SCALE_F)
+		c.High = types.PriceFromFloat(float64(highRaw) / PRICE_SCALE_F)
+		c.Low = types.PriceFromFloat(float64(lowRaw) / PRICE_SCALE_F)
+		c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
+		c.Volume = float64(vol)
+		c.Symbol = sym
+		candles = append(candles, c)
 		}
 		rows.Close()
 		if rowErrors > 0 {
@@ -188,10 +189,10 @@ func (r *Repository) LoadCandlesByTimeframe(ctx context.Context, symbols []strin
 				rowErrors++
 				continue
 			}
-			c.Open = float64(openRaw) / PRICE_SCALE_F
-			c.High = float64(highRaw) / PRICE_SCALE_F
-			c.Low = float64(lowRaw) / PRICE_SCALE_F
-			c.Close = float64(closeRaw) / PRICE_SCALE_F
+			c.Open = types.PriceFromFloat(float64(openRaw) / PRICE_SCALE_F)
+			c.High = types.PriceFromFloat(float64(highRaw) / PRICE_SCALE_F)
+			c.Low = types.PriceFromFloat(float64(lowRaw) / PRICE_SCALE_F)
+			c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
 			c.Volume = float64(vol)
 			c.Symbol = sym
 			candles = append(candles, c)
@@ -415,7 +416,7 @@ type TradeExecution struct {
 	Symbol                string
 	Side                  string
 	Quantity              float64
-	Price                 float64
+	Price                 types.Price
 	HMMRegime             int8
 	RiskApproved          bool
 	ConsistencyMultiplier float64
@@ -451,7 +452,7 @@ type Symbol struct {
 	LotSize        float64   `json:"lot_size"`
 	IsActive       bool      `json:"is_active"`
 	CreatedAt      time.Time `json:"created_at"`
-	LastPrice      float64   `json:"last_price,omitempty"`
+	LastPrice      types.Price `json:"last_price,omitempty"`
 	MarketCap      int64     `json:"market_cap,omitempty"`
 	LastVolume     int64     `json:"last_volume,omitempty"`
 	LastATRPct     float64   `json:"last_atr_pct,omitempty"`
@@ -515,10 +516,10 @@ type Credential struct {
 
 type Candle struct {
 	Time   time.Time
-	Open   float64
-	High   float64
-	Low    float64
-	Close  float64
+	Open   types.Price
+	High   types.Price
+	Low    types.Price
+	Close  types.Price
 	Volume float64
 	Symbol string
 }
@@ -786,7 +787,7 @@ func (r *Repository) LoadActiveSymbols(ctx context.Context) ([]Symbol, error) {
 	return symbols, nil
 }
 
-func (r *Repository) UpdateSymbolMetrics(ctx context.Context, symbolID int32, lastPrice float64, marketCap int64, lastVolume int64, lastATRPct float64, lastRSI float64) error {
+func (r *Repository) UpdateSymbolMetrics(ctx context.Context, symbolID int32, lastPrice types.Price, marketCap int64, lastVolume int64, lastATRPct float64, lastRSI float64) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE symbols SET market_cap=$1, last_volume=$2, last_atr_pct=$3, last_rsi=$4, metrics_updated=now()
 		 WHERE id=$5`,
@@ -1015,10 +1016,10 @@ func (r *Repository) LoadAllCandles(ctx context.Context, symbols []string, start
 		if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol, &ticker); err != nil {
 			continue
 		}
-		c.Open = float64(openRaw) / PRICE_SCALE_F
-		c.High = float64(highRaw) / PRICE_SCALE_F
-		c.Low = float64(lowRaw) / PRICE_SCALE_F
-		c.Close = float64(closeRaw) / PRICE_SCALE_F
+		c.Open = types.PriceFromFloat(float64(openRaw) / PRICE_SCALE_F)
+		c.High = types.PriceFromFloat(float64(highRaw) / PRICE_SCALE_F)
+		c.Low = types.PriceFromFloat(float64(lowRaw) / PRICE_SCALE_F)
+		c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
 		c.Volume = float64(vol)
 		c.Symbol = ticker
 		result[ticker] = append(result[ticker], c)

@@ -1,7 +1,7 @@
 """Unit tests for Heston regime-aware synthetic data generation."""
 
 import numpy as np
-import pytest
+
 from orca.simulation.regime_generator import generate_regime_aware
 
 

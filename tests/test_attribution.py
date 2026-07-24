@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import random
 
-import pytest
-
 from orca.attribution.slicer import (
     AttributionReport,
     SliceStats,

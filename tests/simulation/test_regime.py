@@ -1,17 +1,16 @@
 """Unit tests for regime sequence generation and state management."""
 
 import numpy as np
-import pytest
+
 from orca.simulation.regime import (
+    DEFAULT_TRANSITION_MATRIX,
     REGIME_CALM,
     REGIME_CRISIS,
     REGIME_HIGH_VOL,
     REGIME_NAMES,
     REGIME_TRENDING,
-    DEFAULT_AVG_DURATION,
-    DEFAULT_TRANSITION_MATRIX,
-    RegimeSequenceGenerator,
     RegimeBatchState,
+    RegimeSequenceGenerator,
 )
 
 

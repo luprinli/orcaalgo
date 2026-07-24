@@ -1,10 +1,8 @@
 """Tests for orca.optimize.sweeper — hyperparameter sweeper."""
 
-import tempfile
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from orca.optimize.sweeper import (
     _compute_rsi,

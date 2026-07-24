@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { submitOptimizationRun, getOptimizationStatus, getOptimizationResults, listOptimizationRuns, OptimizationConfig, OptimizationResult, OptimizationStatus } from '../api/optimize'
+import { submitOptimizationRun, getOptimizationStatus, getOptimizationResults, listOptimizationRuns, OptimizeConfig, OptimizationResult, OptimizationStatus } from '../api/optimize'
 
 const POLL_INTERVAL = 2000
 
@@ -18,7 +18,7 @@ const STRATEGY_PARAMS: Record<string, Record<string, { min: number; max: number;
 
 export default function OptimizationPanel() {
   const [strategyId, setStrategyId] = useState('intraday_mr')
-  const [objective, setObjective] = useState<OptimizationConfig['objective']>('sharpe')
+  const [objective, setObjective] = useState<OptimizeConfig['objective']>('sharpe')
   const [symbol, setSymbol] = useState('SPY')
   const [trainYears, setTrainYears] = useState(2)
   const [testYears, setTestYears] = useState(1)
@@ -35,7 +35,7 @@ export default function OptimizationPanel() {
   const params = STRATEGY_PARAMS[strategyId] ?? {}
 
   useEffect(() => {
-    listOptimizationRuns().then(r => setPreviousRuns(r.runs || [])).catch(() => {})
+    listOptimizationRuns().then(r => setPreviousRuns(r || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -62,7 +62,7 @@ export default function OptimizationPanel() {
       constraints[name] = { min: def.min, max: def.max, step: def.step }
     })
 
-    const config: OptimizationConfig = {
+    const config: OptimizeConfig = {
       strategy_id: strategyId,
       objective,
       max_combinations: trials,
@@ -71,7 +71,7 @@ export default function OptimizationPanel() {
       step_months: stepMonths,
       symbols: [symbol],
       capital,
-      constraints,
+      parameters: constraints,
     }
 
     const run = await submitOptimizationRun(config)
@@ -173,12 +173,12 @@ export default function OptimizationPanel() {
         <div className="card">
           <h2>Progress</h2>
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent-text)' }}>
-            {status.progress_pct ?? 0}%
+            {status.progress ?? 0}%
           </div>
           <div style={{ position: 'relative', height: 8, background: 'var(--bg-card)', borderRadius: 4, marginTop: 12 }}>
-            <div style={{ width: `${status.progress_pct ?? 0}%`, height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width 1s' }} />
+            <div style={{ width: `${status.progress ?? 0}%`, height: '100%', background: 'var(--accent)', borderRadius: 4, transition: 'width 1s' }} />
           </div>
-          {status.elapsed_s && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Elapsed: {status.elapsed_s}s</div>}
+          {status.elapsed_seconds && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>Elapsed: {status.elapsed_seconds}s</div>}
         </div>
       )}
 
@@ -192,7 +192,7 @@ export default function OptimizationPanel() {
             </div>
             <div className="metric">
               <div className="label">Total Trials</div>
-              <div className="value">{result.total_trials ?? 0}</div>
+              <div className="value">{result.trials?.length ?? (result.trials ? 1 : 0)}</div>
             </div>
             {/* eslint-disable @typescript-eslint/no-explicit-any */}
             <div className="metric">

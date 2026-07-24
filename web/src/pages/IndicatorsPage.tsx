@@ -68,7 +68,7 @@ export default function IndicatorsPage() {
   useEffect(() => {
     symbolsApi.list()
       .then(d => {
-        const all = (d.symbols ?? []) as unknown as Array<{ ticker: string; exchange: string; asset_type: string; id: number; is_active: boolean }>
+        const all = (d ?? []) as unknown as Array<{ ticker: string; exchange: string; asset_type: string; id: number; is_active: boolean }>
         setSymbols(all)
         if (!selectedSymbol && all.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

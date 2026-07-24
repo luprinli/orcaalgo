@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -11,7 +11,7 @@ from orca.models.strategy import (
     StrategyIRV04,
     TokenRef,
 )
-from orca.models.trade import OrderSide, OrderState, TradeSignal
+from orca.models.trade import TradeSignal
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def sample_trade_signal() -> TradeSignal:
         signal="BUY",
         confidence=0.75,
         reason="zscore entry",
-        timestamp=datetime(2025, 1, 15, 10, 30, tzinfo=timezone.utc),
+        timestamp=datetime(2025, 1, 15, 10, 30, tzinfo=UTC),
     )
 
 
@@ -61,7 +61,7 @@ def sample_trade_records() -> list[dict]:
             "pnl": 50.0,
             "cost": 4500.0,
             "confidence": 0.65,
-            "placed_at": datetime(2025, 1, 10, 9, 30, tzinfo=timezone.utc),
+            "placed_at": datetime(2025, 1, 10, 9, 30, tzinfo=UTC),
             "outcome": "win",
         },
         {
@@ -73,7 +73,7 @@ def sample_trade_records() -> list[dict]:
             "pnl": -25.0,
             "cost": 1900.0,
             "confidence": 0.60,
-            "placed_at": datetime(2025, 1, 12, 14, 0, tzinfo=timezone.utc),
+            "placed_at": datetime(2025, 1, 12, 14, 0, tzinfo=UTC),
             "outcome": "loss",
         },
         {
@@ -85,7 +85,7 @@ def sample_trade_records() -> list[dict]:
             "pnl": 200.0,
             "cost": 5000.0,
             "confidence": 0.80,
-            "placed_at": datetime(2025, 1, 14, 11, 15, tzinfo=timezone.utc),
+            "placed_at": datetime(2025, 1, 14, 11, 15, tzinfo=UTC),
             "outcome": "win",
         },
     ]

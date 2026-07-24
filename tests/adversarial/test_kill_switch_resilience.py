@@ -26,9 +26,9 @@ def test_kelly_never_exceeds_cap():
 
 def test_extreme_decimals():
     """Very small or very large numbers should not crash."""
-    from orca.sizing.kelly import kelly_with_attenuators
-
     import sys
+
+    from orca.sizing.kelly import kelly_with_attenuators
     tiny = sys.float_info.min
     huge = sys.float_info.max
 

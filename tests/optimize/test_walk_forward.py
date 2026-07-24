@@ -1,10 +1,8 @@
 """Tests for orca.optimize.walk_forward — walk-forward validation."""
 
-import tempfile
 from pathlib import Path
 
 import pandas as pd
-import pytest
 
 from orca.optimize.walk_forward import walk_forward_validate
 

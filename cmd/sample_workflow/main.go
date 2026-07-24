@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 func main() {
@@ -29,13 +30,13 @@ func main() {
 		c := prices[i]
 		fmt.Printf("%s  %7.2f  %7.2f  %7.2f  %7.2f  %7.0f\n",
 			c.Time.Format("2006-01-02"),
-			c.Open, c.High, c.Low, c.Close, c.Volume)
+			c.Open.Float64(), c.High.Float64(), c.Low.Float64(), c.Close.Float64(), c.Volume)
 	}
 
 	// -- STEP 3: Compute indicators on the price history --
 	closing := make([]float64, len(prices))
 	for i := range prices {
-		closing[i] = prices[i].Close
+		closing[i] = prices[i].Close.Float64()
 	}
 
 	fast := make([]float64, len(closing))
@@ -95,7 +96,7 @@ func main() {
 	}
 	for i, sig := range signals {
 		if i < 20 {
-			fmt.Printf("%-7d  %s    %-5s  %.2f\n", i+1, prices[i].Time.Format("2006-01-02"), sig.Side, prices[i].Close)
+			fmt.Printf("%-7d  %s    %-5s  %.2f\n", i+1, prices[i].Time.Format("2006-01-02"), sig.Side, prices[i].Close.Float64())
 		}
 	}
 	if len(signals) > 20 {
@@ -147,10 +148,10 @@ func generateSyntheticData(n int) []strategy.Candle {
 
 		candles[i] = strategy.Candle{
 			Time:   base.AddDate(0, 0, i),
-			Open:   open,
-			High:   high,
-			Low:    low,
-			Close:  price,
+			Open:   types.PriceFromFloat(open),
+			High:   types.PriceFromFloat(high),
+			Low:    types.PriceFromFloat(low),
+			Close:  types.PriceFromFloat(price),
 			Volume: 1000 + float64(i%50)*100,
 			Symbol: "SAMPLE",
 		}

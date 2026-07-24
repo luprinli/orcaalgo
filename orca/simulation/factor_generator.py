@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 
-@dataclass
+@dataclass(frozen=True)
 class FactorConfig:
     """Regime-specific factor parameters."""
     trend_phi: float

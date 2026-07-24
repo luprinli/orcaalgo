@@ -44,7 +44,7 @@ except ImportError:
     )
 
 
-@dataclass
+@dataclass(frozen=True)
 class TrainingResult:
     model: object | None
     brier_score: float
@@ -61,7 +61,7 @@ class TrainingResult:
     metadata: dict = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class MetaLabelingTrainer:
     n_estimators: int = XGB_N_ESTIMATORS
     max_depth: int = XGB_MAX_DEPTH

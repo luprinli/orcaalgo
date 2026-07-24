@@ -4,11 +4,8 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -139,7 +136,7 @@ class TestAntiPatternScanner:
 
     def test_sarif_output_is_valid_json(self):
         sys.path.insert(0, str(SCRIPTS))
-        from anti_pattern_scan import format_sarif, Violation
+        from anti_pattern_scan import Violation, format_sarif
         violations = [Violation(6, "configs/strategies/test.gkr.yaml", 5, "Full Kelly")]
         sarif_str = format_sarif(violations)
         data = json.loads(sarif_str)
@@ -198,7 +195,7 @@ class TestCriticalPaths:
             ["python", "-c",
              "from orca.preflight.checklist import run_preflight_checks; "
              "results = run_preflight_checks(); "
-             f"assert len(results) >= 12, f'Expected >=12 checks, got {{len(results)}}'"],
+             "assert len(results) >= 12, f'Expected >=12 checks, got {len(results)}'"],
             capture_output=True, text=True, cwd=str(ROOT),
         )
         assert result.returncode == 0, f"Preflight check count too low: {result.stderr}"

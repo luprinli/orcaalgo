@@ -1,37 +1,37 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
-from orca.models.risk import BreachCondition, DrawdownLevel, KillSwitchState, RiskSnapshot
+from orca.models.risk import BreachCondition, RiskSnapshot
 from orca.models.strategy import (
     Node,
     StrategyBody,
     StrategyIRV04,
     TokenRef,
 )
-from orca.models.trade import Order, OrderSide, OrderState, TradeSignal
+from orca.models.trade import TradeSignal
 
 
 class TestTradeSignal:
     def test_create_valid_signal(self):
-        s = TradeSignal(symbol="SPY", signal="BUY", confidence=0.75, timestamp=datetime.now(timezone.utc))
+        s = TradeSignal(symbol="SPY", signal="BUY", confidence=0.75, timestamp=datetime.now(UTC))
         assert s.signal == "BUY"
         assert s.confidence == 0.75
 
     def test_rejects_invalid_confidence(self):
         with pytest.raises(ValidationError):
-            TradeSignal(symbol="SPY", signal="BUY", confidence=1.5, timestamp=datetime.now(timezone.utc))
+            TradeSignal(symbol="SPY", signal="BUY", confidence=1.5, timestamp=datetime.now(UTC))
 
     def test_rejects_invalid_signal(self):
         with pytest.raises(ValidationError):
-            TradeSignal(symbol="SPY", signal="INVALID", confidence=0.5, timestamp=datetime.now(timezone.utc))
+            TradeSignal(symbol="SPY", signal="INVALID", confidence=0.5, timestamp=datetime.now(UTC))
 
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
-            TradeSignal(symbol="SPY", signal="BUY", confidence=0.5, timestamp=datetime.now(timezone.utc), extra="nope")
+            TradeSignal(symbol="SPY", signal="BUY", confidence=0.5, timestamp=datetime.now(UTC), extra="nope")
 
     def test_frozen_prevents_mutation(self, sample_trade_signal):
         with pytest.raises(ValidationError):
@@ -113,7 +113,7 @@ class TestStrategyIR:
 class TestRiskModels:
     def test_risk_snapshot_defaults(self):
         snap = RiskSnapshot(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             balance=100000,
             equity=99500,
             daily_drawdown_pct=0.5,

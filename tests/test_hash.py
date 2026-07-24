@@ -21,7 +21,6 @@ class TestCanonicalJSON:
         assert b"100.5" in result
 
     def test_nan_is_rejected(self):
-        import math
 
         import pytest
 

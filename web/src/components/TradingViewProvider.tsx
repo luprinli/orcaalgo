@@ -1,3 +1,4 @@
+// TODO: Rename to ChartThemeProvider in next major version
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode, type Dispatch, type SetStateAction } from 'react'
 import { useWebSocketMulti } from '../hooks/useWebSocket'
 import { useIndicatorStore } from '../stores/indicatorStore'

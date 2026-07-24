@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.14.8",
     "cryptocurrency-icons": "^0.18.1",
     "html2pdf.js": "^0.14.0",
     "i18next": "^26.3.6",

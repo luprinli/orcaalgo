@@ -31,7 +31,7 @@ export default function SymbolSearch({ value, onChange, placeholder, style }: Sy
   useEffect(() => {
     symbolsApi.list()
       .then(d => {
-        const all = (d.symbols ?? []) as unknown as SymbolItem[]
+        const all = (d ?? []) as unknown as SymbolItem[]
         setSymbols(all)
       })
       .catch(() => {})

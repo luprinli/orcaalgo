@@ -31,7 +31,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
 
   useEffect(() => {
     symbolsApi.list()
-      .then(d => setSymbols((d.symbols ?? []) as unknown as SymbolItem[]))
+      .then(d => setSymbols((d ?? []) as unknown as SymbolItem[]))
       .catch(() => {})
   }, [])
 

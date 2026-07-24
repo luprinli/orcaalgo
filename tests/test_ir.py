@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from orca.ir.loader import load_ir
 from orca.ir.validator import validate_ir
 from orca.models.strategy import (

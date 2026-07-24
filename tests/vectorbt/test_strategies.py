@@ -2,10 +2,8 @@
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from orca.vectorbt.strategies import (
-    HAS_VBT,
     STRATEGY_MAP,
     _compute_adx_numpy,
     _compute_atr_numpy,
@@ -174,6 +172,7 @@ class TestStrategyMap:
 
     def test_param_name_contract(self):
         import inspect
+
         from orca.optimize.indicator_factory import STRATEGY_INDICATORS
 
         for sid in STRATEGY_INDICATORS:

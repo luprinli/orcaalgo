@@ -48,7 +48,7 @@ REGIME_LABELS = [
 REGIME_SCORE_WEIGHTS = [1.0, 0.9, 0.8, 0.7, 0.4, 0.0]
 
 
-@dataclass
+@dataclass(frozen=True)
 class RegimeTrainingResult:
     model: object | None
     accuracy: float
@@ -60,7 +60,7 @@ class RegimeTrainingResult:
     metadata: dict = field(default_factory=dict)
 
 
-@dataclass
+@dataclass(frozen=True)
 class RegimeClassifier:
     n_estimators: int = 100
     max_depth: int = 4

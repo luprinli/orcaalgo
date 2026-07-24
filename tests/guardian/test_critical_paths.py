@@ -72,6 +72,7 @@ def test_wilson_ci_insufficient_data():
 def test_platt_scaling_output_bounds():
     """Platt scaling must return probabilities in [0, 1]."""
     import numpy as np
+
     from orca.math.platt import platt_scale
 
     probs = np.array([0.1, 0.3, 0.5, 0.7, 0.9], dtype=np.float64)

@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type SeedData struct {
@@ -62,10 +64,10 @@ type SymbolSeed struct {
 type MarketTickSeed struct {
 	Time     time.Time
 	Symbol   string
-	Price    float64
+	Price    types.Price
 	Volume   float64
-	BidPrice float64
-	AskPrice float64
+	BidPrice types.Price
+	AskPrice types.Price
 	BidSize  float64
 	AskSize  float64
 }
@@ -73,10 +75,10 @@ type MarketTickSeed struct {
 type CandleSeed struct {
 	Time     time.Time
 	Symbol   string
-	Open     float64
-	High     float64
-	Low      float64
-	Close    float64
+	Open     types.Price
+	High     types.Price
+	Low      types.Price
+	Close    types.Price
 	Volume   float64
 }
 
@@ -107,7 +109,7 @@ type TradeHistorySeed struct {
 	Symbol      string
 	Side        string
 	Quantity    float64
-	Price       float64
+	Price       types.Price
 	HMMRegime   int8
 	StrategyID  string
 	OutcomePnL  float64
@@ -282,10 +284,10 @@ func loadCandlesFromDataDir() []CandleSeed {
 			allCandles = append(allCandles, CandleSeed{
 				Time:   time.Date(y, time.Month(m), d, 16, 0, 0, 0, time.UTC),
 				Symbol: mappedSym,
-				Open:   open,
-				High:   high,
-				Low:    low,
-				Close:  close_,
+				Open:   types.FromFloat64(open),
+				High:   types.FromFloat64(high),
+				Low:    types.FromFloat64(low),
+				Close:  types.FromFloat64(close_),
 				Volume: vol,
 			})
 		}

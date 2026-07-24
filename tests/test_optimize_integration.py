@@ -8,12 +8,10 @@ the matrix endpoints available. If the server is not running, the test
 skips with a clear message.
 """
 
-import json
 import time
 
 import pytest
 import requests
-
 
 BASE = "http://localhost:8081/api/v1"
 

@@ -1,9 +1,6 @@
 """Integration tests for the full orca pipeline: CLI → model → hash → validate."""
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
 import yaml
 
 
@@ -31,7 +28,7 @@ class TestFullPipeline:
         assert ir.strategy.id == "pipeline-test"
         assert len(ir.strategy.nodes) == 2
 
-        from orca.hash.graph import graph_hash_v2, param_hash_v2, instance_hash_v2
+        from orca.hash.graph import graph_hash_v2, instance_hash_v2, param_hash_v2
         gh = graph_hash_v2(ir)
         ph = param_hash_v2(ir)
         ih = instance_hash_v2(ir)
@@ -80,8 +77,8 @@ class TestFullPipeline:
         assert 0 <= lo <= hi <= 1
 
     def test_calibration_to_attribution_flow(self, sample_trade_records):
-        from orca.calibration.audit import run_calibration_audit
         from orca.attribution.slicer import attribute_pnl
+        from orca.calibration.audit import run_calibration_audit
 
         cal_report = run_calibration_audit(sample_trade_records)
         assert cal_report.overall.n == len(sample_trade_records)

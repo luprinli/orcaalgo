@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import random
 
-import pytest
-
 from orca.calibration.audit import (
     CalibrationReport,
     SegmentReport,
@@ -102,8 +100,9 @@ class TestPlattCalibration:
         assert "Insufficient data" in msg
 
     def test_sufficient_data_produces_result(self):
-        from orca.calibration.platt import platt_calibrate_segment
         import numpy as np
+
+        from orca.calibration.platt import platt_calibrate_segment
 
         np.random.seed(42)
         n = 300

@@ -1,10 +1,8 @@
 """Tests for orca.optimize.exporter — GKR YAML config exporter."""
 
 import tempfile
-from pathlib import Path
 
 import yaml
-import pytest
 
 from orca.optimize.exporter import export_best_params
 

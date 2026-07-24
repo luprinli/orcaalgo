@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from orca.ir.compiler import compile_all, compile_strategy, _generate_odin_struct
-from orca.ir.loader import load_ir
+from orca.ir.compiler import compile_all, compile_strategy
 from orca.models.strategy import Node, StrategyBody, StrategyIRV04, TokenRef
 
 
@@ -109,7 +108,6 @@ class TestCompilerOutput:
         assert "_ = 99" in code
 
     def test_compile_all_loads_real_files(self, tmp_path):
-        import json
         out = tmp_path / "gen.odin"
         try:
             result = compile_all(gkr_dir="configs/strategies", output=out)

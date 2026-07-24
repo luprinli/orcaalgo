@@ -1,16 +1,15 @@
 """Tests for validation functions in orca.simulation.validate."""
 
-from unittest import mock
 
 import numpy as np
-import pytest
+
 from orca.simulation.validate import (
-    ks_test_synthetic_vs_real,
-    autocorrelation_check,
-    fat_tail_check,
-    drawdown_check,
-    validate_strategy_coverage,
     _compute_daily_returns,
+    autocorrelation_check,
+    drawdown_check,
+    fat_tail_check,
+    ks_test_synthetic_vs_real,
+    validate_strategy_coverage,
 )
 
 

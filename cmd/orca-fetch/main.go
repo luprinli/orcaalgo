@@ -133,7 +133,7 @@ func importStooq(tickers []string, timeframe, dataDir, format string, logger *sl
 			}
 			for _, c := range candles {
 				fmt.Printf("%s,%.4f,%.4f,%.4f,%.4f,%.0f,%s\n",
-					c.Time.Format("2006-01-02 15:04"), c.Open, c.High, c.Low, c.Close, c.Volume, ticker)
+					c.Time.Format("2006-01-02 15:04"), c.Open.Float64(), c.High.Float64(), c.Low.Float64(), c.Close.Float64(), c.Volume, ticker)
 			}
 		}
 		return
@@ -202,7 +202,7 @@ func exportCSV(fetcher ingest.DataFetcher, tickers []string, start, end time.Tim
 		}
 		for _, c := range candles {
 			fmt.Printf("%s,%.4f,%.4f,%.4f,%.4f,%.0f,%s\n",
-				c.Time.Format("2006-01-02 15:04"), c.Open, c.High, c.Low, c.Close, c.Volume, ticker)
+				c.Time.Format("2006-01-02 15:04"), c.Open.Float64(), c.High.Float64(), c.Low.Float64(), c.Close.Float64(), c.Volume, ticker)
 		}
 	}
 }

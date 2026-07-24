@@ -19,7 +19,7 @@ def _server_reachable(host: str = "localhost", port: int = 8080) -> bool:
         s.connect((host, port))
         s.close()
         return True
-    except (socket.timeout, ConnectionRefusedError, OSError):
+    except (TimeoutError, ConnectionRefusedError, OSError):
         return False
 
 

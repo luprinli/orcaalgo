@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from orca.math.brier import (
-    BinStats,
     MurphyResult,
     brier_score,
     murphy_decomposition,
