@@ -15,6 +15,8 @@ import { useDrawingTool } from '../hooks/useDrawingTool'
 import { useIndicatorRenderer } from '../hooks/useIndicatorRenderer'
 import { OHLCVHeader } from '../components/OHLCVHeader'
 import ChartOverlayButtons from '../components/ChartOverlayButtons'
+import TimeframeChips from '../components/TimeframeChips'
+import { useTimeframeStore } from '../stores/timeframeStore'
 import type { Candle, TradeSummary } from '../types/api'
 
 interface LiveMonitorChartProps {
@@ -26,6 +28,7 @@ interface LiveMonitorChartProps {
 
 export default function LiveMonitorChart({ candles, height = 500, markers, trades }: LiveMonitorChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const { timeframe } = useTimeframeStore()
   const [isFullscreen, setIsFullscreen] = useState(false)
   const fullscreenContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -62,6 +65,13 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
       })
     } catch { /* volume scale may not exist yet */ }
   }, [chartRef])
+
+  // Refit chart when timeframe changes
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent()
+    }
+  }, [timeframe, chartRef])
 
   const { crosshairData } = useCrosshair(chartRef, candles, indicatorIds)
 
@@ -155,6 +165,7 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
   return (
     <div ref={fullscreenContainerRef} style={{ width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: isFullscreen ? 'var(--chart-bg)' : undefined }}>
       <OHLCVHeader candle={latestCandle} />
+      <TimeframeChips variant="toolbar" />
       <div ref={containerRef} role="img" aria-label="Candlestick chart with indicators" style={{ width: '100%', position: 'relative' }}>
         <ChartOverlayButtons
           isFullscreen={isFullscreen}

@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { backtests } from '../api/client'
 import { useMatrixStore } from '../stores/matrixStore'
 import { useMatrixStream } from '../hooks/useMatrixStream'
@@ -44,9 +45,16 @@ const DATA_SOURCES = ['synthetic', 'stooq']
 
 export default function BacktestPage() {
   const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const preselectedStrategy = searchParams.get('strategy')
   const [mode, setMode] = useState<'backtest' | 'optimize'>('backtest')
   const [matrixMode, setMatrixMode] = useState<'matrix' | 'single'>('matrix')
-  const [strategies, setStrategies] = useState<string[]>(['ma_crossover'])
+  const [strategies, setStrategies] = useState<string[]>(() => {
+    if (preselectedStrategy && ALL_STRATEGIES.includes(preselectedStrategy)) {
+      return [preselectedStrategy]
+    }
+    return ['ma_crossover']
+  })
   const [symbols, setSymbols] = useState('SPX500,NAS100')
   const [start, setStart] = useState('2024-01-01')
   const [end, setEnd] = useState('2024-06-30')
@@ -180,9 +188,11 @@ export default function BacktestPage() {
         matrixBegin(batchId, total)
         setMatrixBatchId(batchId)
         setResult({ status: 'running', total_combos: total })
+        toast.success(`Backtest queued — ID: ${batchId}`)
       } else {
         matrixReset()
         setResult(data as unknown as Record<string, unknown>)
+        toast.success(`Backtest queued — ID: ${(data as Record<string, unknown>)?.run_id || 'completed'}`)
       }
     } catch (err) {
       matrixReset()

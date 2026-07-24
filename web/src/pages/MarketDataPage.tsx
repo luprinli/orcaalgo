@@ -27,6 +27,7 @@ export default function MarketDataPage() {
   const [cvdHistory, setCvdHistory] = useState<Array<{ time: string; delta: number; buy_volume: number; sell_volume: number }>>([])
   const [latestCvd, setLatestCvd] = useState<WSCVDData | null>(null)
   const [divergence, setDivergence] = useState<WSDivergenceData | null>(null)
+  const [ticksOnly, setTicksOnly] = useState(false)
 
   const { connected } = useWebSocket({
     channels: ['ticks', 'cvd', 'divergence'],
@@ -84,6 +85,10 @@ export default function MarketDataPage() {
           <span className={`badge ${connected ? 'badge-ok' : 'badge-err'}`}>
             {connected ? t('marketData:live', 'Live') : t('marketData:offline', 'Offline')}
           </span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <input type="checkbox" checked={ticksOnly} onChange={e => setTicksOnly(e.target.checked)} />
+            <span style={{ color: 'var(--text-secondary)' }}>Live Ticks Only</span>
+          </label>
           <input
             className="input"
             style={{ width: 120 }}
@@ -109,7 +114,7 @@ export default function MarketDataPage() {
         </div>
       )}
 
-      {candleData.length > 0 && (
+      {!ticksOnly && candleData.length > 0 && (
         <CandlesChart data={candleData} height={400} title={`${symbol} — ${range}`} />
       )}
 
@@ -146,6 +151,7 @@ export default function MarketDataPage() {
           )}
         </div>
 
+        {!ticksOnly && (
         <div>
           {cvdHistory.length > 0 && (
             <CVDChart data={cvdHistory} height={200} title={t('marketData:cvdTitle', 'CVD')} />
@@ -169,6 +175,7 @@ export default function MarketDataPage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   )

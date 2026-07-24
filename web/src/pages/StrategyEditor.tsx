@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { strategies } from '../api/client'
 import ParamEditor from '../components/ParamEditor'
 import type { StrategyValidationResponse, ParamDef } from '../types/api'
@@ -33,6 +33,7 @@ function parseParamsJson(json: string): Record<string, number> {
 
 export default function StrategyEditor() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const [form, setForm] = useState<StrategyFormData>({
     name: '',
@@ -338,6 +339,12 @@ export default function StrategyEditor() {
               }}
             >
               {t('strategyEditor:clone', 'Clone')}
+            </button>
+            <button
+              className="btn btn-outline"
+              onClick={() => navigate(`/backtest?strategy=${createdId}`)}
+            >
+              {t('strategyEditor:quickBacktest', 'Quick Backtest')}
             </button>
           </div>
         </div>

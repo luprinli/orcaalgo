@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { strategies } from '../api/client'
+import { useCacheStore } from '../stores/cacheStore'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { STRATEGY_CATALOG, type CatalogWithInstance } from '../data/strategyCatalog'
 import type { Strategy } from '../types/api'
@@ -9,6 +10,7 @@ import type { Strategy } from '../types/api'
 export default function StrategiesPage() {
   const { t } = useTranslation()
   const nav = useNavigate()
+  const cacheStore = useCacheStore()
   const [dbList, setDbList] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -20,8 +22,11 @@ export default function StrategiesPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   useEffect(() => {
-    strategies.list()
-      .then((res) => setDbList(res.strategies ?? []))
+    cacheStore.fetchStrategies(async () => {
+      const res = await strategies.list()
+      return res.strategies ?? []
+    })
+      .then((list) => setDbList(list))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
