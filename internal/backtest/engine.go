@@ -54,6 +54,7 @@ type BacktestConfig struct {
 	StrategyHash          string `json:"strategy_hash,omitempty"`
 	GKRPath               string `json:"gkr_path,omitempty"`
 	EnablePrefetch        bool   `json:"enable_prefetch,omitempty"`
+	WarmUpBars            int    `json:"warmup_bars,omitempty"`
 }
 
 type MatrixBacktestConfig struct {
@@ -119,6 +120,10 @@ type Trade struct {
 	SlippageMidBps   float64
 	SlippageLastBps  float64
 	AdverseSelection bool
+	MAE              float64
+	MFE              float64
+	lowestSinceEntry float64
+	highestSinceEntry float64
 }
 
 type BacktestResult struct {
@@ -139,6 +144,8 @@ type BacktestResult struct {
 	NumWins        int
 	NumLosses      int
 	AdverseSelectionRate float64
+	AvgMAE        float64
+	AvgMFE        float64
 	RegimeStats    []RegimeStat
 	EquityCurve    []EquityPoint
 	DailyReturns   []DailyReturn
@@ -194,6 +201,7 @@ type SignalDiag struct {
 	ExitSignalZeroQty int `json:"exit_signal_zero_qty"`
 	QuantityTooSmall  int `json:"quantity_too_small"`
 	ExposureBlocked   int `json:"exposure_blocked"`
+	PipelineRejected  int `json:"pipeline_rejected"`
 	SignalsPassed     int `json:"signals_passed"`
 	TradesOpened      int `json:"trades_opened"`
 	FillRejected      int `json:"fill_rejected"`
@@ -231,6 +239,7 @@ type Engine struct {
 	metaCfg        ml.MetaLabelerConfig
 	regimeEnhancer *ml.RegimeEnhancer
 	exitOrch       *ml.ExitOrchestrator
+	pipeline       *risk.RiskPipeline
 }
 
 type Database interface {
@@ -305,6 +314,19 @@ func (e *Engine) SetRegimeEnhancer(enhancer *ml.RegimeEnhancer) {
 // SetExitOrchestrator configures the ML exit optimization subsystem.
 func (e *Engine) SetExitOrchestrator(orch *ml.ExitOrchestrator) {
 	e.exitOrch = orch
+}
+
+// SetRiskPipeline injects a shared signal-and-fill audit pipeline. When set,
+// ProcessSignal is called after the engine's inline sizing/exposure checks,
+// and ReconcileFillWithoutPropFirm is called on every trade close.
+func (e *Engine) SetRiskPipeline(p *risk.RiskPipeline) {
+	e.pipeline = p
+}
+
+// GetDB returns the underlying database handle, enabling callers that need the raw Database
+// interface (e.g., RunLightOptimize) to use an already-configured Engine.
+func (e *Engine) GetDB() Database {
+	return e.db
 }
 
 func NewEngineWithFixedSeed(db Database, seed int64) *Engine {
@@ -616,6 +638,15 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				}
 			}
 
+			low := candle.Low.Float64()
+			high := candle.High.Float64()
+			if low < ot.lowestSinceEntry {
+				ot.lowestSinceEntry = low
+			}
+			if high > ot.highestSinceEntry {
+				ot.highestSinceEntry = high
+			}
+
 			if !shouldExit {
 				reverseSignal := e.generateSignalForExit(candle, regime, config, capital)
 				if reverseSignal != nil && reverseSignal.Symbol == sym {
@@ -626,7 +657,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 
 			if shouldExit {
 				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64())
+				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64(), candle.Volume)
 				if simulatedExit.FillPrice.Float64() > 0 {
 					exitPrice = simulatedExit.FillPrice.Float64()
 				}
@@ -651,13 +682,25 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				ot.ExitReason = exitReason
 				ot.BrokerFee = brokerFee
 
+				entry := ot.EntryPrice.Float64()
+				if ot.Side == "BUY" {
+					ot.MAE = entry - ot.lowestSinceEntry
+					ot.MFE = ot.highestSinceEntry - entry
+				} else {
+					ot.MAE = ot.highestSinceEntry - entry
+					ot.MFE = entry - ot.lowestSinceEntry
+				}
+
 				capital += ot.PnL
 			if capital <= 0 {
 				capital = 0
 			}
-				if e.ftmo != nil {
-					e.ftmo.OnFill(ot.PnL)
-				}
+			if e.ftmo != nil {
+				e.ftmo.OnFill(ot.PnL)
+			}
+			if e.pipeline != nil {
+				e.pipeline.ReconcileFillWithoutPropFirm(ot.StrategyID, ot.Symbol, ot.Side, ot.PnL, ot.Quantity, ot.ExitPrice.Float64())
+			}
 				trades = append(trades, *ot)
 				delete(openTrades, sym)
 				delete(activeStops, sym)
@@ -666,11 +709,18 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 
 		if _, alreadyOpen := openTrades[candle.Symbol]; !alreadyOpen {
 			e.signalDiag.SignalAttempts++
+			if i < config.WarmUpBars {
+				sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
+				if sr != nil {
+					sr.Evaluate(candle, regime)
+				}
+				continue
+			}
 			signal := e.generateSignal(candle, regime, config, capital)
 			if signal != nil {
 			e.signalDiag.TradesOpened++
 			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64(), signal.Quantity, signal.Side, candle.Close.Float64(), candle.Time, midPrice, candle.Close.Float64())
+			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64(), signal.Quantity, signal.Side, candle.Close.Float64(), candle.Time, midPrice, candle.Close.Float64(), candle.Volume)
 			entryPrice := simulatedEntry.FillPrice.Float64()
 			entryQty := simulatedEntry.FillQuantity
 			entrySlippageMid := simulatedEntry.SlippageMidBps
@@ -724,6 +774,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				TakePrice:        types.PriceFromFloat(takePrice),
 				SlippageMidBps:   entrySlippageMid,
 				SlippageLastBps:  entrySlippageLast,
+				lowestSinceEntry:  entryPrice,
+				highestSinceEntry: entryPrice,
 			}
 			openTrades[candle.Symbol] = newTrade
 			pendingAS[candle.Symbol] = newTrade
@@ -802,9 +854,22 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		ot.ExitTime = lastCandle.Time
 		ot.ExitReason = exitReason
 		ot.BrokerFee = brokerFee
+
+		entry := ot.EntryPrice.Float64()
+		if ot.Side == "BUY" {
+			ot.MAE = entry - ot.lowestSinceEntry
+			ot.MFE = ot.highestSinceEntry - entry
+		} else {
+			ot.MAE = ot.highestSinceEntry - entry
+			ot.MFE = entry - ot.lowestSinceEntry
+		}
+
 		capital += ot.PnL
 		if capital <= 0 {
 			capital = 0
+		}
+		if e.pipeline != nil {
+			e.pipeline.ReconcileFillWithoutPropFirm(ot.StrategyID, ot.Symbol, ot.Side, ot.PnL, ot.Quantity, exitPrice)
 		}
 		trades = append(trades, *ot)
 	}
@@ -812,6 +877,17 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 	result.Trades = trades
 	result.EquityCurve = equity
 	result.NumTrades = len(trades)
+
+	var sumMAE, sumMFE float64
+	for _, t := range trades {
+		sumMAE += t.MAE
+		sumMFE += t.MFE
+	}
+	if len(trades) > 0 {
+		result.AvgMAE = sumMAE / float64(len(trades))
+		result.AvgMFE = sumMFE / float64(len(trades))
+	}
+
 	result.TotalReturnPct = (capital - config.InitialCapital) / config.InitialCapital * 100
 	result.TotalReturn = capital - config.InitialCapital
 	result.CompletedAt = time.Now()
@@ -1000,6 +1076,27 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		return nil
 	}
 
+	// Pipeline audit: if a RiskPipeline is configured, run the signal through
+	// the canonical pipeline. This is belt-and-suspenders with the inline checks
+	// above — the pipeline enforces the same rules via the shared infrastructure.
+	if e.pipeline != nil {
+		pipeResult := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
+			StrategyID:       config.StrategyID,
+			Symbol:           candle.Symbol,
+			Side:             raw.Side,
+			Price:            candle.Close.Float64(),
+			Confidence:       1.0,
+			BaseSize:         quantity,
+			ExistingPosition: 0,
+			RunningCapital:   runningCapital,
+		})
+		if !pipeResult.Approved {
+			e.signalDiag.PipelineRejected++
+			return nil
+		}
+		quantity = pipeResult.Size
+	}
+
 	e.signalDiag.SignalsPassed++
 	return &Signal{
 		Symbol:   candle.Symbol,
@@ -1137,12 +1234,34 @@ func calculateSharpe(equity []EquityPoint, barsPerDay float64) float64 {
 	if len(equity) < 2 {
 		return 0
 	}
-	returns := make([]float64, len(equity)-1)
-	for i := 1; i < len(equity); i++ {
-		if equity[i-1].Value > 0 {
-			returns[i-1] = (equity[i].Value - equity[i-1].Value) / equity[i-1].Value
+
+	dayMap := make(map[string]float64)
+	dayOrder := make([]string, 0)
+	for _, e := range equity {
+		dayKey := e.Time.Format("2006-01-02")
+		if _, exists := dayMap[dayKey]; !exists {
+			dayOrder = append(dayOrder, dayKey)
+		}
+		dayMap[dayKey] = e.Value
+	}
+
+	if len(dayOrder) < 2 {
+		return 0
+	}
+
+	returns := make([]float64, 0, len(dayOrder)-1)
+	for i := 1; i < len(dayOrder); i++ {
+		prev := dayMap[dayOrder[i-1]]
+		curr := dayMap[dayOrder[i]]
+		if prev > 0 {
+			returns = append(returns, (curr-prev)/prev)
 		}
 	}
+
+	if len(returns) < 2 {
+		return 0
+	}
+
 	mean := 0.0
 	for _, r := range returns {
 		mean += r
@@ -1161,11 +1280,7 @@ func calculateSharpe(equity []EquityPoint, barsPerDay float64) float64 {
 	if stdDev == 0 {
 		return 0
 	}
-	if barsPerDay <= 0 {
-		barsPerDay = 1.0
-	}
-	annualFactor := math.Sqrt(252.0 * barsPerDay)
-	return mean / stdDev * annualFactor
+	return mean / stdDev * math.Sqrt(252.0)
 }
 
 func calculateSortino(equity []EquityPoint, barsPerDay float64) float64 {
@@ -1476,7 +1591,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 
 		regime := getRegimeAt(candle.Time, regimeLogs)
 
-		if e.poolSim.Halted {
+		if e.poolSim.Halted() {
 			continue
 		}
 
@@ -1591,10 +1706,10 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		result.StrategyMetrics[sid] = metric
 	}
 
-	if e.poolSim.Halted {
+	if e.poolSim.Halted() {
 		result.ComplianceReport = &ComplianceReport{
 			Passed:     false,
-			HaltReason: e.poolSim.HaltReason,
+			HaltReason: e.poolSim.HaltReason(),
 		}
 	} else {
 		result.ComplianceReport = &ComplianceReport{Passed: true}

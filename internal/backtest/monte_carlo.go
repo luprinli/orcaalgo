@@ -236,9 +236,75 @@ func MonteCarloFromTrades(trades []Trade, simulations int, initialCapital float6
 	if cfg.Iterations <= 0 {
 		cfg.Iterations = 500
 	}
-	_ = trades
-	_ = initialCapital
+	if len(trades) > 0 {
+		cfg.BarsPerSim = len(trades)
+	}
 	return cfg
+}
+
+func RunMonteCarloFromTrades(trades []Trade, simulations int, initialCapital float64) (*MonteCarloResult, error) {
+	if len(trades) < 2 {
+		return nil, ErrInsufficientReturns
+	}
+
+	returns := make([]float64, 0, len(trades))
+	for _, t := range trades {
+		pnlPct := t.PnLPct
+		if pnlPct == 0 && t.PnL != 0 {
+			pnlPct = t.PnL / initialCapital * 100.0
+		}
+		if !math.IsNaN(pnlPct) && !math.IsInf(pnlPct, 0) {
+			returns = append(returns, pnlPct/100.0)
+		}
+	}
+
+	if len(returns) < 2 {
+		return nil, ErrInsufficientReturns
+	}
+
+	cfg := MCConfig{
+		Iterations: simulations,
+		BarsPerSim: len(returns),
+		Seed:       time.Now().UnixNano(),
+	}
+	if cfg.Iterations <= 0 {
+		cfg.Iterations = 500
+	}
+
+	var (
+		iters = make([]MCIterationResult, cfg.Iterations)
+		g     errgroup.Group
+	)
+
+	numWorkers := 4
+	chunkSize := (cfg.Iterations + numWorkers - 1) / numWorkers
+
+	for w := 0; w < numWorkers; w++ {
+		start := w * chunkSize
+		end := min(start+chunkSize, cfg.Iterations)
+		if start >= end {
+			continue
+		}
+
+		g.Go(func() error {
+			localRng := rand.New(rand.NewPCG(uint64(start), uint64(cfg.Seed)))
+			for i := start; i < end; i++ {
+				path := bootstrapPath(returns, cfg.BarsPerSim, localRng)
+				pnlPct, maxDD := computePathMetrics(path)
+				iters[i] = MCIterationResult{
+					PnlPct:   pnlPct,
+					MaxDDPct: maxDD,
+				}
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	return newMCResult(cfg, iters), nil
 }
 
 func RunMonteCarloWithContext(ctx context.Context, cfg MCConfig) (*MonteCarloResult, error) {

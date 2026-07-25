@@ -9,10 +9,11 @@ import (
 )
 
 type SlippageModel struct {
-	Type       string
-	SpreadBps  float64
-	MaxSlippage float64
-	LatencyMs  float64
+	Type               string
+	SpreadBps          float64
+	MaxSlippage        float64
+	LatencyMs          float64
+	VolumeImpactFactor float64
 }
 
 type FillSimulator struct {
@@ -47,16 +48,19 @@ type SimulatedFill struct {
 }
 
 func (s *FillSimulator) SimulateFill(orderID uint32, symbol string, limitPrice float64, quantity float64, side string, tickPrice float64, tickTime time.Time) *SimulatedFill {
-	return s.SimulateFillWithTCA(orderID, symbol, limitPrice, quantity, side, tickPrice, tickTime, tickPrice, tickPrice)
+	return s.SimulateFillWithTCA(orderID, symbol, limitPrice, quantity, side, tickPrice, tickTime, tickPrice, tickPrice, 0)
 }
 
-func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limitPrice float64, quantity float64, side string, tickPrice float64, tickTime time.Time, midPrice float64, lastPrice float64) *SimulatedFill {
+func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limitPrice float64, quantity float64, side string, tickPrice float64, tickTime time.Time, midPrice float64, lastPrice float64, barVolume float64) *SimulatedFill {
 	delay := time.Duration(s.model.LatencyMs) * time.Millisecond
 
 	slippageBps := s.model.SpreadBps
 	if s.model.MaxSlippage > 0 {
 		randomFactor := (s.rng.Float64()*2 - 1) * s.model.MaxSlippage
 		slippageBps += randomFactor
+	}
+	if barVolume > 0 && s.model.VolumeImpactFactor > 0 && quantity > 0 {
+		slippageBps += s.model.VolumeImpactFactor * (quantity / barVolume)
 	}
 	if slippageBps < 0 {
 		slippageBps = 0
@@ -105,10 +109,11 @@ func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limit
 
 func DefaultEquitySlippage() SlippageModel {
 	return SlippageModel{
-		Type:        "relative",
-		SpreadBps:   0.5,
-		MaxSlippage: 2.0,
-		LatencyMs:   5.0,
+		Type:               "relative",
+		SpreadBps:          0.5,
+		MaxSlippage:        2.0,
+		LatencyMs:          5.0,
+		VolumeImpactFactor: 0.5,
 	}
 }
 

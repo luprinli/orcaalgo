@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -37,13 +38,84 @@ type LiveEngine struct {
 	regimeDailyLossPct float64          // H4: cached daily loss limit
 	openPositions  map[string]*backtest.ActiveStop  // H5: symbol → active stop
 
-	StrategyHash string // content-addressable instance hash of the deployed strategy
+	StrategyHash  string  // content-addressable instance hash of the deployed strategy
+	KellyFraction float64 // fractional Kelly multiplier (0.25 default)
+
+	pipeline  *risk.RiskPipeline             // shared signal-audit pipeline (optional)
+	multiPool *risk.MultiAccountCapitalPool   // per-account capital pools (optional)
+
+	accountRegistries map[string]*strategy.Registry // per-account isolated strategy instances
+	defaultRegistry   *strategy.Registry            // fallback for single-account (created from factories)
 }
 
 func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) { e.metaLabeler = p }
 func (e *LiveEngine) SetFeatureStore(fs *ml.FeatureStore) { e.featureStore = fs }
 func (e *LiveEngine) SetExitOrchestrator(orch *ml.ExitOrchestrator) { e.exitOrch = orch }
 func (e *LiveEngine) SetRegimeEnhancer(re *ml.RegimeEnhancer) { e.regimeEnhancer = re }
+
+// SetRiskPipeline injects the shared signal-audit pipeline. When set, every
+// approved signal in ProcessTick runs through ProcessSignal, and reconcile
+// calls update the pipeline's capital and prop-firm state.
+func (e *LiveEngine) SetRiskPipeline(p *risk.RiskPipeline) {
+	e.pipeline = p
+}
+
+// SetMultiAccountPool injects per-account capital pools for live multi-account
+// deployments.
+func (e *LiveEngine) SetMultiAccountPool(mp *risk.MultiAccountCapitalPool) {
+	e.multiPool = mp
+}
+
+// RegisterAccountStrategies creates an isolated strategy registry for the given
+// accountID, populated with factory-created instances and per-account parameters.
+// Each account gets its own independent strategy instances with private state
+// (indicator buffers, open positions, rolling windows). If params is non-empty,
+// each strategy receives its account-specific tuning via SetParams.
+func (e *LiveEngine) RegisterAccountStrategies(accountID string, params map[string]map[string]float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	reg := strategy.NewRegistry()
+	global := strategy.GlobalRegistry()
+
+	for name, factory := range global.Factories() {
+		instance := factory()
+		if instance == nil {
+			continue
+		}
+		if accountParams, ok := params[name]; ok {
+			instance.SetParams(accountParams)
+		}
+		reg.Register(instance)
+	}
+
+	e.accountRegistries[accountID] = reg
+}
+
+// getRegistryForAccount returns the per-account registry if one exists,
+// falling back to the shared default registry (created lazily from global
+// factories) for single-account deployments.
+func (e *LiveEngine) getRegistryForAccount(accountID string) *strategy.Registry {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	if reg, ok := e.accountRegistries[accountID]; ok {
+		return reg
+	}
+	if e.defaultRegistry == nil {
+		// Lazily create the default registry on first access.
+		reg := strategy.NewRegistry()
+		global := strategy.GlobalRegistry()
+		for _, factory := range global.Factories() {
+			instance := factory()
+			if instance != nil {
+				reg.Register(instance)
+			}
+		}
+		e.defaultRegistry = reg
+	}
+	return e.defaultRegistry
+}
 
 type SymbolState struct {
 	SymbolID   uint32
@@ -54,9 +126,11 @@ type SymbolState struct {
 
 func NewLiveEngine() *LiveEngine {
 	return &LiveEngine{
-		Symbols:        make(map[uint32]*SymbolState),
-		RiskState:      risk.NewGlobalRiskState(),
-		openPositions:  make(map[string]*backtest.ActiveStop),
+		Symbols:           make(map[uint32]*SymbolState),
+		RiskState:         risk.NewGlobalRiskState(),
+		openPositions:     make(map[string]*backtest.ActiveStop),
+		KellyFraction:     0.25,
+		accountRegistries: make(map[string]*strategy.Registry),
 	}
 }
 
@@ -99,6 +173,10 @@ func (e *LiveEngine) GetOrCreateSymbol(symbolID uint32) *SymbolState {
 }
 
 func (e *LiveEngine) ProcessTick(symbolID uint32, priceRaw, volumeRaw uint64, timestampNS int64) []*strategy.Signal {
+	return e.ProcessTickForAccount("default", symbolID, priceRaw, volumeRaw, timestampNS)
+}
+
+func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, priceRaw, volumeRaw uint64, timestampNS int64) []*strategy.Signal {
 	if e.Halted {
 		return nil
 	}
@@ -119,7 +197,7 @@ func (e *LiveEngine) ProcessTick(symbolID uint32, priceRaw, volumeRaw uint64, ti
 	candle := s.Aggregator.GetLatestBar("1m")
 	goCandle := strategy.BarToCandle(candle)
 
-	signals := strategy.GlobalRegistry().EvaluateAll(goCandle, regimeInt8)
+	signals := e.getRegistryForAccount(accountID).EvaluateAll(goCandle, regimeInt8)
 
 	var approvedSignals []*strategy.Signal
 	hasML := e.metaLabeler != nil && e.metaLabeler.IsHealthy()
@@ -166,6 +244,35 @@ func (e *LiveEngine) ProcessTick(symbolID uint32, priceRaw, volumeRaw uint64, ti
 		sort.Slice(approvedSignals, func(i, j int) bool {
 			return approvedSignals[i].PWin > approvedSignals[j].PWin
 		})
+	}
+
+	kelly := e.KellyFraction
+	if kelly <= 0 {
+		kelly = 0.25
+	}
+	for _, sig := range approvedSignals {
+		sig.Quantity *= kelly
+	}
+
+	if e.pipeline != nil {
+		filtered := approvedSignals[:0]
+		for _, sig := range approvedSignals {
+			result := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
+				StrategyID:       "live",
+				Symbol:           sig.Symbol,
+				Side:             sig.Side,
+				Price:            goCandle.Close.Float64(),
+				Confidence:       sig.PWin,
+				BaseSize:         sig.Quantity,
+				ExistingPosition: 0,
+				RunningCapital:   e.regimeDailyLossPct * 10000,
+			})
+			if result.Approved {
+				sig.Quantity = result.Size
+				filtered = append(filtered, sig)
+			}
+		}
+		approvedSignals = filtered
 	}
 
 	e.CheckOpenStops(symbolID, s, goCandle, &approvedSignals)
@@ -318,10 +425,35 @@ func (e *LiveEngine) UpdateRegimeRiskLimit() {
 }
 
 func (e *LiveEngine) SignalOutcome(symbol string, side string, pnl float64) int {
+	if e.pipeline != nil {
+		price := 0.0
+		if s, ok := e.openPositions[symbol]; ok {
+			price = s.EntryPrice.Float64()
+		}
+		e.pipeline.ReconcileFill("global", symbol, side, pnl, 1.0, price)
+	}
 	if pnl > 0 {
 		return 1
 	}
 	return 0
+}
+
+// ReconcileLiveFill notifies the pipeline of a completed trade fill with full
+// data. Used when the caller has access to strategy ID, quantity, and fill price.
+func (e *LiveEngine) ReconcileLiveFill(strategyID, symbol, side string, pnl, quantity, price float64) {
+	if e.pipeline == nil {
+		return
+	}
+	e.pipeline.ReconcileFill(strategyID, symbol, side, pnl, quantity, price)
+
+	// Also update the per-account capital pool if configured.
+	if e.multiPool != nil {
+		// The multiPool records fills by account; for single-engine deployments
+		// we use the pool associated with the running engine's first account.
+		for _, aid := range e.multiPool.AccountIDs() {
+			e.multiPool.RecordFill(aid, strategyID, symbol, side, pnl, quantity)
+		}
+	}
 }
 
 func NanoToTime(ns int64) time.Time {

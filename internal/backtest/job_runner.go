@@ -327,8 +327,7 @@ func (r *JobRunner) executeStrategyPipeline(job *RunningJob, engine *Engine, str
 	for _, w := range owfResult.Windows {
 		trades = append(trades, Trade{PnL: w.OOSReturnPct})
 	}
-	mcConfig := MonteCarloFromTrades(trades, job.Config.Simulations, job.Config.InitialCapital)
-	mcResult, err := RunMonteCarloWithContext(ctx, mcConfig)
+	mcResult, err := RunMonteCarloFromTrades(trades, job.Config.Simulations, job.Config.InitialCapital)
 	if err != nil {
 		stratResult.Error = fmt.Sprintf("monte carlo: %v", err)
 		return stratResult
