@@ -11,7 +11,7 @@ export default function TimeframeChips({ variant = 'toolbar' }: TimeframeChipsPr
   return (
     <div style={{
       display: 'flex', gap: 2,
-      background: isToolbar ? 'var(--bg-secondary)' : undefined,
+      background: isToolbar ? 'var(--muted)' : undefined,
       borderRadius: 6, padding: isToolbar ? 2 : 0,
     }}>
       {TIMEFRAME_OPTIONS.map(({ label, value }) => (
@@ -29,7 +29,7 @@ export default function TimeframeChips({ variant = 'toolbar' }: TimeframeChipsPr
               : 'transparent',
             color: timeframe === value
               ? '#fff'
-              : 'var(--text-secondary)',
+              : 'var(--muted-foreground)',
             transition: 'background .15s, color .15s',
           }}
         >

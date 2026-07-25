@@ -30,7 +30,7 @@ export default function CancelButton({ batchId }: { batchId: string }) {
       className="btn btn-outline"
       onClick={onCancel}
       disabled={busy}
-      style={{ fontSize: 11, padding: '4px 12px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+      style={{ fontSize: 11, padding: '4px 12px', color: 'var(--trading-danger)', borderColor: 'var(--trading-danger)' }}
     >
       {busy ? 'Cancelling…' : 'Cancel Run'}
     </button>

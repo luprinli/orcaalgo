@@ -19,7 +19,7 @@ export default function MonteCarloSummaryCard({ stats }: MonteCarloSummaryCardPr
   const format = (v: number) => v.toFixed(2)
 
   return (
-    <div className="card" style={{ padding: '12px 16px' }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ padding: '12px 16px' }}>
       <h4 style={{ margin: '0 0 10px' }}>Monte Carlo Summary</h4>
       <table className="summary-stats-table">
         <tbody>
@@ -59,7 +59,7 @@ export default function MonteCarloSummaryCard({ stats }: MonteCarloSummaryCardPr
           </tr>
           <tr>
             <td>Probability of Loss</td>
-            <td style={{ color: stats.bustProbability > 0.5 ? 'var(--danger)' : 'var(--text-primary)' }}>
+            <td style={{ color: stats.bustProbability > 0.5 ? 'var(--trading-danger)' : 'var(--foreground)' }}>
               {format(stats.bustProbability * 100)}%
             </td>
           </tr>
@@ -85,13 +85,13 @@ export default function MonteCarloSummaryCard({ stats }: MonteCarloSummaryCardPr
           font-weight: 600;
           background: var(--surface-secondary, #3a3a3a);
           min-width: 200px;
-          color: var(--text-secondary);
+          color: var(--muted-foreground);
         }
         .summary-stats-table td:last-child {
           text-align: right;
           min-width: 80px;
           font-family: monospace;
-          color: var(--text-primary);
+          color: var(--foreground);
         }
       `}</style>
     </div>

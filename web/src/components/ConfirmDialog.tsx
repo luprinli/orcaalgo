@@ -31,7 +31,7 @@ export default function ConfirmDialog({
       onKeyDown={(e) => { if (e.key === 'Escape') onCancel() }}
     >
       <div
-        className="card"
+        className="rounded-lg bg-card ring-1 ring-foreground/10 p-4"
         style={{ width: 400, maxWidth: '90vw' }}
         role="dialog"
         aria-modal="true"

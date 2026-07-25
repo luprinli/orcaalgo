@@ -1,8 +1,9 @@
 import { useParameterSensitivity } from '../../hooks/useParameterSensitivity'
 import { useWindowedRows } from '../../hooks/useWindowedRows'
 import type { MatrixResultsResponse, ComboResult } from '../../types/api'
+import MetricCard from '../../components/MetricCard'
 import { exportMatrixResultsCSV } from '../../lib/export'
-import { showToast } from '../../stores/toastStore'
+import toast from 'react-hot-toast'
 
 const ROW_HEIGHT = 22
 const TABLE_VIEWPORT = 400
@@ -26,6 +27,7 @@ export interface MatrixResultsPanelProps {
   onClearFilters: () => void
   onSortToggle: (field: SortField) => void
   sortIndicator: (field: SortField) => string
+  onViewDetail?: (comboKey: string) => void
 }
 
 export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
@@ -34,7 +36,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
     filterStrategy, filterSymbol, filterTf,
     sortedMatrixResults, filterStrats, filterSyms, filterTfs,
     onFilterStrategyChange, onFilterSymbolChange, onFilterTfChange,
-    onClearFilters, onSortToggle, sortIndicator,
+    onClearFilters, onSortToggle, sortIndicator, onViewDetail,
   } = props
 
   const sensitivity = useParameterSensitivity(matrixResult)
@@ -43,22 +45,22 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
   const range = maxS - minS || 1
 
   return (
-    <div className="card mb-4">
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4 mb-4">
       <div className="flex-between mb-3"><h2 style={{ margin: 0 }}>Matrix Results {matrixBatchId && <span className="text-muted" style={{ fontSize: 13, marginLeft: 8 }}>(streaming {progressPct}%)</span>}</h2>
-        <div className="flex gap-2">{matrixResult.results.length > 0 && <button className="btn btn-outline" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { exportMatrixResultsCSV(sortedMatrixResults); showToast('success', `Exported ${sortedMatrixResults.length} results`) }}>CSV</button>}<span className={`badge ${matrixResult.status === 'completed' ? 'badge-ok' : 'badge-warn'}`}>{matrixResult.status}</span></div>
+        <div className="flex gap-2">{matrixResult.results.length > 0 && <button className="btn btn-outline" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => { exportMatrixResultsCSV(sortedMatrixResults); toast.success(`Exported ${sortedMatrixResults.length} results`) }}>CSV</button>}<span className={`badge ${matrixResult.status === 'completed' ? 'badge-ok' : 'badge-warn'}`}>{matrixResult.status}</span></div>
       </div>
       <div className="metric-grid mb-3">
-        <div className="metric-card"><div className="metric-label">Combos</div><div className="metric-value">{matrixResult.summary.total_combos}</div></div>
-        <div className="metric-card"><div className="metric-label">Passed</div><div className="metric-value" style={{ color: matrixResult.summary.passed > 0 ? 'var(--success)' : 'var(--danger)' }}>{matrixResult.summary.passed}/{matrixResult.summary.total_combos}</div></div>
-        <div className="metric-card"><div className="metric-label">Trades</div><div className="metric-value">{matrixResult.summary.total_trades}</div></div>
-        <div className="metric-card"><div className="metric-label">Best Sharpe</div><div className="metric-value">{matrixResult.summary.best_sharpe?.toFixed(3)}</div></div>
-        <div className="metric-card"><div className="metric-label">Best Strat</div><div className="metric-value" style={{ fontSize: 14 }}>{matrixResult.summary.best_strategy}</div></div>
-        <div className="metric-card"><div className="metric-label">Best Sym</div><div className="metric-value">{matrixResult.summary.best_symbol}</div></div>
+        <MetricCard label="Combos" value={matrixResult.summary.total_combos} format="number" />
+        <MetricCard label="Passed" value={`${matrixResult.summary.passed}/${matrixResult.summary.total_combos}`} color={matrixResult.summary.passed > 0 ? 'positive' : 'negative'} />
+        <MetricCard label="Trades" value={matrixResult.summary.total_trades} format="number" />
+        <MetricCard label="Best Sharpe" value={matrixResult.summary.best_sharpe?.toFixed(3) ?? '--'} />
+        <MetricCard label="Best Strat" value={matrixResult.summary.best_strategy ?? '--'} />
+        <MetricCard label="Best Sym" value={matrixResult.summary.best_symbol ?? '--'} />
       </div>
       {matrixResult.results.length > 0 && (<>
         {entries.length > 1 && (
           <div style={{ marginBottom: 12 }}>
-            <h3 style={{ fontSize: 13, margin: '0 0 6px', color: 'var(--text-secondary)' }}>Parameter Sensitivity</h3>
+            <h3 style={{ fontSize: 13, margin: '0 0 6px', color: 'var(--muted-foreground)' }}>Parameter Sensitivity</h3>
             <div style={{ overflowX: 'auto' }}>
               <table className="data-table" style={{ fontSize: 10 }}>
                 <thead>
@@ -97,7 +99,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
             </div>
           </div>
         )}
-        <div className="card" style={{ padding: '6px 10px', marginBottom: 8, background: 'var(--bg-secondary)' }}>
+        <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ padding: '6px 10px', marginBottom: 8, background: 'var(--muted)' }}>
           <div className="flex gap-2 flex-wrap" style={{ alignItems: 'center' }}>
             <span className="text-muted" style={{ fontSize: 10 }}>Filter:</span>
             <select className="input" style={{ fontSize: 10, padding: '3px 6px', width: 170, height: 26 }} value={filterStrategy} onChange={e => onFilterStrategyChange(e.target.value)}><option value="">Strategies ({filterStrats.length})</option>{filterStrats.map(s => <option key={s} value={s}>{s}</option>)}</select>
@@ -115,19 +117,20 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
           <th style={{ cursor: 'pointer' }} onClick={() => onSortToggle('return')}>Return{sortIndicator('return')}</th>
           <th style={{ cursor: 'pointer' }} onClick={() => onSortToggle('win_rate')}>Win{sortIndicator('win_rate')}</th>
           <th style={{ cursor: 'pointer' }} onClick={() => onSortToggle('profit_factor')}>PF{sortIndicator('profit_factor')}</th>
-          <th>Gate</th><th>Opt</th>
+           <th>Gate</th><th>Opt</th>{onViewDetail && <th style={{ width: 50 }} />}
         </tr></thead><tbody>
           {win.topPad > 0 && <tr style={{ height: win.topPad }}><td colSpan={12} /></tr>}
           {sortedMatrixResults.slice(win.start, win.end).map((r: ComboResult, i: number) => (
           <tr key={win.start + i} style={{ height: ROW_HEIGHT, background: r.sharpe_ratio >= 1.0 ? 'rgba(63,185,80,.06)' : undefined }}>
             <td>{r.strategy_id}</td><td>{r.symbol}</td><td>{r.timeframe}</td><td>{r.num_trades}</td>
-            <td style={{ color: r.sharpe_ratio >= 1.0 ? 'var(--success)' : r.sharpe_ratio <= 0 ? 'var(--danger)' : undefined }}>{r.sharpe_ratio?.toFixed(3)}</td>
+            <td style={{ color: r.sharpe_ratio >= 1.0 ? 'var(--trading-success)' : r.sharpe_ratio <= 0 ? 'var(--trading-danger)' : undefined }}>{r.sharpe_ratio?.toFixed(3)}</td>
             <td>{r.sortino_ratio?.toFixed(3)}</td><td>{r.max_drawdown?.toFixed(1)}%</td>
-            <td style={{ color: r.total_return >= 0 ? 'var(--success)' : 'var(--danger)' }}>{r.total_return?.toFixed(1)}%</td>
+            <td style={{ color: r.total_return >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>{r.total_return?.toFixed(1)}%</td>
             <td>{r.win_rate != null ? `${(r.win_rate * 100).toFixed(0)}%` : '\u2014'}</td>
             <td>{r.profit_factor?.toFixed(2)}</td>
-            <td>{r.gate_passed === true ? <span className="badge badge-ok">PASS</span> : r.gate_passed === false ? <span className="badge badge-err">FAIL</span> : '\u2014'}</td>
+             <td>{r.gate_passed === true ? <span className="badge badge-ok">PASS</span> : r.gate_passed === false ? <span className="badge badge-err">FAIL</span> : '\u2014'}</td>
             <td>{r.optimized ? <span className="badge badge-ok" title={JSON.stringify(r.best_params || {})}>Y</span> : '\u2014'}</td>
+            {onViewDetail && <td><button className="text-xs" style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: '1px 4px' }} onClick={() => onViewDetail(`${r.strategy_id}|${r.symbol}|${r.timeframe}`)}>View</button></td>}
           </tr>))}
           {win.bottomPad > 0 && <tr style={{ height: win.bottomPad }}><td colSpan={12} /></tr>}
         </tbody></table></div>

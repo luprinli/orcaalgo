@@ -11,7 +11,7 @@ export function SkeletonRow({ rows = 1, className = '' }: SkeletonRowProps) {
       {Array.from({ length: rows }).map((_, i) => (
         <div
           key={i}
-          className="h-4 bg-slate-700/50 rounded animate-pulse"
+          className="h-4 bg-muted rounded animate-pulse"
           style={{ width: `${Math.max(40, 100 - i * 15)}%` }}
         />
       ))}

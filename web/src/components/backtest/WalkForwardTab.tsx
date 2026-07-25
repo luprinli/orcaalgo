@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { WalkForwardResponse } from '../../types/api'
+import MetricCard from '../../components/MetricCard'
 
 interface WalkForwardTabProps {
   data: WalkForwardResponse | null
@@ -11,7 +12,7 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
 
   if (!data) {
     return (
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Walk-Forward Analysis</h2>
         <p className="text-muted">Loading walk-forward data...</p>
       </div>
@@ -20,7 +21,7 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
 
   if (data.message) {
     return (
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Walk-Forward Analysis</h2>
         <p className="text-muted">{data.message}</p>
       </div>
@@ -29,7 +30,7 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
 
   if (data.total_windows === 0) {
     return (
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Walk-Forward Analysis</h2>
         <p className="text-muted">No walk-forward windows available for this run. Run an optimized backtest to generate walk-forward metrics.</p>
       </div>
@@ -39,25 +40,25 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
   return (
     <div className="space-y-4">
       {/* Summary */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Walk-Forward Summary</h2>
-        <div className="grid grid-3 mt-3">
+        <div className="grid grid grid-cols-3 gap-2 mt-3">
           <Metric label="Windows Passed" value={`${data.passed_windows} / ${data.total_windows}`}
-            color={data.passed_windows === data.total_windows ? 'var(--success)' : data.passed_windows > data.total_windows / 2 ? 'var(--warn)' : 'var(--danger)'} />
+            color={data.passed_windows === data.total_windows ? 'var(--trading-success)' : data.passed_windows > data.total_windows / 2 ? 'var(--trading-warning)' : 'var(--trading-danger)'} />
           <Metric label="OOS Avg Sharpe" value={data.oos_avg_sharpe?.toFixed(3) ?? '—'} />
           <Metric label="Sharpe Degradation" value={data.sharpe_degradation != null ? (data.sharpe_degradation * 100).toFixed(1) + '%' : '—'}
-            color={data.sharpe_degradation != null && data.sharpe_degradation < 0.3 ? 'var(--success)' : 'var(--warn)'} />
+            color={data.sharpe_degradation != null && data.sharpe_degradation < 0.3 ? 'var(--trading-success)' : 'var(--trading-warning)'} />
           <Metric label="Overall Sharpe" value={data.overall_sharpe?.toFixed(3) ?? '—'} />
           <Metric label="Overall Win Rate" value={data.overall_win_rate != null ? (data.overall_win_rate * 100).toFixed(1) + '%' : '—'} />
           <Metric label="IS→OOS Stability" value={data.oos_avg_sharpe != null && data.sharpe_degradation != null
             ? (data.oos_avg_sharpe > 0 ? 'Stable' : 'Degraded')
             : '—'}
-            color={data.oos_avg_sharpe != null && data.oos_avg_sharpe > 0 ? 'var(--success)' : 'var(--danger)'} />
+            color={data.oos_avg_sharpe != null && data.oos_avg_sharpe > 0 ? 'var(--trading-success)' : 'var(--trading-danger)'} />
         </div>
       </div>
 
       {/* Per-Window Table */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Walk-Forward Windows</h2>
         <div style={{ overflowX: 'auto' }}>
           <table>
@@ -81,10 +82,10 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
                   <td className="text-muted text-xs">{w.train_start ? new Date(w.train_start).toLocaleDateString() : '—'}</td>
                   <td className="text-muted text-xs">{w.test_start ? new Date(w.test_start).toLocaleDateString() : '—'}</td>
                   <td className="text-muted text-xs">{w.test_end ? new Date(w.test_end).toLocaleDateString() : '—'}</td>
-                  <td style={{ color: (w.in_sample_sharpe ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  <td style={{ color: (w.in_sample_sharpe ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {w.in_sample_sharpe?.toFixed(3) ?? '—'}
                   </td>
-                  <td style={{ color: (w.out_sample_sharpe ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  <td style={{ color: (w.out_sample_sharpe ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {w.out_sample_sharpe?.toFixed(3) ?? '—'}
                   </td>
                   <td>{w.oos_win_rate != null ? (w.oos_win_rate * 100).toFixed(1) + '%' : '—'}</td>
@@ -106,9 +107,6 @@ export function WalkForwardTab({ data }: WalkForwardTabProps) {
 
 function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="metric-card">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value" style={color ? { color } : undefined}>{value}</div>
-    </div>
+    <MetricCard label={label} value={value} color={color === 'var(--trading-success)' ? 'positive' : color === 'var(--trading-danger)' ? 'negative' : color === 'var(--trading-warning)' ? 'default' : 'default'} />
   )
 }

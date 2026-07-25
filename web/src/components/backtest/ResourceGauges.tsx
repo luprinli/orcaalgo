@@ -3,9 +3,9 @@ import { system } from '../../api/client'
 import type { SystemHealth } from '../../types/api'
 
 function gaugeColor(ratio: number): string {
-  if (ratio >= 0.9) return 'var(--danger)'
-  if (ratio >= 0.7) return 'var(--warning, #d29922)'
-  return 'var(--success)'
+  if (ratio >= 0.9) return 'var(--trading-danger)'
+  if (ratio >= 0.7) return 'var(--trading-warning)'
+  return 'var(--trading-success)'
 }
 
 function Gauge({ label, value, max, unit }: { label: string; value: number; max: number; unit: string }) {
@@ -50,9 +50,9 @@ export default function ResourceGauges({ active }: { active: boolean }) {
   if (!health) return null
 
   return (
-    <div className="card mb-3" style={{ padding: '8px 14px' }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4 mb-3" style={{ padding: '8px 14px' }}>
       {health.near_capacity && (
-        <div style={{ color: 'var(--danger)', fontSize: 11, marginBottom: 6 }}>
+        <div style={{ color: 'var(--trading-danger)', fontSize: 11, marginBottom: 6 }}>
           Engine near capacity — new heavy runs may be slow or queued.
         </div>
       )}

@@ -53,12 +53,12 @@ export default function TradesTab({ trades, filteredTrades, filteredMonth, onCle
               {filteredTrades.map((t) => (
                 <tr key={t.id}>
                   <td>{t.symbol}</td>
-                  <td style={{ color: t.side === 'BUY' ? 'var(--success)' : 'var(--danger)' }}>{t.side}</td>
+                  <td style={{ color: t.side === 'BUY' ? 'var(--trading-success)' : 'var(--trading-danger)' }}>{t.side}</td>
                   <td>{t.quantity}</td>
                   <td>${t.entry_price?.toFixed(2)}</td>
                   <td>${t.exit_price?.toFixed(2)}</td>
-                  <td style={{ color: (t.pnl ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>${t.pnl?.toFixed(2)}</td>
-                  <td style={{ color: (t.pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>{t.pnl_pct?.toFixed(2)}%</td>
+                  <td style={{ color: (t.pnl ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>${t.pnl?.toFixed(2)}</td>
+                  <td style={{ color: (t.pnl_pct ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>{t.pnl_pct?.toFixed(2)}%</td>
                   <td>${t.mae?.toFixed(2)}</td>
                   <td>${t.mfe?.toFixed(2)}</td>
                   <td>{t.hold_duration?.toFixed(1)}h</td>

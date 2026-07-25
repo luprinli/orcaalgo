@@ -16,22 +16,22 @@ function formatPrice(p: number): string {
 export function OHLCVHeader({ candle }: { candle?: Candle }) {
   if (!candle) {
     return (
-      <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)', background: 'var(--bg-secondary)' }}>
+      <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 11, fontFamily: 'monospace', color: 'var(--muted-foreground)', background: 'var(--muted)' }}>
         <span>Waiting for data...</span>
       </div>
     )
   }
   const change = candle.close - candle.open
   const changePct = candle.open !== 0 ? (change / candle.open) * 100 : 0
-  const color = change >= 0 ? 'var(--success)' : 'var(--danger)'
+  const color = change >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)'
 
   return (
-    <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 11, fontFamily: 'monospace', color: 'var(--text-secondary)', background: 'var(--bg-secondary)', flexWrap: 'wrap' }}>
-      <span>O: <span style={{ color: 'var(--text-primary)' }}>{formatPrice(candle.open)}</span></span>
-      <span>H: <span style={{ color: 'var(--text-primary)' }}>{formatPrice(candle.high)}</span></span>
-      <span>L: <span style={{ color: 'var(--text-primary)' }}>{formatPrice(candle.low)}</span></span>
-      <span>C: <span style={{ color: 'var(--text-primary)' }}>{formatPrice(candle.close)}</span></span>
-      <span>V: <span style={{ color: 'var(--text-primary)' }}>{formatVolume(candle.volume)}</span></span>
+    <div style={{ padding: '6px 10px', borderBottom: '1px solid var(--border)', display: 'flex', gap: 16, fontSize: 11, fontFamily: 'monospace', color: 'var(--muted-foreground)', background: 'var(--muted)', flexWrap: 'wrap' }}>
+      <span>O: <span style={{ color: 'var(--foreground)' }}>{formatPrice(candle.open)}</span></span>
+      <span>H: <span style={{ color: 'var(--foreground)' }}>{formatPrice(candle.high)}</span></span>
+      <span>L: <span style={{ color: 'var(--foreground)' }}>{formatPrice(candle.low)}</span></span>
+      <span>C: <span style={{ color: 'var(--foreground)' }}>{formatPrice(candle.close)}</span></span>
+      <span>V: <span style={{ color: 'var(--foreground)' }}>{formatVolume(candle.volume)}</span></span>
       <span style={{ color }}>{change >= 0 ? '+' : ''}{changePct.toFixed(2)}%</span>
     </div>
   )

@@ -74,7 +74,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
           width: panelWidth,
           overflow: 'hidden',
           transition: 'width 0.25s ease',
-          background: 'var(--bg-secondary)',
+          background: 'var(--muted)',
           borderRight: isOpen ? '1px solid var(--border)' : 'none',
           flexShrink: 0,
         }}
@@ -84,7 +84,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
             padding: '8px 10px 6px',
             fontSize: 11,
             fontWeight: 600,
-            color: 'var(--text-secondary)',
+            color: 'var(--muted-foreground)',
             textTransform: 'uppercase',
             letterSpacing: 1,
             display: 'flex',
@@ -126,12 +126,12 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
                   onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--bg-hover)' }}
                   onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent' }}
                 >
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.ticker}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--foreground)' }}>{s.ticker}</span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{
                       color: p && change != null
-                        ? (change >= 0 ? 'var(--success)' : 'var(--danger)')
-                        : 'var(--text-secondary)',
+                        ? (change >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)')
+                        : 'var(--muted-foreground)',
                       fontSize: 11,
                       fontVariantNumeric: 'tabular-nums',
                     }}>
@@ -139,7 +139,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
                     </span>
                     {change != null && (
                       <span style={{
-                        color: change >= 0 ? 'var(--success)' : 'var(--danger)',
+                        color: change >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)',
                         fontSize: 10,
                         fontWeight: 600,
                         fontVariantNumeric: 'tabular-nums',
@@ -152,7 +152,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
               )
             })}
             {activeSymbols.length === 0 && (
-              <div style={{ padding: '10px', fontSize: 11, color: 'var(--text-secondary)' }}>
+              <div style={{ padding: '10px', fontSize: 11, color: 'var(--muted-foreground)' }}>
                 {t('watchlist:noSymbols', 'No symbols')}
               </div>
             )}
@@ -170,7 +170,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
           transform: 'translateY(-50%)',
           width: 20,
           height: 48,
-          background: 'var(--bg-secondary)',
+          background: 'var(--muted)',
           border: '1px solid var(--border)',
           borderLeft: isOpen ? 'none' : '1px solid var(--border)',
           borderRadius: '0 4px 4px 0',
@@ -178,7 +178,7 @@ export default function Watchlist({ onSelectSymbol, selectedSymbol, isOpen, onTo
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'var(--text-secondary)',
+          color: 'var(--muted-foreground)',
           fontSize: 9,
           padding: 0,
           zIndex: 10,

@@ -29,7 +29,7 @@ export default function OverviewTab({ regimeStats }: Props) {
                   <td>{r.label}</td>
                   <td>{r.num_trades}</td>
                   <td>{(r.win_rate * 100).toFixed(1)}%</td>
-                  <td style={{ color: r.total_return >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  <td style={{ color: r.total_return >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {(r.total_return * 100).toFixed(1)}%
                   </td>
                   <td>{(r.max_drawdown * 100).toFixed(1)}%</td>

@@ -11,9 +11,9 @@ export function PageHeader({ title, subtitle, badge, actions }: PageHeaderProps)
   return (
     <div className="flex items-center justify-between mb-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        <h1 className="text-2xl font-bold text-foreground">{title}</h1>
         {subtitle && (
-          <p className="text-sm text-slate-400 mt-1">{subtitle}</p>
+          <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
         )}
       </div>
       <div className="flex items-center gap-3">
@@ -21,10 +21,10 @@ export function PageHeader({ title, subtitle, badge, actions }: PageHeaderProps)
           <span
             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
               badge.variant === 'ok'
-                ? 'bg-green-400/10 text-green-400'
+                ? 'bg-trading-success/10 text-trading-success'
                 : badge.variant === 'err'
-                  ? 'bg-red-400/10 text-red-400'
-                  : 'bg-yellow-400/10 text-yellow-400'
+                  ? 'bg-trading-danger/10 text-trading-danger'
+                  : 'bg-trading-warning/10 text-trading-warning'
             }`}
           >
             {badge.text}

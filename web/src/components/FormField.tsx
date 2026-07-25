@@ -1,5 +1,7 @@
 import { type ReactNode } from 'react'
 import { type UseFormRegister, type FieldError } from 'react-hook-form'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
 
 interface FormFieldProps {
   label: string
@@ -16,10 +18,10 @@ interface FormFieldProps {
 export function FormField({ label, name, register, error, type, placeholder, children, className }: FormFieldProps) {
   return (
     <div className={className}>
-      <label className="text-muted" style={{ display: 'block', marginBottom: 4 }}>{label}</label>
+      <Label htmlFor={name} className="mb-1 block">{label}</Label>
       {children ?? (
-        <input
-          className="input"
+        <Input
+          id={name}
           type={type ?? 'text'}
           placeholder={placeholder}
           aria-label={label}
@@ -28,7 +30,7 @@ export function FormField({ label, name, register, error, type, placeholder, chi
         />
       )}
       {error && (
-        <p role="alert" style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>
+        <p role="alert" className="text-destructive text-[11px] mt-1 mb-0">
           {error.message}
         </p>
       )}

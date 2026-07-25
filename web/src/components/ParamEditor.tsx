@@ -62,12 +62,12 @@ export default function ParamEditor({ defs, initialParams = {}, onChange, compac
                   border: `1px solid var(--border)`,
                   borderRadius: 'var(--radius-sm)',
                   padding: compact ? '6px 8px' : '8px 10px',
-                  background: !isDefault ? 'rgba(63,185,80,.05)' : 'var(--bg-secondary)',
+                  background: !isDefault ? 'rgba(63,185,80,.05)' : 'var(--muted)',
                 }}>
                   <div className="flex-between" style={{ marginBottom: 4 }}>
                     <label
                       title={d.description}
-                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)', cursor: 'help' }}
+                      style={{ fontSize: 11, fontWeight: 600, color: 'var(--foreground)', cursor: 'help' }}
                     >
                       {d.name}
                     </label>
@@ -76,8 +76,8 @@ export default function ParamEditor({ defs, initialParams = {}, onChange, compac
                         type="number"
                         style={{
                           width: 70, fontSize: 11, fontFamily: 'monospace',
-                          background: 'var(--bg-input)', border: '1px solid var(--border)',
-                          borderRadius: 3, color: 'var(--text-primary)',
+                          background: 'var(--input)', border: '1px solid var(--border)',
+                          borderRadius: 3, color: 'var(--foreground)',
                           padding: '2px 5px', textAlign: 'right',
                         }}
                         value={d.type === 'integer' ? Math.round(value) : Number(value.toFixed(displayPrecision))}
@@ -115,12 +115,12 @@ export default function ParamEditor({ defs, initialParams = {}, onChange, compac
                       updateParam(d.name, d.type === 'integer' ? Math.round(v) : v)
                     }}
                   />
-                  <div className="flex-between" style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2 }}>
+                  <div className="flex-between" style={{ fontSize: 10, color: 'var(--muted-foreground)', marginTop: 2 }}>
                     <span>{d.type === 'integer' ? Math.round(d.min) : Number(d.min.toFixed(displayPrecision))}</span>
                     <span>{d.type === 'integer' ? Math.round(d.max) : Number(d.max.toFixed(displayPrecision))}</span>
                   </div>
                   {d.description && !compact && (
-                    <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, fontStyle: 'italic' }}>
+                    <div style={{ fontSize: 10, color: 'var(--muted-foreground)', marginTop: 2, fontStyle: 'italic' }}>
                       {d.description}
                     </div>
                   )}

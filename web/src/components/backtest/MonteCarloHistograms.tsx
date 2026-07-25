@@ -14,7 +14,7 @@ export default function MonteCarloHistograms({
 }: MonteCarloHistogramsProps) {
   if (!allPnlPct.length || !allMaxDDPct.length) {
     return (
-      <div className="card" style={{ padding: 16 }}>
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ padding: 16 }}>
         <p className="text-muted">Insufficient data for Monte Carlo histograms.</p>
       </div>
     )
@@ -38,7 +38,7 @@ export default function MonteCarloHistograms({
   const ddMax = Math.max(...ddTrace.y, 1)
 
   return (
-    <div className="card" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <h4 style={{ margin: '0 0 8px' }}>P/L% Distribution</h4>
         <div style={chartStyle}>
@@ -58,7 +58,7 @@ export default function MonteCarloHistograms({
             />
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-secondary)', padding: '0 8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted-foreground)', padding: '0 8px' }}>
           <span>{pnlTrace.x[0]?.split(' to ')[0] ?? ''}%</span>
           <span>{pnlTrace.x[pnlTrace.x.length - 1]?.split(' to ')[1] ?? ''}%</span>
         </div>
@@ -75,7 +75,7 @@ export default function MonteCarloHistograms({
                 flex: 1,
                 height: `${Math.max(4, (count / ddMax) * 100)}%`,
                 minHeight: count > 0 ? 4 : 1,
-                background: count > 0 ? 'var(--danger, #EF5350)' : 'transparent',
+                background: count > 0 ? 'var(--trading-danger, #EF5350)' : 'transparent',
                 opacity: 0.7,
                 marginRight: 1,
                 borderRadius: '2px 2px 0 0',
@@ -83,13 +83,13 @@ export default function MonteCarloHistograms({
             />
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-secondary)', padding: '0 8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--muted-foreground)', padding: '0 8px' }}>
           <span>{ddTrace.x[0]?.split(' to ')[0] ?? ''}%</span>
           <span>{ddTrace.x[ddTrace.x.length - 1]?.split(' to ')[1] ?? ''}%</span>
         </div>
       </div>
 
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', textAlign: 'center' }}>
+      <div style={{ fontSize: 11, color: 'var(--muted-foreground)', textAlign: 'center' }}>
         {stats.numSimulations.toLocaleString()} paths, {stats.numDays} days per path
       </div>
     </div>

@@ -32,7 +32,7 @@ export function OptimizationConfigForm({
 }: OptimizationConfigFormProps) {
   return (
     <div className="space-y-3">
-      <div className="grid grid-2">
+      <div className="grid grid grid-cols-2 gap-4">
         <div>
           <label className="text-xs text-slate-400 block mb-1">Strategy</label>
           <select className="input" value={strategyId} onChange={e => onStrategyChange(e.target.value)}>
@@ -59,7 +59,7 @@ export function OptimizationConfigForm({
         <label className="text-xs text-slate-400 block mb-1">Symbol</label>
         <input className="input" value={symbol} onChange={e => onSymbolChange(e.target.value.toUpperCase())} placeholder="SPY" />
       </div>
-      <div className="grid grid-2">
+      <div className="grid grid grid-cols-2 gap-4">
         <div>
           <label className="text-xs text-slate-400 block mb-1">Train Years</label>
           <input className="input" type="number" min={1} max={5} value={trainYears} onChange={e => onTrainYearsChange(parseInt(e.target.value) || 2)} />

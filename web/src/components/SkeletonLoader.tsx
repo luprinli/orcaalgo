@@ -15,7 +15,7 @@ export default function SkeletonLoader({ lines = 1, height = 16, width = '100%',
             height,
             width: i === lines - 1 && lines > 1 ? '60%' : width,
             borderRadius: 4,
-            background: 'var(--bg-input)',
+            background: 'var(--input)',
             animation: 'skeleton-pulse 1.5s ease-in-out infinite',
           }}
         />
@@ -28,18 +28,18 @@ export function MetricSkeleton({ count = 3 }: { count?: number }) {
   return (
     <div className="metric-grid">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="metric-card">
+        <div key={i} className="rounded-lg bg-card ring-1 ring-foreground/10 p-3 flex flex-col gap-0.5">
           <div
             style={{
               height: 10, width: '60%', margin: '0 auto 8px',
-              borderRadius: 3, background: 'var(--bg-input)',
+              borderRadius: 3, background: 'var(--input)',
               animation: 'skeleton-pulse 1.5s ease-in-out infinite',
             }}
           />
           <div
             style={{
               height: 24, width: '40%', margin: '0 auto',
-              borderRadius: 3, background: 'var(--bg-input)',
+              borderRadius: 3, background: 'var(--input)',
               animation: 'skeleton-pulse 1.5s ease-in-out infinite',
             }}
           />
@@ -61,7 +61,7 @@ export function TableSkeleton({ rows = 5, cols = 4 }: { rows?: number; cols?: nu
                 flex: 1,
                 height: 14,
                 borderRadius: 3,
-                background: 'var(--bg-input)',
+                background: 'var(--input)',
                 animation: 'skeleton-pulse 1.5s ease-in-out infinite',
               }}
             />

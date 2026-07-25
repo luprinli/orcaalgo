@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { TradeSummary } from '../../types/api'
+import MetricCard from '../../components/MetricCard'
 
 interface AnalyticsTabProps {
   trades: TradeSummary[]
@@ -100,38 +101,38 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
   }, [dailyReturns])
 
   if (trades.length === 0) {
-    return <div className="card"><h2>Trade Analytics</h2><p className="text-muted">No trades to analyze.</p></div>
+    return <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4"><h2>Trade Analytics</h2><p className="text-muted">No trades to analyze.</p></div>
   }
 
   return (
     <div className="space-y-4">
       {/* PnL Distribution Stats */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>PnL Distribution</h2>
-        <div className="grid grid-3 mt-3">
+        <div className="grid grid grid-cols-3 gap-2 mt-3">
           <Metric label="Mean PnL" value={`$${pnlStats.mean}`} />
           <Metric label="Median PnL" value={`$${pnlStats.median}`} />
-          <Metric label="Max Win" value={`$${pnlStats.maxWin}`} color="var(--success)" />
-          <Metric label="Max Loss" value={`$${pnlStats.maxLoss}`} color="var(--danger)" />
-          <Metric label="Avg Win" value={`$${pnlStats.avgWin}`} color="var(--success)" />
-          <Metric label="Avg Loss" value={`$${pnlStats.avgLoss}`} color="var(--danger)" />
+          <Metric label="Max Win" value={`$${pnlStats.maxWin}`} color="var(--trading-success)" />
+          <Metric label="Max Loss" value={`$${pnlStats.maxLoss}`} color="var(--trading-danger)" />
+          <Metric label="Avg Win" value={`$${pnlStats.avgWin}`} color="var(--trading-success)" />
+          <Metric label="Avg Loss" value={`$${pnlStats.avgLoss}`} color="var(--trading-danger)" />
         </div>
       </div>
 
       {/* MAE/MFE */}
       {maeMfeStats && (
-        <div className="card">
+        <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
           <h2>MAE / MFE Analysis</h2>
-          <div className="grid grid-3 mt-3">
-            <Metric label="Avg MAE" value={`$${maeMfeStats.avgMae}`} color="var(--danger)" />
-            <Metric label="Avg MFE" value={`$${maeMfeStats.avgMfe}`} color="var(--success)" />
+          <div className="grid grid grid-cols-3 gap-2 mt-3">
+            <Metric label="Avg MAE" value={`$${maeMfeStats.avgMae}`} color="var(--trading-danger)" />
+            <Metric label="Avg MFE" value={`$${maeMfeStats.avgMfe}`} color="var(--trading-success)" />
             <Metric label="MFE/MAE Ratio" value={maeMfeStats.ratio} />
           </div>
         </div>
       )}
 
       {/* Win Rate by Day of Week */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Win Rate by Day of Week</h2>
         <div style={{ overflowX: 'auto' }}>
           <table>
@@ -143,7 +144,7 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
                 <tr key={d.day}>
                   <td className="font-medium text-white">{d.day}</td>
                   <td>{d.trades}</td>
-                  <td style={{ color: d.winRate != null && d.winRate >= 50 ? 'var(--success)' : 'var(--danger)' }}>
+                  <td style={{ color: d.winRate != null && d.winRate >= 50 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {d.winRate != null ? `${d.winRate.toFixed(1)}%` : '—'}
                   </td>
                   <td>
@@ -162,7 +163,7 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
       </div>
 
       {/* Duration Distribution */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Trade Duration Distribution</h2>
         <div style={{ overflowX: 'auto' }}>
           <table>
@@ -184,19 +185,19 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
 
       {/* Rolling Sharpe */}
       {rollingSharpe && (
-        <div className="card">
+        <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
           <h2>Rolling Sharpe Ratio</h2>
-          <div className="grid grid-3 mt-3">
+          <div className="grid grid grid-cols-3 gap-2 mt-3">
             {rollingSharpe.map(r => (
               <Metric key={r.label} label={`${r.label} Rolling`} value={r.sharpe.toFixed(2)}
-                color={r.sharpe >= 1 ? 'var(--success)' : r.sharpe >= 0 ? 'var(--warn)' : 'var(--danger)'} />
+                color={r.sharpe >= 1 ? 'var(--trading-success)' : r.sharpe >= 0 ? 'var(--trading-warning)' : 'var(--trading-danger)'} />
             ))}
           </div>
         </div>
       )}
 
       {/* Win Rate by Hour */}
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Win Rate by Hour (UTC)</h2>
         <div style={{ overflowX: 'auto' }}>
           <table>
@@ -208,7 +209,7 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
                 <tr key={h.hour}>
                   <td className="font-medium text-white">{h.hour}</td>
                   <td>{h.trades}</td>
-                  <td style={{ color: h.winRate != null && h.winRate >= 50 ? 'var(--success)' : 'var(--danger)' }}>
+                  <td style={{ color: h.winRate != null && h.winRate >= 50 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {h.winRate != null ? `${h.winRate.toFixed(1)}%` : '—'}
                   </td>
                 </tr>
@@ -223,9 +224,6 @@ export default function AnalyticsTab({ trades, dailyReturns }: AnalyticsTabProps
 
 function Metric({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="metric-card">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value" style={color ? { color } : undefined}>{value}</div>
-    </div>
+    <MetricCard label={label} value={value} color={color === 'var(--trading-success)' ? 'positive' : color === 'var(--trading-danger)' ? 'negative' : 'default'} />
   )
 }

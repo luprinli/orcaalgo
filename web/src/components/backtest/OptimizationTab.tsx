@@ -1,4 +1,5 @@
 import type { OptimizationFootprint } from '../../types/api'
+import MetricCard from '../../components/MetricCard'
 
 function paramDiffTable(bestParamsJson: string) {
   let parsed: Record<string, unknown> = {}
@@ -43,48 +44,19 @@ export default function OptimizationTab({ optimization }: Props) {
     <div>
       <h2>Walk-Forward Optimization</h2>
       <div className="metric-grid mb-3">
-        <div className="metric-card">
-          <div className="metric-label">Deflated Sharpe</div>
-          <div className="metric-value">{optimization.deflated_sharpe?.toFixed(3)}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Conventional Sharpe</div>
-          <div className="metric-value">{optimization.conventional_sharpe?.toFixed(3)}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">OOS Avg Sharpe</div>
-          <div className="metric-value">{optimization.oos_average_sharpe?.toFixed(3)}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Sharpe Degradation</div>
-          <div className="metric-value" style={{ color: (optimization.sharpe_degradation ?? 0) > 0.3 ? 'var(--danger)' : 'var(--success)' }}>
-            {optimization.sharpe_degradation != null ? `${(optimization.sharpe_degradation * 100).toFixed(1)}%` : '--'}
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">IVS</div>
-          <div className="metric-value">{optimization.ivs?.toFixed(3)}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Walk-Forward Windows</div>
-          <div className="metric-value">{optimization.walk_forward_windows}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Passed Windows</div>
-          <div className="metric-value">{optimization.passed_windows}/{optimization.walk_forward_windows}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Grid Passes</div>
-          <div className="metric-value">{optimization.grid_passes}</div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-label">Bayesian Iterations</div>
-          <div className="metric-value">{optimization.bayesian_iterations}</div>
-        </div>
+        <MetricCard label="Deflated Sharpe" value={optimization.deflated_sharpe?.toFixed(3) ?? '--'} />
+        <MetricCard label="Conventional Sharpe" value={optimization.conventional_sharpe?.toFixed(3) ?? '--'} />
+        <MetricCard label="OOS Avg Sharpe" value={optimization.oos_average_sharpe?.toFixed(3) ?? '--'} />
+        <MetricCard label="Sharpe Degradation" value={optimization.sharpe_degradation != null ? `${(optimization.sharpe_degradation * 100).toFixed(1)}%` : '--'} color={optimization.sharpe_degradation != null ? 'auto' : 'default'} />
+        <MetricCard label="IVS" value={optimization.ivs?.toFixed(3) ?? '--'} />
+        <MetricCard label="Walk-Forward Windows" value={optimization.walk_forward_windows ?? 0} format="number" />
+        <MetricCard label="Passed Windows" value={`${optimization.passed_windows}/${optimization.walk_forward_windows}`} />
+        <MetricCard label="Grid Passes" value={optimization.grid_passes ?? 0} format="number" />
+        <MetricCard label="Bayesian Iterations" value={optimization.bayesian_iterations ?? 0} format="number" />
       </div>
       {optimization.best_params_json && (
         <div>
-          <h3 style={{ fontSize: 13, margin: '12px 0 8px', color: 'var(--text-secondary)' }}>Optimized Parameters</h3>
+          <h3 style={{ fontSize: 13, margin: '12px 0 8px', color: 'var(--muted-foreground)' }}>Optimized Parameters</h3>
           {paramDiffTable(optimization.best_params_json)}
         </div>
       )}

@@ -68,11 +68,11 @@ export default function MonteCarloContextCard({ data, stats, seed }: MonteCarloC
           font-weight: 600;
           background: var(--surface-secondary, #3a3a3a);
           min-width: 140px;
-          color: var(--text-secondary);
+          color: var(--muted-foreground);
         }
         .context-table td:last-child {
           font-family: monospace;
-          color: var(--text-primary);
+          color: var(--foreground);
         }
       `}</style>
     </details>

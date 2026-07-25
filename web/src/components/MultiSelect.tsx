@@ -62,7 +62,7 @@ export default function MultiSelect<T extends MultiSelectItem>({
         {selCount > 6 && <span className="text-muted" style={{ fontSize: 10, lineHeight: '22px' }}>+{selCount - 6}</span>}
       </div>
       {open && (
-        <div className="card" style={{ position: 'absolute', zIndex: 200, minWidth: 240, maxHeight: 340, overflowY: 'auto', marginTop: 2, padding: 8, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>
+        <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ position: 'absolute', zIndex: 200, minWidth: 240, maxHeight: 340, overflowY: 'auto', marginTop: 2, padding: 8, boxShadow: '0 8px 32px rgba(0,0,0,.3)' }}>
           {onSelectAll && (
             <div className="flex gap-1 mb-2 flex-wrap">
               <button className="btn btn-outline" style={{ fontSize: 10, padding: '2px 6px' }} onClick={onSelectAll}>{t('components:multiSelect.all', 'All')} ({total})</button>

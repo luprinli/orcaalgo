@@ -104,7 +104,7 @@ export default function SymbolSearch({ value, onChange, placeholder, style }: Sy
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               <span style={{ fontWeight: 600 }}>{s.ticker}</span>
-              <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{s.exchange}</span>
+              <span style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{s.exchange}</span>
             </div>
           ))}
         </div>

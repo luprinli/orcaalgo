@@ -15,7 +15,7 @@ export function PageSection({ title, variant = 'default', children }: PageSectio
         : ''
 
   return (
-    <div className={`bg-slate-800/50 rounded-lg p-4 ${borderClass}`}>
+    <div className={`bg-card rounded-lg p-4 ${borderClass}`}>
       {title && (
         <h2 className="text-lg font-semibold text-white mb-3">{title}</h2>
       )}

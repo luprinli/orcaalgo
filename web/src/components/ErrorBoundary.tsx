@@ -29,8 +29,8 @@ class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div className="card" style={{ border: '1px solid var(--danger)', padding: 16 }}>
-            <h3 style={{ color: 'var(--danger)', marginBottom: 8 }}>
+          <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ border: '1px solid var(--trading-danger)', padding: 16 }}>
+            <h3 style={{ color: 'var(--trading-danger)', marginBottom: 8 }}>
               {i18n.t('components:errorBoundary.somethingWentWrong', 'Something went wrong')}
             </h3>
             <p className="text-muted" style={{ fontSize: 12 }}>

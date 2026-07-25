@@ -14,10 +14,10 @@ function fmtEta(seconds: number): string {
 
 const STATUS_COLOR: Record<string, string> = {
   running: 'var(--accent)',
-  queued: 'var(--text-secondary)',
-  completed: 'var(--success)',
-  failed: 'var(--danger)',
-  cancelled: 'var(--danger)',
+  queued: 'var(--muted-foreground)',
+  completed: 'var(--trading-success)',
+  failed: 'var(--trading-danger)',
+  cancelled: 'var(--trading-danger)',
 }
 
 /**
@@ -37,7 +37,7 @@ export default function MatrixProgressBar() {
   const color = STATUS_COLOR[status] ?? 'var(--accent)'
 
   return (
-    <div className="card mb-3" style={{ padding: '10px 14px' }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4 mb-3" style={{ padding: '10px 14px' }}>
       <div className="flex-between mb-1" style={{ fontSize: 12 }}>
         <span style={{ fontWeight: 600, textTransform: 'capitalize', color }}>
           {status}{t.phase === 'screening' ? ' · screening' : ''}

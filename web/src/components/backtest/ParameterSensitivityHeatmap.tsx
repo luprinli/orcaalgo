@@ -84,7 +84,7 @@ export function ParameterSensitivityHeatmap({ entries, height = 400 }: Parameter
 
   if (!heatmapData) {
     return (
-      <div className="card">
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
         <h2>Parameter Sensitivity</h2>
         <p className="text-muted text-sm mt-2">
           Run a parameter sweep with 2+ parameters to visualize interaction effects as a heatmap.
@@ -94,7 +94,7 @@ export function ParameterSensitivityHeatmap({ entries, height = 400 }: Parameter
   }
 
   return (
-    <div className="card">
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
       <h2>Parameter Sensitivity — {heatmapData.p1} vs {heatmapData.p2}</h2>
       <div ref={containerRef} />
     </div>
