@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -13,12 +15,17 @@ import (
 
 func (s *Server) getOptimizationStatus(c *gin.Context) {
 	runID := c.Param("id")
-	bp, err := monitor.ReadBatchProgress("optimize_" + runID)
+	bp, err := monitor.ReadBatchProgress("opt_" + runID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "optimization run not found"})
 		return
 	}
-	c.JSON(http.StatusOK, bp)
+	c.JSON(http.StatusOK, gin.H{
+		"run_id":          bp.BatchID,
+		"status":          bp.Status,
+		"progress":        bp.ProgressPct,
+		"elapsed_seconds": bp.ElapsedS,
+	})
 }
 
 func (s *Server) getOptimizationResults(c *gin.Context) {
@@ -29,18 +36,28 @@ func (s *Server) getOptimizationResults(c *gin.Context) {
 		return
 	}
 
-	var result *db.OptimizationRun
-	if s.repo != nil {
-		result, err = s.repo.GetOptimizationRunByID(c.Request.Context(), runUUID)
-		if err != nil || result == nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "optimization run not found"})
-			return
-		}
+	if s.repo == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "repository not available"})
+		return
+	}
+
+	result, err := s.repo.GetOptimizationRunByID(c.Request.Context(), runUUID)
+	if err != nil || result == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "optimization run not found"})
+		return
+	}
+
+	bestMetric := 0.0
+	if result.BestMetric != nil {
+		bestMetric = *result.BestMetric
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"run":      result,
-		"endpoint": "optimization_results",
+		"run_id":       result.ID.String(),
+		"best_params":  result.BestParams,
+		"best_metric":  bestMetric,
+		"total_trials": result.TotalTrials,
+		"trials":       []interface{}{},
 	})
 }
 
@@ -61,20 +78,17 @@ func (s *Server) submitBacktestWithOptimization(c *gin.Context) {
 	var req struct {
 		StrategyID      string                          `json:"strategy_id"`
 		Symbols         []string                        `json:"symbols"`
-		StartDate       string                          `json:"start_date"`
-		EndDate         string                          `json:"end_date"`
-		Timeframe       string                          `json:"timeframe"`
-		Capital         float64                         `json:"capital"`
 		Objective       string                          `json:"objective"`
 		MaxCombinations int                             `json:"max_combinations"`
 		TrainYears      int                             `json:"train_years"`
 		TestYears       int                             `json:"test_years"`
 		StepMonths      int                             `json:"step_months"`
+		Capital         float64                         `json:"capital"`
 		Constraints     map[string]struct {
 			Min  float64 `json:"min"`
 			Max  float64 `json:"max"`
 			Step float64 `json:"step"`
-		} `json:"constraints"`
+		} `json:"parameters"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -82,28 +96,102 @@ func (s *Server) submitBacktestWithOptimization(c *gin.Context) {
 		return
 	}
 
-	runID := uuid.New().String()
+	if s.backtestEngine == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "backtest engine not available"})
+		return
+	}
+
+	capital := req.Capital
+	if capital <= 0 {
+		capital = 100000
+	}
+	maxCombos := req.MaxCombinations
+	if maxCombos <= 0 {
+		maxCombos = backtest.LightOptBudget()
+	}
+
+	runID := uuid.New()
+	now := time.Now()
+
+	repSymbols := backtest.SelectRepresentativeSymbols(req.Symbols, backtest.LightOptSymbolCount())
+
+	monitor.WriteBatchProgress("opt_"+runID.String(), monitor.BatchProgress{
+		BatchID: runID.String(), Status: "running", ProgressPct: 0,
+		StartedAt: now.Format(time.RFC3339),
+	})
 
 	go func() {
-		searchSpace := make(backtest.SearchSpace)
-		for name, con := range req.Constraints {
-			searchSpace[name] = backtest.ParamConstraint{
-				Name: name, Type: backtest.ParamContinuous,
-				Min: con.Min, Max: con.Max, Step: con.Step,
-			}
+		ctx := context.Background()
+		lightCfg := backtest.LightOptimizeConfig{
+			StrategyID:         req.StrategyID,
+			Symbols:            repSymbols,
+			ValidationSymbols:  backtest.DiffStrings(req.Symbols, repSymbols),
+			Timeframe:          "1d",
+			StartDate:          now.AddDate(-req.TrainYears-req.TestYears, 0, 0),
+			EndDate:            now.AddDate(-req.TestYears, 0, 0),
+			InitialCapital:     capital,
+			MaxCombos:          maxCombos,
+			PropFirmEnabled:    false,
+			EnableCache:        true,
+			PerBacktestTimeout: backtest.LightOptTimeout(),
+			PlateauPatience:    backtest.LightOptPlateauPatience(),
+			TrainFraction:      backtest.LightOptTrainFraction(),
+			ObjectiveWeights:   backtest.LightOptWeights(),
+			CacheTTL:           backtest.LightOptCacheTTL(),
 		}
-		if len(searchSpace) == 0 {
-			searchSpace = backtest.DefaultSearchSpace(req.StrategyID)
+		if lightCfg.StartDate.IsZero() {
+			lightCfg.StartDate = now.AddDate(-4, 0, 0)
+		}
+		if lightCfg.EndDate.Before(lightCfg.StartDate) {
+			lightCfg.EndDate = now
 		}
 
+		monitor.WriteBatchProgress("opt_"+runID.String(), monitor.BatchProgress{
+			BatchID: runID.String(), Status: "running", ProgressPct: 50,
+			StartedAt: now.Format(time.RFC3339),
+		})
+
+		params := backtest.RunLightOptimize(ctx, s.backtestEngine.GetDB(), lightCfg)
+
+		bestMetric := 0.0
+		bestParams := make(map[string]float64)
+
+		if params == nil {
+			slog.Warn("light optimize produced no params", "run_id", runID.String())
+			monitor.WriteBatchProgress("opt_"+runID.String(), monitor.BatchProgress{
+				BatchID: runID.String(), Status: "failed", ProgressPct: 100,
+			})
+			return
+		}
+
+		bestParams = params
+		btCfg := backtest.BacktestConfig{
+			StrategyID:     req.StrategyID,
+			Symbols:        repSymbols,
+			StartDate:      lightCfg.StartDate,
+			EndDate:        lightCfg.EndDate,
+			InitialCapital: capital,
+			Timeframe:      "1d",
+			StrategyParams: params,
+		}
+		if result, btErr := s.backtestEngine.Run(ctx, btCfg); btErr == nil && result != nil {
+			bestMetric = result.SharpeRatio
+		}
+
+		bestMetricPtr := &bestMetric
 		if s.repo != nil {
-			s.repo.SaveOptimizationRun(c.Request.Context(), &db.OptimizationRun{
-				ID: uuid.MustParse(runID), Method: "walkforward",
-				ObjectiveMetric: req.Objective, TotalTrials: req.MaxCombinations,
-				CreatedAt: time.Now(),
+			s.repo.SaveOptimizationRun(ctx, &db.OptimizationRun{
+				ID: runID, Method: "light_optimize",
+				ObjectiveMetric: req.Objective, TotalTrials: maxCombos,
+				BestParams: bestParams, BestMetric: bestMetricPtr,
+				CreatedAt: now,
 			})
 		}
+
+		monitor.WriteBatchProgress("opt_"+runID.String(), monitor.BatchProgress{
+			BatchID: runID.String(), Status: "completed", ProgressPct: 100,
+		})
 	}()
 
-	c.JSON(http.StatusAccepted, gin.H{"run_id": runID, "status": "accepted"})
+	c.JSON(http.StatusAccepted, gin.H{"run_id": runID.String(), "status": "accepted"})
 }

@@ -172,6 +172,52 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 		return &MatrixResult{RunID: uuid.New().String(), Combos: 0}, nil
 	}
 
+	// §1 per-strategy light optimization: each unique strategy gets a bounded
+	// train/test-split parameter sweep on a representative symbol subset.
+	// Optimized params are applied to all combos of that strategy in the matrix.
+	optimizedParams := make(map[string]map[string]float64)
+	seenStrats := make(map[string]bool)
+	for _, c := range combos {
+		if seenStrats[c.Strategy] {
+			continue
+		}
+		seenStrats[c.Strategy] = true
+
+		repSymbols := SelectRepresentativeSymbols(config.Symbols, LightOptSymbolCount())
+		lightCfg := LightOptimizeConfig{
+			StrategyID:         c.Strategy,
+			Symbols:            repSymbols,
+			ValidationSymbols:  DiffStrings(config.Symbols, repSymbols),
+			Timeframe:          pickDominantTimeframe(config.Timeframes),
+			StartDate:          config.StartDate,
+			EndDate:            config.StartDate.AddDate(0, LightOptWindowMonths(), 0),
+			InitialCapital:     config.InitialCapital,
+			PropFirmEnabled:    config.PropFirmEnabled,
+			GateProfile:        config.GateProfile,
+			EnableCache:        true,
+			MaxCombos:          LightOptBudget(),
+			PerBacktestTimeout: LightOptTimeout(),
+			PlateauPatience:    LightOptPlateauPatience(),
+			TrainFraction:      LightOptTrainFraction(),
+			ObjectiveWeights:   LightOptWeights(),
+			CacheTTL:           LightOptCacheTTL(),
+		}
+		if lightCfg.EndDate.After(config.EndDate) {
+			lightCfg.EndDate = config.EndDate
+		}
+
+		params := RunLightOptimize(ctx, db, lightCfg)
+		if params == nil {
+			continue
+		}
+		optimizedParams[c.Strategy] = params
+		if onProgress != nil {
+			onProgress(len(combos)-1, "optimized", "", &ComboResult{
+				StrategyID: c.Strategy, Optimized: true,
+			})
+		}
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -235,6 +281,9 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 					Type:    "risk_reward",
 					RRRatio: 2.0,
 				},
+			}
+			if optParams, ok := optimizedParams[combo.Strategy]; ok {
+				btConfig.StrategyParams = optParams
 			}
 			engine := NewEngine(db)
 			result, err := engine.Run(ctx, btConfig)
@@ -318,4 +367,45 @@ func gateBool(v *MultiMetricVerdict) *bool {
 	}
 	b := v.Passed
 	return &b
+}
+
+// SelectRepresentativeSymbols picks up to n symbols deterministically from the
+// provided list, preserving order. Used for the light optimizer's representative
+// subset (§Det. Symbol Selection).
+func SelectRepresentativeSymbols(symbols []string, n int) []string {
+	if len(symbols) <= n {
+		out := make([]string, len(symbols))
+		copy(out, symbols)
+		return out
+	}
+	return symbols[:n]
+}
+
+// DiffStrings returns elements in a that are not in b (set difference).
+func DiffStrings(a, b []string) []string {
+	bset := make(map[string]bool, len(b))
+	for _, s := range b {
+		bset[s] = true
+	}
+	var out []string
+	for _, s := range a {
+		if !bset[s] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// pickDominantTimeframe returns the most appropriate timeframe for optimization,
+// preferring daily bars then the longest-tick timeframe present.
+func pickDominantTimeframe(timeframes []string) string {
+	if len(timeframes) == 0 {
+		return "1d"
+	}
+	for _, tf := range timeframes {
+		if tf == "1d" || tf == "daily" {
+			return "1d"
+		}
+	}
+	return timeframes[0]
 }

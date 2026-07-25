@@ -348,8 +348,14 @@ func DefaultOptimizedWalkForwardConfig(strategyID string, symbols []string, star
 		OptimizationConfig: OptimizationConfig{
 			StrategyID:      strategyID,
 			SearchSpace:     DefaultSearchSpace(strategyID),
-			ObjectiveType:   ObjectiveDDRatio,
+			ObjectiveType:   ObjectiveComposite,
+			ObjectiveWeights: map[ObjectiveType]float64{
+				ObjectiveSharpe:       0.5,
+				ObjectiveMinDD:        0.3,
+				ObjectiveProfitFactor: 0.2,
+			},
 			MaxCombinations: 200,
 		},
+		IVSConfig: DefaultIVSConfig(),
 	}
 }

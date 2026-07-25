@@ -80,3 +80,15 @@ func ResumeBatch(batchID string) error {
 	haltPath := filepath.Join(DefaultProgressDir, ".halt_"+batchID)
 	return os.Remove(haltPath)
 }
+
+func WriteBatchProgress(batchID string, bp BatchProgress) error {
+	dir := DefaultProgressDir
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(bp)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, batchID+".json"), data, 0644)
+}
