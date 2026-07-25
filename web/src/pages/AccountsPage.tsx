@@ -1,10 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { accounts, brokers } from '../api/client'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Badge } from '../components/ui/badge'
+import { Label } from '../components/ui/label'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../components/ui/select'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table'
 import type { Account, CreateAccountRequest } from '../types/api'
 
 const accountSchema = z.object({
@@ -29,6 +36,7 @@ export default function AccountsPage() {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
@@ -104,116 +112,131 @@ export default function AccountsPage() {
 
   if (loading) {
     return (
-      <div className="card">
-        <p className="text-muted">{t('accounts:loading', 'Loading accounts...')}</p>
-      </div>
+      <Card>
+        <CardContent className="pt-6 text-muted-foreground">
+          {t('accounts:loading', 'Loading accounts...')}
+        </CardContent>
+      </Card>
     )
   }
 
   return (
     <div>
-      <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>{t('accounts:title', 'Accounts')}</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-2xl font-bold mb-0">{t('accounts:title', 'Accounts')}</h1>
+        <Button onClick={() => setShowCreate(true)}>
           {t('accounts:newAccount', '+ New Account')}
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div className="card mb-4" style={{ background: 'rgba(218,54,51,.1)', border: '1px solid var(--danger)' }}>
-          <span style={{ color: 'var(--danger)' }}>{error}</span>
-        </div>
+        <Card className="mb-4 border-destructive border-l-4">
+          <CardContent className="text-destructive text-sm pt-4">{error}</CardContent>
+        </Card>
       )}
 
       {showCreate && (
-        <div className="card mb-4" style={{ maxWidth: 400 }}>
-          <h2>{t('accounts:createAccount', 'Create Account')}</h2>
-          <form onSubmit={handleSubmit(onCreate)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <input className="input" placeholder={t('accounts:accountName', 'Account name')} {...register('name')} />
-              {errors.name && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{t('accounts:validation:nameRequired', errors.name.message || 'Account name is required')}</p>}
-            </div>
-            <select className="input" {...register('broker_type')}>
-              {(brokerOptions.length > 0 ? brokerOptions : [{ id: 'paper', label: 'Paper' }]).map((b) => (
-                <option key={b.id} value={b.id}>{b.label}</option>
-              ))}
-            </select>
-            <label className="flex gap-2" style={{ alignItems: 'center' }}>
-              <input type="checkbox" {...register('is_default')} />
-              {t('accounts:setAsDefault', 'Set as default')}
-            </label>
-            <div className="flex gap-2">
-              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? t('accounts:creating', 'Creating...') : t('accounts:create', 'Create')}
-              </button>
-              <button className="btn btn-outline" type="button" onClick={() => setShowCreate(false)}>
-                {t('accounts:cancel', 'Cancel')}
-              </button>
-            </div>
-          </form>
-        </div>
+        <Card className="mb-4 max-w-[400px]">
+          <CardHeader><CardTitle>{t('accounts:createAccount', 'Create Account')}</CardTitle></CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(onCreate)} className="flex flex-col gap-2.5">
+              <div>
+                <Input placeholder={t('accounts:accountName', 'Account name')} {...register('name')} />
+                {errors.name && <p className="text-destructive text-[11px] mt-1 mb-0">{t('accounts:validation:nameRequired', errors.name.message || 'Account name is required')}</p>}
+              </div>
+              <Controller
+                name="broker_type"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(brokerOptions.length > 0 ? brokerOptions : [{ id: 'paper', label: 'Paper' }]).map((b) => (
+                        <SelectItem key={b.id} value={b.id}>{b.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" {...register('is_default')} />
+                {t('accounts:setAsDefault', 'Set as default')}
+              </label>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? t('accounts:creating', 'Creating...') : t('accounts:create', 'Create')}
+                </Button>
+                <Button variant="outline" type="button" onClick={() => setShowCreate(false)}>
+                  {t('accounts:cancel', 'Cancel')}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
       {msg && (
-        <p className="text-muted mb-4" style={{ fontSize: 13, margin: '0 0 12px' }}>{msg}</p>
+        <p className="text-muted-foreground text-[13px] mb-4">{msg}</p>
       )}
 
       {list.length === 0 ? (
-        <div className="card">
-          <p className="text-muted">{t('accounts:noAccounts', 'No accounts configured. Create one to start trading.')}</p>
-        </div>
+        <Card>
+          <CardContent className="pt-6 text-muted-foreground">
+            {t('accounts:noAccounts', 'No accounts configured. Create one to start trading.')}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="card">
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>{t('accounts:table:name', 'Name')}</th>
-                  <th>{t('accounts:table:broker', 'Broker')}</th>
-                  <th>{t('accounts:table:default', 'Default')}</th>
-                  <th>{t('accounts:table:balance', 'Balance')}</th>
-                  <th>{t('accounts:table:equity', 'Equity')}</th>
-                  <th>{t('accounts:table:dailyPnl', 'Daily P&L')}</th>
-                  <th>{t('accounts:table:buyingPower', 'Buying Power')}</th>
-                  <th>{t('accounts:table:status', 'Status')}</th>
-                  <th>{t('accounts:table:actions', 'Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
+        <Card>
+          <CardContent className="pt-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('accounts:table:name', 'Name')}</TableHead>
+                  <TableHead>{t('accounts:table:broker', 'Broker')}</TableHead>
+                  <TableHead>{t('accounts:table:default', 'Default')}</TableHead>
+                  <TableHead>{t('accounts:table:balance', 'Balance')}</TableHead>
+                  <TableHead>{t('accounts:table:equity', 'Equity')}</TableHead>
+                  <TableHead>{t('accounts:table:dailyPnl', 'Daily P&L')}</TableHead>
+                  <TableHead>{t('accounts:table:buyingPower', 'Buying Power')}</TableHead>
+                  <TableHead>{t('accounts:table:status', 'Status')}</TableHead>
+                  <TableHead>{t('accounts:table:actions', 'Actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {list.map((a) => (
-                  <tr key={a.id}>
-                    <td><strong>{a.label || a.id}</strong></td>
-                    <td>{a.broker_type}</td>
-                    <td>{a.is_default ? <span className="badge badge-ok">{t('accounts:defaultAccount', 'Default')}</span> : '—'}</td>
-                    <td>${a.balance?.toFixed(2) ?? '--'}</td>
-                    <td>${a.equity?.toFixed(2) ?? '--'}</td>
-                    <td style={{ color: (a.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                  <TableRow key={a.id}>
+                    <TableCell className="font-semibold">{a.label || a.id}</TableCell>
+                    <TableCell>{a.broker_type}</TableCell>
+                    <TableCell>{a.is_default ? <Badge>{t('accounts:defaultAccount', 'Default')}</Badge> : '—'}</TableCell>
+                    <TableCell>${a.balance?.toFixed(2) ?? '--'}</TableCell>
+                    <TableCell>${a.equity?.toFixed(2) ?? '--'}</TableCell>
+                    <TableCell className={(a.daily_pnl_pct ?? 0) >= 0 ? 'text-trading-success' : 'text-trading-danger'}>
                       {a.daily_pnl_pct != null ? `${a.daily_pnl_pct.toFixed(2)}%` : '--'}
-                    </td>
-                    <td>${a.buying_power?.toFixed(2) ?? '--'}</td>
-                    <td>
-                      <span className={`badge ${a.halted ? 'badge-err' : 'badge-ok'}`}>
+                    </TableCell>
+                    <TableCell>${a.buying_power?.toFixed(2) ?? '--'}</TableCell>
+                    <TableCell>
+                      <Badge variant={a.halted ? 'destructive' : 'default'}>
                         {a.halted ? t('common:halted', 'HALTED') : t('common:active', 'Active')}
-                      </span>
-                    </td>
-                    <td>
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex gap-1">
                         {!a.is_default && (
-                          <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleSetDefault(a.id)}>
+                          <Button variant="outline" size="sm" onClick={() => handleSetDefault(a.id)}>
                             {t('accounts:setDefault', 'Set Default')}
-                          </button>
+                          </Button>
                         )}
-                        <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => setConfirmDelete({ id: a.id, name: a.label || a.id })}>
+                        <Button variant="outline" size="sm" className="text-trading-danger" onClick={() => setConfirmDelete({ id: a.id, name: a.label || a.id })}>
                           {t('accounts:delete', 'Delete')}
-                        </button>
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {confirmDelete && (

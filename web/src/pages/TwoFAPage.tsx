@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { QRCodeSVG } from 'qrcode.react'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Input } from '../components/ui/input'
 
 export default function TwoFAPage() {
   const { t } = useTranslation()
@@ -63,50 +66,58 @@ export default function TwoFAPage() {
   }
 
   return (
-    <div>
-      <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>{t('auth:twoFactorSetup', '2FA Setup')}</h1>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Card className="w-[450px]">
+        <CardHeader>
+          <CardTitle>{t('auth:twoFactorSetup', '2FA Setup')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {msg && <p role="alert" className="text-destructive text-xs">{msg}</p>}
 
-      {msg && <p className="text-muted mb-2" style={{ color: 'var(--danger)' }}>{msg}</p>}
+          {step === 'setup' && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">{t('auth:twoFactorEnable', 'Enable Two-Factor Authentication')}</h2>
+              <p className="text-sm text-muted-foreground">
+                {t('auth:twoFactorDescription', 'Two-factor authentication adds an extra layer of security to your account. You\'ll need an authenticator app like Google Authenticator or Authy.')}
+              </p>
+              <Button onClick={handleSetup}>
+                {t('auth:generateSecret', 'Generate Secret')}
+              </Button>
+            </div>
+          )}
 
-      <div className="card" style={{ maxWidth: 450 }}>
-        {step === 'setup' && (
-          <div>
-            <h2>{t('auth:twoFactorEnable', 'Enable Two-Factor Authentication')}</h2>
-            <p className="text-muted">
-              {t('auth:twoFactorDescription', 'Two-factor authentication adds an extra layer of security to your account. You\'ll need an authenticator app like Google Authenticator or Authy.')}
-            </p>
-            <button className="btn btn-primary mt-3" onClick={handleSetup}>
-              {t('auth:generateSecret', 'Generate Secret')}
-            </button>
-          </div>
-        )}
-
-        {step === 'confirm' && (
-          <div>
-            <h2>{t('auth:scanQrCode', 'Scan QR Code')}</h2>
-            {uri && (
-              <div className="card mb-3" style={{ textAlign: 'center', background: '#fff' }}>
-                <QRCodeSVG value={uri} size={200} level="M" />
+          {step === 'confirm' && (
+            <div className="space-y-3">
+              <h2 className="text-lg font-semibold">{t('auth:scanQrCode', 'Scan QR Code')}</h2>
+              {uri && (
+                <div className="flex justify-center bg-white rounded-lg p-4">
+                  <QRCodeSVG value={uri} size={200} level="M" />
+                </div>
+              )}
+              <div>
+                <span className="text-sm text-muted-foreground">{t('auth:enterKeyManually', 'Or enter this key manually:')}</span>
+                <div className="font-mono text-[13px] p-2 bg-muted rounded mt-1 break-all">
+                  {secret}
+                </div>
               </div>
-            )}
-            <div className="mb-3">
-              <span className="text-muted">{t('auth:enterKeyManually', 'Or enter this key manually:')}</span>
-              <div style={{ fontFamily: 'monospace', fontSize: 13, padding: 8, background: 'var(--bg-input)', borderRadius: 4, marginTop: 4, wordBreak: 'break-all' }}>
-                {secret}
+              <div>
+                <label className="text-sm text-muted-foreground">{t('auth:verifyWithCode', 'Verify with 6-digit code')}</label>
+                <div className="flex gap-2 mt-2">
+                  <Input
+                    placeholder={t('risk:2faPlaceholder', '000000')}
+                    maxLength={6}
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
+                  />
+                  <Button disabled={code.length !== 6 || verifying} onClick={handleVerify}>
+                    {t('auth:verify', 'Verify')}
+                  </Button>
+                </div>
               </div>
             </div>
-            <div>
-              <label className="text-muted">{t('auth:verifyWithCode', 'Verify with 6-digit code')}</label>
-              <div className="flex gap-2 mt-2">
-                <input className="input" placeholder={t('risk:2faPlaceholder', '000000')} maxLength={6} value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))} />
-                <button className="btn btn-primary" disabled={code.length !== 6 || verifying} onClick={handleVerify}>{t('auth:verify', 'Verify')}</button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

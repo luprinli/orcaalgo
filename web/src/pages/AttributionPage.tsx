@@ -2,7 +2,11 @@ import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { attribution } from '../api/client'
 import ErrorCard from '../components/ErrorCard'
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table'
 import type { AttributionReportResponse, AttributionSliceStats } from '../types/api'
+import MetricCard from '../components/MetricCard'
 
 export default function AttributionPage() {
   const { t } = useTranslation()
@@ -47,140 +51,120 @@ export default function AttributionPage() {
 
   return (
     <div>
-      <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>{t('attribution:title', 'PnL Attribution')}</h1>
-        <button className="btn btn-primary" onClick={runAttribution} disabled={loading}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="m-0">{t('attribution:title', 'PnL Attribution')}</h1>
+        <Button onClick={runAttribution} disabled={loading}>
           {loading ? t('attribution:runningAttribution', 'Running Attribution...') : t('attribution:runAttribution', 'Run Attribution')}
-        </button>
+        </Button>
       </div>
 
       {error && <ErrorCard message={error} />}
 
       {!report && !loading && (
-        <div className="card">
-          <p className="text-muted">
-            {t('attribution:emptyDescription', 'Run multi-dimensional PnL attribution to analyze trading performance sliced by side, price bucket, and edge bucket with Wilson confidence intervals.')}
-          </p>
-        </div>
+        <Card>
+          <CardContent className="p-6">
+            <CardDescription>
+              {t('attribution:emptyDescription', 'Run multi-dimensional PnL attribution to analyze trading performance sliced by side, price bucket, and edge bucket with Wilson confidence intervals.')}
+            </CardDescription>
+          </CardContent>
+        </Card>
       )}
 
       {loading && (
-        <div className="card">
-          <p className="text-muted">{t('attribution:runningMessage', 'Running PnL attribution against trade ledger...')}</p>
-        </div>
+        <Card>
+          <CardContent className="p-6">
+            <CardDescription>{t('attribution:runningMessage', 'Running PnL attribution against trade ledger...')}</CardDescription>
+          </CardContent>
+        </Card>
       )}
 
       {report && !loading && (
         <div>
-          <div className="card mb-4">
-            <h2>{t('attribution:overallTab', 'Overall')}</h2>
-            <div className="metric-grid">
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:totalTrades', 'Total Trades')}</div>
-                <div className="metric-value">{report.overall?.n ?? 0}</div>
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>{t('attribution:overallTab', 'Overall')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <MetricCard label={t('attribution:totalTrades', 'Total Trades')} value={report.overall?.n ?? 0} format="number" />
+                <MetricCard label={t('attribution:wins', 'Wins')} value={report.overall?.wins ?? 0} format="number" />
+                <MetricCard label={t('attribution:winRate', 'Win Rate')} value={report.overall?.hit_rate ?? 0} format="percent" />
+                <MetricCard label={t('attribution:hitRateCi', 'Hit Rate CI')} value={`${formatPct(report.overall?.hit_rate_ci_low)} – ${formatPct(report.overall?.hit_rate_ci_high)}`} />
+                <MetricCard label={t('attribution:totalPnl', 'Total PnL')} value={report.overall?.total_pnl ?? 0} format="currency" color="auto" />
+                <MetricCard label={t('attribution:totalCost', 'Total Cost')} value={report.overall?.total_cost ?? 0} format="currency" />
+                <MetricCard label={t('attribution:roi', 'ROI')} value={report.overall?.roi ?? 0} format="percent" />
+                <MetricCard label={t('attribution:avgWin', 'Avg Win')} value={report.overall ? report.overall.total_pnl / report.overall.n : 0} format="currency" />
               </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:wins', 'Wins')}</div>
-                <div className="metric-value">{report.overall?.wins ?? 0}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:winRate', 'Win Rate')}</div>
-                <div className="metric-value">{formatPct(report.overall?.hit_rate)}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:hitRateCi', 'Hit Rate CI')}</div>
-                <div className="metric-value" style={{ fontSize: 16 }}>
-                  {formatPct(report.overall?.hit_rate_ci_low)} – {formatPct(report.overall?.hit_rate_ci_high)}
-                </div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:totalPnl', 'Total PnL')}</div>
-                <div className="metric-value" style={{ color: (report.overall?.total_pnl ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>
-                  {formatUSD(report.overall?.total_pnl)}
-                </div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:totalCost', 'Total Cost')}</div>
-                <div className="metric-value">{formatUSD(report.overall?.total_cost)}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:roi', 'ROI')}</div>
-                <div className="metric-value">{formatPct(report.overall?.roi)}</div>
-              </div>
-              <div className="metric-card">
-                <div className="metric-label">{t('attribution:avgWin', 'Avg Win')}</div>
-                <div className="metric-value">
-                  {report.overall ? formatUSD(report.overall.total_pnl / report.overall.n) : '--'}
-                </div>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          <div className="card">
-            <h2>{t('attribution:sliceDimensions', 'Slice Dimensions')}</h2>
-            <div className="flex gap-2 mb-3">
-              {(['side', 'price', 'edge'] as const).map((d) => {
-                const dimLabels: Record<string, string> = {
-                  side: t('attribution:bySide', 'By Side'),
-                  price: t('attribution:byPrice', 'By Price'),
-                  edge: t('attribution:byEdge', 'By Edge'),
-                }
-                return (
-                  <button
-                    key={d}
-                    className={`btn ${dimension === d ? 'btn-primary' : 'btn-outline'}`}
-                    onClick={() => setDimension(d)}
-                  >
-                    {dimLabels[d]}
-                  </button>
-                )
-              })}
-            </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('attribution:sliceDimensions', 'Slice Dimensions')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 mb-3">
+                {(['side', 'price', 'edge'] as const).map((d) => {
+                  const dimLabels: Record<string, string> = {
+                    side: t('attribution:bySide', 'By Side'),
+                    price: t('attribution:byPrice', 'By Price'),
+                    edge: t('attribution:byEdge', 'By Edge'),
+                  }
+                  return (
+                    <Button
+                      key={d}
+                      variant={dimension === d ? 'default' : 'outline'}
+                      onClick={() => setDimension(d)}
+                    >
+                      {dimLabels[d]}
+                    </Button>
+                  )
+                })}
+              </div>
 
-            {currentSlices.length === 0 ? (
-              <p className="text-muted">{t('attribution:noSliceData', 'No {{dim}} slice data available.', { dim: dimension })}</p>
-            ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>{t('attribution:table.slice', 'Slice')}</th>
-                      <th>{t('attribution:table.trades', 'Trades')}</th>
-                      <th>{t('attribution:wins', 'Wins')}</th>
-                      <th>{t('attribution:table.winRate', 'Win Rate')}</th>
-                      <th>{t('attribution:ciLow', 'CI Low')}</th>
-                      <th>{t('attribution:ciHigh', 'CI High')}</th>
-                      <th>{t('attribution:table.pnl', 'PnL')}</th>
-                      <th>{t('attribution:totalCost', 'Cost')}</th>
-                      <th>{t('attribution:roi', 'ROI')}</th>
-                      <th>{t('attribution:avgWin', 'Avg Win')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+              {currentSlices.length === 0 ? (
+                <p className="text-muted-foreground text-sm">{t('attribution:noSliceData', 'No {{dim}} slice data available.', { dim: dimension })}</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('attribution:table.slice', 'Slice')}</TableHead>
+                      <TableHead>{t('attribution:table.trades', 'Trades')}</TableHead>
+                      <TableHead>{t('attribution:wins', 'Wins')}</TableHead>
+                      <TableHead>{t('attribution:table.winRate', 'Win Rate')}</TableHead>
+                      <TableHead>{t('attribution:ciLow', 'CI Low')}</TableHead>
+                      <TableHead>{t('attribution:ciHigh', 'CI High')}</TableHead>
+                      <TableHead>{t('attribution:table.pnl', 'PnL')}</TableHead>
+                      <TableHead>{t('attribution:totalCost', 'Cost')}</TableHead>
+                      <TableHead>{t('attribution:roi', 'ROI')}</TableHead>
+                      <TableHead>{t('attribution:avgWin', 'Avg Win')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {currentSlices.map(([key, s]) => (
-                      <tr key={key}>
-                        <td><strong>{key}</strong></td>
-                        <td>{s.n}</td>
-                        <td>{s.wins}</td>
-                        <td>{formatPct(s.hit_rate)}</td>
-                        <td>{formatPct(s.hit_rate_ci_low)}</td>
-                        <td>{formatPct(s.hit_rate_ci_high)}</td>
-                        <td style={{ color: s.total_pnl >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                      <TableRow key={key}>
+                        <TableCell className="font-bold">{key}</TableCell>
+                        <TableCell>{s.n}</TableCell>
+                        <TableCell>{s.wins}</TableCell>
+                        <TableCell>{formatPct(s.hit_rate)}</TableCell>
+                        <TableCell>{formatPct(s.hit_rate_ci_low)}</TableCell>
+                        <TableCell>{formatPct(s.hit_rate_ci_high)}</TableCell>
+                        <TableCell style={{ color: s.total_pnl >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                           {formatUSD(s.total_pnl)}
-                        </td>
-                        <td>{formatUSD(s.total_cost)}</td>
-                        <td>{formatPct(s.roi)}</td>
-                        <td>{s.n > 0 ? formatUSD(s.total_pnl / s.n) : '--'}</td>
-                      </tr>
+                        </TableCell>
+                        <TableCell>{formatUSD(s.total_cost)}</TableCell>
+                        <TableCell>{formatPct(s.roi)}</TableCell>
+                        <TableCell>{s.n > 0 ? formatUSD(s.total_pnl / s.n) : '--'}</TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
 
           {report.generated_at && (
-            <p className="text-muted mt-4">{t('attribution:generated', 'Generated: {{date}}', { date: new Date(report.generated_at).toLocaleString() })}</p>
+            <p className="text-muted-foreground text-sm mt-4">{t('attribution:generated', 'Generated: {{date}}', { date: new Date(report.generated_at).toLocaleString() })}</p>
           )}
         </div>
       )}

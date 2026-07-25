@@ -42,27 +42,27 @@ export default function EmergencyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
+    <div className="min-h-screen bg-gray-900 text-foreground p-4" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif' }}>
       <div className="max-w-md mx-auto">
         <h1 className="text-lg font-bold mb-1">{t('emergency.title', 'Emergency Access')}</h1>
-        <p className="text-xs text-slate-400 mb-4">{t('emergency.subtitle', 'Quick kill-switch access on mobile')}</p>
+        <p className="text-xs text-muted-foreground mb-4">{t('emergency.subtitle', 'Quick kill-switch access on mobile')}</p>
 
         {/* Live Status */}
         {riskData && (
           <div className="space-y-2 mb-6">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Balance</span>
+              <span className="text-muted-foreground">Balance</span>
               <span className="font-medium">{formatCurrency(riskData.balance)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Daily PnL</span>
-              <span className={`font-medium ${(riskData.daily_pnl_pct ?? 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              <span className="text-muted-foreground">Daily PnL</span>
+              <span className={`font-medium ${(riskData.daily_pnl_pct ?? 0) >= 0 ? 'text-trading-success' : 'text-trading-danger'}`}>
                 {(riskData.daily_pnl_pct ?? 0) >= 0 ? '+' : ''}{(riskData.daily_pnl_pct ?? 0).toFixed(2)}%
               </span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-slate-400">Drawdown Used</span>
-              <span className="font-medium text-yellow-400">{(riskData.drawdown_used ?? 0).toFixed(1)}%</span>
+              <span className="text-muted-foreground">Drawdown Used</span>
+              <span className="font-medium text-trading-warning">{(riskData.drawdown_used ?? 0).toFixed(1)}%</span>
             </div>
             <div className="mt-2">
               <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
@@ -82,12 +82,12 @@ export default function EmergencyPage() {
         {/* Status */}
         {isHalted ? (
           <div className="bg-red-900/40 border border-red-700 rounded-lg p-4 mb-4 text-center">
-            <div className="text-red-400 font-bold text-lg mb-1">⚠️ TRADING HALTED</div>
+            <div className="text-trading-danger font-bold text-lg mb-1">⚠️ TRADING HALTED</div>
             <p className="text-red-300 text-xs">{riskData?.reason || 'Emergency stop was activated'}</p>
           </div>
         ) : (
           <div className="bg-green-900/20 border border-green-700/50 rounded-lg p-3 mb-4 text-center">
-            <span className="text-green-400 text-sm font-medium">● Trading Active</span>
+            <span className="text-trading-success text-sm font-medium">● Trading Active</span>
           </div>
         )}
 
@@ -101,24 +101,24 @@ export default function EmergencyPage() {
         {/* Confirmation Dialog */}
         {confirming ? (
           <div className="border border-red-700 rounded-lg p-4">
-            <p className="text-sm mb-3 text-slate-300">
+            <p className="text-sm mb-3 text-foreground">
               {action === 'stop' ? 'Enter 2FA code to confirm EMERGENCY STOP:' : 'Enter 2FA code to confirm resume:'}
             </p>
             <input
               type="text" inputMode="numeric" maxLength={6} autoFocus
               value={code} onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-              className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-center text-2xl tracking-widest font-mono text-white outline-none focus:border-red-500"
+              className="w-full bg-muted border border-border rounded-lg p-3 text-center text-2xl tracking-widest font-mono text-foreground outline-none focus:border-red-500"
               placeholder="000000"
             />
             <button
-              className="w-full bg-red-700 hover:bg-red-800 disabled:bg-gray-700 text-white font-bold py-3 rounded-lg mt-3 transition-colors"
+              className="w-full bg-red-700 hover:bg-red-800 disabled:bg-gray-700 text-foreground font-bold py-3 rounded-lg mt-3 transition-colors"
               disabled={code.length !== 6 || loading}
               onClick={handleAction}
             >
               {loading ? 'Processing...' : action === 'stop' ? 'Confirm Emergency Stop' : 'Confirm Resume'}
             </button>
             <button
-              className="w-full bg-transparent border border-gray-600 text-slate-400 py-2 rounded-lg mt-2 text-sm"
+              className="w-full bg-transparent border border-border text-muted-foreground py-2 rounded-lg mt-2 text-sm"
               onClick={() => { setConfirming(false); setCode(''); setAction(null); setMsg('') }}
             >
               Cancel
@@ -128,7 +128,7 @@ export default function EmergencyPage() {
           <div className="space-y-2">
             {!isHalted && (
               <button
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-lg transition-colors"
+                className="w-full bg-red-600 hover:bg-red-700 text-foreground font-bold py-4 rounded-lg transition-colors"
                 onClick={() => { setConfirming(true); setAction('stop'); setMsg('') }}
               >
                 🛑 Emergency Stop All Trading
@@ -136,7 +136,7 @@ export default function EmergencyPage() {
             )}
             {isHalted && (
               <button
-                className="w-full bg-green-700 hover:bg-green-800 text-white font-bold py-4 rounded-lg transition-colors"
+                className="w-full bg-green-700 hover:bg-green-800 text-foreground font-bold py-4 rounded-lg transition-colors"
                 onClick={() => { setConfirming(true); setAction('resume'); setMsg('') }}
               >
                 ▶️ Resume Trading
@@ -144,7 +144,7 @@ export default function EmergencyPage() {
             )}
             <a
               href="/"
-              className="block w-full text-center bg-gray-800 hover:bg-gray-700 text-slate-300 py-3 rounded-lg text-sm transition-colors"
+              className="block w-full text-center bg-muted hover:bg-gray-700 text-foreground py-3 rounded-lg text-sm transition-colors"
             >
               ← Back to Dashboard
             </a>

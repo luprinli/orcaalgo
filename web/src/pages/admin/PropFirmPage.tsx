@@ -5,8 +5,15 @@ import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
 import i18next from 'i18next'
 import { propfirm } from '../../api/client'
-import ConfirmDialog from '../../components/ConfirmDialog'
 import type { PropFirmProfile, PropFirmState } from '../../types/api'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card'
+import { Label } from '../../components/ui/label'
+import { Badge } from '../../components/ui/badge'
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '../../components/ui/alert-dialog'
+import MetricCard from '../../components/MetricCard'
 
 const profileSchema = z.object({
   id: z.string().min(1, i18next.t('propfirm:validation.profileIdRequired', 'Profile ID is required')),
@@ -121,126 +128,158 @@ export default function PropFirmPage() {
     }
   }
 
-  if (loading) return <div className="card"><p className="text-muted">Loading...</p></div>
+  if (loading) return <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground">Loading...</p></CardContent></Card>
 
   return (
     <div>
-      <div className="flex-between mb-4">
-        <h1 style={{ margin: 0 }}>{t('propfirm:title', 'Prop Firm')}</h1>
-        <button className="btn btn-primary" onClick={() => { setShowForm(true); reset() }}>{t('propfirm:newProfile', '+ New Profile')}</button>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="m-0">{t('propfirm:title', 'Prop Firm')}</h1>
+        <Button onClick={() => { setShowForm(true); reset() }}>{t('propfirm:newProfile', '+ New Profile')}</Button>
       </div>
 
-      {msg && <p className="text-muted mb-2" style={{ color: msg.includes('fail') ? 'var(--danger)' : 'var(--success)' }}>{msg}</p>}
+      {msg && <p className={`text-sm mb-2 ${msg.includes('fail') ? 'text-destructive' : 'text-emerald-400'}`}>{msg}</p>}
 
       {status && (
-        <div className="card mb-4">
-          <h2>{t('propfirm:status', 'Status')}</h2>
-          <div className="metric-grid">
-            <div className="metric-card"><div className="metric-label">{t('propfirm:phase', 'Phase')}</div><div className="metric-value">{status.current_phase}</div></div>
-            <div className="metric-card"><div className="metric-label">{t('propfirm:dailyPnl', 'Daily P&L')}</div><div className="metric-value" style={{ color: (status.daily_pnl_pct ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)' }}>{(status.daily_pnl_pct ?? 0).toFixed(2)}%</div></div>
-            <div className="metric-card"><div className="metric-label">{t('propfirm:cumulative', 'Cumulative')}</div><div className="metric-value">${(status.cumulative_pnl ?? 0).toFixed(2)}</div></div>
-            <div className="metric-card"><div className="metric-label">{t('propfirm:tradingDays', 'Trading Days')}</div><div className="metric-value">{status.trading_days}</div></div>
-            <div className="metric-card"><div className="metric-label">{t('propfirm:targetMet', 'Target Met')}</div><div className="metric-value" style={{ color: status.phase_target_met ? 'var(--success)' : 'var(--warn)' }}>{status.phase_target_met ? t('common:yes', 'Yes') : t('common:no', 'No')}</div></div>
-            <div className="metric-card"><div className="metric-label">{t('propfirm:violation', 'Violation')}</div><div className="metric-value" style={{ color: status.violated ? 'var(--danger)' : 'var(--success)' }}>{status.violated ? status.violation_reason : t('common:none', 'None')}</div></div>
-          </div>
-        </div>
+        <Card className="mb-4">
+          <CardHeader><CardTitle>{t('propfirm:status', 'Status')}</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <MetricCard label={t('propfirm:phase', 'Phase')} value={status.current_phase} format="number" />
+              <MetricCard label={t('propfirm:dailyPnl', 'Daily P&L')} value={status.daily_pnl_pct ?? 0} format="percent_raw" color="auto" />
+              <MetricCard label={t('propfirm:cumulative', 'Cumulative')} value={status.cumulative_pnl ?? 0} format="currency" />
+              <MetricCard label={t('propfirm:tradingDays', 'Trading Days')} value={status.trading_days} format="number" />
+              <MetricCard
+                label={t('propfirm:targetMet', 'Target Met')}
+                value={status.phase_target_met ? t('common:yes', 'Yes') : t('common:no', 'No')}
+                color={status.phase_target_met ? 'positive' : 'default'}
+              />
+              <MetricCard
+                label={t('propfirm:violation', 'Violation')}
+                value={status.violated ? status.violation_reason : t('common:none', 'None')}
+                color={status.violated ? 'negative' : 'positive'}
+              />
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {showForm && (
-        <div className="card mb-4" style={{ maxWidth: 500 }}>
-          <h2>{t('propfirm:newProfileTitle', 'New Profile')}</h2>
-          <form onSubmit={handleSubmit(handleCreate)} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div>
-              <input className="input" placeholder={t('propfirm:profileId', 'Profile ID')} {...register('id')} />
-              {errors.id && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.id.message}</p>}
-            </div>
-            <div>
-              <input className="input" placeholder={t('propfirm:name', 'Name')} {...register('name')} />
-              {errors.name && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.name.message}</p>}
-            </div>
-            <div className="grid-2">
+        <Card className="mb-4 max-w-[500px]">
+          <CardHeader><CardTitle>{t('propfirm:newProfileTitle', 'New Profile')}</CardTitle></CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit(handleCreate)} className="flex flex-col gap-3">
               <div>
-                <label className="text-muted">{t('propfirm:maxDailyLossPct', 'Max Daily Loss %')}</label>
-                <input className="input" type="number" step="0.1" {...register('max_daily_loss_pct')} />
-                {errors.max_daily_loss_pct && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.max_daily_loss_pct.message}</p>}
+                <Input placeholder={t('propfirm:profileId', 'Profile ID')} {...register('id')} />
+                {errors.id && <p className="text-destructive text-xs mt-1">{errors.id.message}</p>}
               </div>
               <div>
-                <label className="text-muted">{t('propfirm:maxDrawdownPct', 'Max Drawdown %')}</label>
-                <input className="input" type="number" step="0.1" {...register('max_drawdown_pct')} />
-                {errors.max_drawdown_pct && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.max_drawdown_pct.message}</p>}
+                <Input placeholder={t('propfirm:name', 'Name')} {...register('name')} />
+                {errors.name && <p className="text-destructive text-xs mt-1">{errors.name.message}</p>}
               </div>
-            </div>
-            <div className="grid-2">
-              <div>
-                <label className="text-muted">{t('propfirm:phase1TargetPct', 'Phase 1 Target %')}</label>
-                <input className="input" type="number" step="0.1" {...register('profit_target_pct_phase1')} />
-                {errors.profit_target_pct_phase1 && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.profit_target_pct_phase1.message}</p>}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('propfirm:maxDailyLossPct', 'Max Daily Loss %')}</Label>
+                  <Input type="number" step="0.1" {...register('max_daily_loss_pct')} />
+                  {errors.max_daily_loss_pct && <p className="text-destructive text-xs mt-1">{errors.max_daily_loss_pct.message}</p>}
+                </div>
+                <div>
+                  <Label>{t('propfirm:maxDrawdownPct', 'Max Drawdown %')}</Label>
+                  <Input type="number" step="0.1" {...register('max_drawdown_pct')} />
+                  {errors.max_drawdown_pct && <p className="text-destructive text-xs mt-1">{errors.max_drawdown_pct.message}</p>}
+                </div>
               </div>
-              <div>
-                <label className="text-muted">{t('propfirm:phase2TargetPct', 'Phase 2 Target %')}</label>
-                <input className="input" type="number" step="0.1" {...register('profit_target_pct_phase2')} />
-                {errors.profit_target_pct_phase2 && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.profit_target_pct_phase2.message}</p>}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('propfirm:phase1TargetPct', 'Phase 1 Target %')}</Label>
+                  <Input type="number" step="0.1" {...register('profit_target_pct_phase1')} />
+                  {errors.profit_target_pct_phase1 && <p className="text-destructive text-xs mt-1">{errors.profit_target_pct_phase1.message}</p>}
+                </div>
+                <div>
+                  <Label>{t('propfirm:phase2TargetPct', 'Phase 2 Target %')}</Label>
+                  <Input type="number" step="0.1" {...register('profit_target_pct_phase2')} />
+                  {errors.profit_target_pct_phase2 && <p className="text-destructive text-xs mt-1">{errors.profit_target_pct_phase2.message}</p>}
+                </div>
               </div>
-            </div>
-            <div className="grid-2">
-              <div>
-                <label className="text-muted">{t('propfirm:maxPositions', 'Max Positions')}</label>
-                <input className="input" type="number" {...register('max_open_positions')} />
-                {errors.max_open_positions && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.max_open_positions.message}</p>}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>{t('propfirm:maxPositions', 'Max Positions')}</Label>
+                  <Input type="number" {...register('max_open_positions')} />
+                  {errors.max_open_positions && <p className="text-destructive text-xs mt-1">{errors.max_open_positions.message}</p>}
+                </div>
+                <div>
+                  <Label>{t('propfirm:minTradingDays', 'Min Trading Days')}</Label>
+                  <Input type="number" {...register('min_trading_days')} />
+                  {errors.min_trading_days && <p className="text-destructive text-xs mt-1">{errors.min_trading_days.message}</p>}
+                </div>
               </div>
-              <div>
-                <label className="text-muted">{t('propfirm:minTradingDays', 'Min Trading Days')}</label>
-                <input className="input" type="number" {...register('min_trading_days')} />
-                {errors.min_trading_days && <p style={{ color: 'var(--danger)', fontSize: 11, margin: '4px 0 0' }}>{errors.min_trading_days.message}</p>}
+              <div className="flex gap-2">
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? t('propfirm:creating', 'Creating...') : t('propfirm:create', 'Create')}
+                </Button>
+                <Button variant="outline" type="button" onClick={() => setShowForm(false)}>
+                  {t('propfirm:cancel', 'Cancel')}
+                </Button>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button className="btn btn-primary" type="submit" disabled={isSubmitting}>
-                {isSubmitting ? t('propfirm:creating', 'Creating...') : t('propfirm:create', 'Create')}
-              </button>
-              <button className="btn btn-outline" type="button" onClick={() => setShowForm(false)}>
-                {t('propfirm:cancel', 'Cancel')}
-              </button>
-            </div>
-          </form>
-        </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      <div className="card">
-        <h2>{t('propfirm:profiles', 'Profiles ({{n}})', { n: profiles.length })}</h2>
-        {profiles.length === 0 ? <p className="text-muted">{t('propfirm:noProfiles', 'No profiles')}</p> : (
-          <table className="data-table">
-            <thead><tr><th>{t('propfirm:table.id', 'ID')}</th><th>{t('propfirm:table.name', 'Name')}</th><th>{t('propfirm:table.dailyLoss', 'Daily Loss')}</th><th>{t('propfirm:table.maxDd', 'Max DD')}</th><th>{t('propfirm:table.phase1', 'Phase 1')}</th><th>{t('propfirm:table.phase2', 'Phase 2')}</th><th>{t('propfirm:table.active', 'Active')}</th><th>{t('propfirm:table.actions', 'Actions')}</th></tr></thead>
-            <tbody>
-              {profiles.map(p => (
-                <tr key={p.id}>
-                  <td>{p.id}</td><td>{p.name}</td>
-                  <td>{p.max_daily_loss_pct}%</td><td>{p.max_drawdown_pct}%</td>
-                  <td>{p.profit_target_pct_phase1}%</td><td>{p.profit_target_pct_phase2}%</td>
-                  <td>{activeId === p.id ? <span className="badge badge-ok">{t('common:active', 'Active')}</span> : '\u2014'}</td>
-                  <td>
-                    <div className="flex gap-1">
-                      {activeId !== p.id && <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => handleSetActive(p.id)}>{t('propfirm:activate', 'Activate')}</button>}
-                      <button className="btn btn-outline" style={{ padding: '2px 8px', fontSize: 11, color: 'var(--danger)' }} onClick={() => handleDelete(p.id)}>{t('propfirm:delete', 'Delete')}</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <Card>
+        <CardHeader><CardTitle>{t('propfirm:profiles', 'Profiles ({{n}})', { n: profiles.length })}</CardTitle></CardHeader>
+        <CardContent>
+          {profiles.length === 0 ? <p className="text-sm text-muted-foreground">{t('propfirm:noProfiles', 'No profiles')}</p> : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('propfirm:table.id', 'ID')}</TableHead>
+                  <TableHead>{t('propfirm:table.name', 'Name')}</TableHead>
+                  <TableHead>{t('propfirm:table.dailyLoss', 'Daily Loss')}</TableHead>
+                  <TableHead>{t('propfirm:table.maxDd', 'Max DD')}</TableHead>
+                  <TableHead>{t('propfirm:table.phase1', 'Phase 1')}</TableHead>
+                  <TableHead>{t('propfirm:table.phase2', 'Phase 2')}</TableHead>
+                  <TableHead>{t('propfirm:table.active', 'Active')}</TableHead>
+                  <TableHead>{t('propfirm:table.actions', 'Actions')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {profiles.map(p => (
+                  <TableRow key={p.id}>
+                    <TableCell>{p.id}</TableCell>
+                    <TableCell>{p.name}</TableCell>
+                    <TableCell>{p.max_daily_loss_pct}%</TableCell>
+                    <TableCell>{p.max_drawdown_pct}%</TableCell>
+                    <TableCell>{p.profit_target_pct_phase1}%</TableCell>
+                    <TableCell>{p.profit_target_pct_phase2}%</TableCell>
+                    <TableCell>
+                      {activeId === p.id ? <Badge variant="outline" className="text-trading-success border-trading-success/50">{t('common:active', 'Active')}</Badge> : '\u2014'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {activeId !== p.id && <Button variant="outline" size="sm" onClick={() => handleSetActive(p.id)}>{t('propfirm:activate', 'Activate')}</Button>}
+                        <Button variant="outline" size="sm" className="text-destructive border-destructive/50 hover:bg-destructive/10" onClick={() => handleDelete(p.id)}>{t('propfirm:delete', 'Delete')}</Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      {confirmDelete && (
-        <ConfirmDialog
-          title={t('propfirm:deleteTitle', 'Delete Profile')}
-          message={t('propfirm:deleteConfirm', 'Delete this prop firm profile? This action cannot be undone.')}
-          confirmLabel={t('propfirm:delete', 'Delete')}
-          danger
-          onConfirm={confirmDeleteProfile}
-          onCancel={() => setConfirmDelete(null)}
-        />
-      )}
+      <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('propfirm:deleteTitle', 'Delete Profile')}</AlertDialogTitle>
+            <AlertDialogDescription>{t('propfirm:deleteConfirm', 'Delete this prop firm profile? This action cannot be undone.')}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmDelete(null)}>{t('common:cancel', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={confirmDeleteProfile}>{t('propfirm:delete', 'Delete')}</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

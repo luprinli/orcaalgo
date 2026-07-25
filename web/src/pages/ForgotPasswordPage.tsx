@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { auth } from '../api/client'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Input } from '../components/ui/input'
 
 export default function ForgotPasswordPage({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
   const { t } = useTranslation()
@@ -24,15 +27,29 @@ export default function ForgotPasswordPage({ onSwitchToLogin }: { onSwitchToLogi
     }
   }
 
-  return <div className="auth-page"><div className="auth-card">
-    <h1>{t('auth:forgotPassword', 'Reset Password')}</h1>
-    <p className="text-muted">{t('auth:resetDescription', 'Enter your email to receive a reset link.')}</p>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <input className="input" placeholder={t('auth:email', 'Email')} value={email} onChange={e => setEmail(e.target.value)} />
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={loading} style={{ justifyContent: 'center' }}>{loading ? t('auth:sending', 'Sending...') : t('auth:sendResetLink', 'Send Reset Link')}</button>
-      {msg && <p style={{ color: 'var(--success)', fontSize: 12, margin: 0 }}>{msg}</p>}
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{error}</p>}
-      <button className="btn btn-outline" onClick={onSwitchToLogin} style={{ justifyContent: 'center' }}>{t('auth:backToLogin', 'Back to Login')}</button>
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Card className="w-[360px]">
+        <CardHeader>
+          <CardTitle className="text-center">{t('auth:forgotPassword', 'Reset Password')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2.5">
+          <p className="text-sm text-muted-foreground">{t('auth:resetDescription', 'Enter your email to receive a reset link.')}</p>
+          <Input
+            placeholder={t('auth:email', 'Email')}
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+          />
+          <Button className="w-full" onClick={handleSubmit} disabled={loading}>
+            {loading ? t('auth:sending', 'Sending...') : t('auth:sendResetLink', 'Send Reset Link')}
+          </Button>
+          {msg && <p className="text-xs">{msg}</p>}
+          {error && <p role="alert" className="text-destructive text-xs">{error}</p>}
+          <Button variant="outline" className="w-full" onClick={onSwitchToLogin}>
+            {t('auth:backToLogin', 'Back to Login')}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
-  </div></div>
+  )
 }

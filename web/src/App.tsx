@@ -1,39 +1,29 @@
 import { useState, useEffect, createContext, useContext, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
+import { ThemeProvider } from './components/ThemeProvider'
+import { ThemeToggle } from './components/ThemeToggle'
+import { CommandPalette } from './components/CommandPalette'
+import { DynamicBreadcrumb } from './components/DynamicBreadcrumb'
+import { TooltipProvider } from './components/ui/tooltip'
 import { PageSkeleton } from './components/layout/PageSkeleton'
 import ErrorBoundary from './components/ErrorBoundary'
-import AppHeader from './components/AppHeader'
 import { Sidebar } from './components/layout/Sidebar'
-import Dashboard from './pages/Dashboard'
-import LiveTrading from './pages/LiveTrading'
+import MonitorPage from './pages/MonitorPage'
 import ExecutionPage from './pages/ExecutionPage'
-import BacktestPage from './pages/BacktestPage'
-const BacktestDetail = lazy(() => import('./pages/BacktestDetail'))
-const BacktestHistory = lazy(() => import('./pages/BacktestHistory'))
-import StrategiesPage from './pages/StrategiesPage'
+import BacktestHub from './pages/BacktestHub'
+import StrategyHub from './pages/StrategyHub'
 import SettingsPage from './pages/SettingsPage'
-import RiskPage from './pages/RiskPage'
 import AccountsPage from './pages/AccountsPage'
 const AttributionPage = lazy(() => import('./pages/AttributionPage'))
 const CalibratePage = lazy(() => import('./pages/CalibratePage'))
-import IndicatorsPage from './pages/IndicatorsPage'
-import MarketDataPage from './pages/MarketDataPage'
-import OptimizationPanel from './pages/OptimizationPanel'
+import ChartingHub from './pages/ChartingHub'
 const SimulatePage = lazy(() => import('./pages/SimulatePage'))
-const StrategyEditor = lazy(() => import('./pages/StrategyEditor'))
 import TwoFAPage from './pages/TwoFAPage'
 const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
 import PropFirmPage from './pages/admin/PropFirmPage'
-import SymbolAdminPage from './pages/admin/SymbolAdminPage'
+import IntegrationsPage from './pages/IntegrationsPage'
 const UniversePage = lazy(() => import('./pages/admin/UniversePage'))
-import StatusPage from './pages/StatusPage'
-import BrokerManagement from './pages/BrokerManagement'
-import DataSources from './pages/DataSources'
-import CredentialManagement from './pages/CredentialManagement'
-import WebhookConfig from './pages/WebhookConfig'
-import LLMSettings from './pages/LLMSettings'
-import NotificationSettings from './pages/NotificationSettings'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -43,85 +33,94 @@ import EmergencyPage from './pages/EmergencyPage'
 const AuthCtx = createContext<{ token: string | null; setToken: (t: string | null) => void }>({ token: null, setToken: () => {} })
 export const useAuth = () => useContext(AuthCtx)
 
+// Helper: wrap a lazy component with Suspense
+const Lazy = ({ Comp, skeleton }: { Comp: React.ComponentType<any>, skeleton?: boolean }) => (
+  <Suspense fallback={skeleton ? <PageSkeleton /> : <div className="p-6"><div className="animate-pulse space-y-4"><div className="h-4 bg-muted rounded w-1/3" /><div className="h-20 bg-muted rounded" /></div></div>}>
+    <Comp />
+  </Suspense>
+)
+
 function AuthenticatedApp() {
   return (
-    <div className="app-shell">
+    <div className="flex min-h-screen">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
+        Skip to main content
+      </a>
       <Sidebar />
-      <AppHeader />
-      <main className="main app-main" role="main" id="main-content">
-        <ErrorBoundary>
-          <Routes>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background sticky top-0 z-10 px-4">
+          <DynamicBreadcrumb />
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto p-4" role="main" id="main-content">
+          <ErrorBoundary>
+            <Routes>
             {/* Core Trading */}
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/live" element={<LiveTrading />} />
-            <Route path="/live/market" element={<Navigate to="/market-data" replace />} />
+            <Route path="/" element={<MonitorPage />} />
+            <Route path="/live" element={<Navigate to="/" replace />} />
+            <Route path="/live/market" element={<Navigate to="/charting" replace />} />
+            <Route path="/risk" element={<Navigate to="/?tab=risk" replace />} />
             <Route path="/execution" element={<ExecutionPage />} />
-            <Route path="/risk" element={<RiskPage />} />
-            <Route path="/status" element={<StatusPage />} />
 
             {/* Backtesting & Strategy */}
-            <Route path="/backtest" element={<BacktestPage />} />
-            <Suspense fallback={<PageSkeleton />}>
-              <Route path="/backtest/history" element={<BacktestHistory />} />
-              <Route path="/backtest/history/:id" element={<BacktestDetail />} />
-            </Suspense>
-            <Route path="/strategies" element={<StrategiesPage />} />
-            <Suspense fallback={<PageSkeleton />}>
-              <Route path="/strategies/:id/edit" element={<StrategyEditor />} />
-            </Suspense>
-            <Route path="/optimize" element={<div className="main" style={{ maxWidth: 1000, margin: '0 auto' }}><OptimizationPanel /></div>} />
+            <Route path="/backtest" element={<BacktestHub />} />
+            <Route path="/backtest/history" element={<BacktestHub />} />
+            <Route path="/backtest/history/:id" element={<BacktestHub />} />
+            <Route path="/strategies" element={<StrategyHub />} />
+            <Route path="/strategies/:id" element={<Navigate to="/strategies?edit=:id" replace />} />
+            <Route path="/strategies/:id/edit" element={<Navigate to="/strategies?edit=:id" replace />} />
+            <Route path="/strategies/new" element={<Navigate to="/strategies?edit=new" replace />} />
+            <Route path="/strategies/edit/:id" element={<Navigate to="/strategies?edit=:id" replace />} />
 
             {/* Accounts & Prop Firms */}
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/propfirm" element={<PropFirmPage />} />
 
-            {/* Market Data & Indicators */}
-            <Route path="/market-data" element={<MarketDataPage />} />
-            <Route path="/indicators" element={<IndicatorsPage />} />
-            <Route path="/data-sources" element={<DataSources />} />
-            <Route path="/brokers" element={<BrokerManagement />} />
-            <Route path="/symbols" element={<SymbolAdminPage />} />
+            {/* Charts — consolidated */}
+            <Route path="/market-data" element={<Navigate to="/charting" replace />} />
+            <Route path="/indicators" element={<Navigate to="/charting?tab=indicators" replace />} />
+            <Route path="/charting" element={<ChartingHub />} />
+
+            {/* Integrations — consolidated */}
+            <Route path="/integrations" element={<IntegrationsPage />} />
+            <Route path="/brokers" element={<Navigate to="/integrations?tab=brokers" replace />} />
+            <Route path="/symbols" element={<Navigate to="/integrations?tab=providers-symbols" replace />} />
+            <Route path="/data-sources" element={<Navigate to="/settings?tab=trading" replace />} />
 
             {/* Validation & Analysis */}
-            <Suspense fallback={<PageSkeleton />}>
-              <Route path="/calibrate" element={<CalibratePage />} />
-              <Route path="/attribution" element={<AttributionPage />} />
-              <Route path="/simulate" element={<SimulatePage />} />
-            </Suspense>
+            <Route path="/calibrate" element={<Lazy Comp={CalibratePage} skeleton />} />
+            <Route path="/attribution" element={<Lazy Comp={AttributionPage} skeleton />} />
+            <Route path="/simulate" element={<Lazy Comp={SimulatePage} skeleton />} />
 
             {/* Admin */}
-            <Suspense fallback={<PageSkeleton />}>
-              <Route path="/admin" element={<AdminPage />} />
-              <Route path="/admin/universe" element={<UniversePage />} />
-            </Suspense>
+            <Route path="/admin" element={<Lazy Comp={AdminPage} skeleton />} />
+            <Route path="/admin/universe" element={<Lazy Comp={UniversePage} skeleton />} />
+            <Route path="/status" element={<Navigate to="/admin?tab=health" replace />} />
 
             {/* Configuration */}
-            <Route path="/credentials" element={<CredentialManagement />} />
-            <Route path="/webhooks" element={<WebhookConfig />} />
-            <Route path="/llm" element={<LLMSettings />} />
-            <Route path="/2fa" element={<TwoFAPage />} />
             <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/notifications" element={<NotificationSettings />} />
-
-            {/* Emergency mobile access — also available without auth */}
+            <Route path="/webhooks" element={<Navigate to="/settings?tab=webhooks" replace />} />
+            <Route path="/llm" element={<Navigate to="/settings?tab=llm" replace />} />
+            <Route path="/notifications" element={<Navigate to="/settings?tab=notifications" replace />} />
+            <Route path="/credentials" element={<Navigate to="/integrations?tab=credentials" replace />} />
+            <Route path="/optimize" element={<Navigate to="/backtest?view=runner" replace />} />
+            <Route path="/2fa" element={<TwoFAPage />} />
             <Route path="/emergency" element={<EmergencyPage />} />
 
-            {/* Legacy route redirects — maintain for 2 release cycles */}
-            <Route path="/strategies/new" element={<Navigate to="/strategies/new/edit" replace />} />
-            <Suspense fallback={<PageSkeleton />}>
-              <Route path="/strategies/:id" element={<StrategyEditor />} />
-            </Suspense>
-            <Route path="/strategies/edit/:id" element={<Navigate to="/strategies/:id/edit" replace />} />
+            {/* Legacy redirects */}
             <Route path="/admin/health" element={<Navigate to="/admin?tab=health" replace />} />
             <Route path="/admin/logs" element={<Navigate to="/admin?tab=errors" replace />} />
             <Route path="/admin/propfirm" element={<PropFirmPage />} />
-            <Route path="/admin/symbols" element={<SymbolAdminPage />} />
+            <Route path="/admin/symbols" element={<IntegrationsPage />} />
             <Route path="/audit" element={<Navigate to="/admin?tab=audit" replace />} />
             <Route path="/users" element={<Navigate to="/admin?tab=users" replace />} />
           </Routes>
         </ErrorBoundary>
-      </main>
-      <Toaster position="bottom-right" toastOptions={{ duration: 4000, style: { background: '#21262d', color: '#c9d1d9', border: '1px solid #30363d', fontSize: 13 }, success: { iconTheme: { primary: '#3fb950', secondary: '#21262d' } }, error: { iconTheme: { primary: '#f85149', secondary: '#21262d' } } }} />
+        </main>
+        <Toaster position="bottom-right" toastOptions={{ duration: 4000, style: { background: 'hsl(var(--popover))', color: 'hsl(var(--popover-foreground))', border: '1px solid hsl(var(--border))', fontSize: 13 } }} />
+      </div>
     </div>
   )
 }
@@ -156,7 +155,7 @@ function AuthGate() {
 
   if (window.location.pathname === '/emergency') return <EmergencyPage />
 
-  if (token) return <AuthCtx.Provider value={{ token, setToken }}><AuthenticatedApp /></AuthCtx.Provider>
+  if (token) return <AuthCtx.Provider value={{ token, setToken }}><TooltipProvider delayDuration={300}><AuthenticatedApp /><CommandPalette /></TooltipProvider></AuthCtx.Provider>
 
   switch (page) {
     case 'register':
@@ -166,8 +165,20 @@ function AuthGate() {
     case 'reset-password':
       return <ResetPasswordPage onSwitchToLogin={() => switchPage('login')} />
     default:
-      return <LoginPage onLogin={(t: string) => { setToken(t); window.location.href = '/' }} />
+      return <LoginPage
+        onLogin={(t: string) => { setToken(t); window.location.href = '/' }}
+        onForgotPassword={() => switchPage('forgot-password')}
+        onRegister={() => switchPage('register')}
+      />
   }
 }
 
-export default function App() { return <BrowserRouter><AuthGate /></BrowserRouter> }
+export default function App() {
+  return (
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <ThemeProvider>
+        <AuthGate />
+      </ThemeProvider>
+    </BrowserRouter>
+  )
+}

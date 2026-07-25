@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import { auth } from '../api/client'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import { Input } from '../components/ui/input'
 
 export default function ResetPasswordPage({ onSwitchToLogin }: { onSwitchToLogin: () => void }) {
   const { t } = useTranslation()
@@ -27,14 +30,29 @@ export default function ResetPasswordPage({ onSwitchToLogin }: { onSwitchToLogin
     }
   }
 
-  return <div className="auth-page"><div className="auth-card">
-    <h1>{t('auth:setNewPassword', 'Set New Password')}</h1>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <input className="input" placeholder={t('auth:newPassword', 'New Password')} type="password" value={pass} onChange={e => setPass(e.target.value)} />
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={loading || !token} style={{ justifyContent: 'center' }}>{loading ? t('auth:resetting', 'Resetting...') : t('auth:resetButton', 'Set Password')}</button>
-      {msg && <p style={{ color: 'var(--success)', fontSize: 12, margin: 0 }}>{msg}</p>}
-      {error && <p style={{ color: 'var(--danger)', fontSize: 12, margin: 0 }}>{error}</p>}
-      <button className="btn btn-outline" onClick={onSwitchToLogin} style={{ justifyContent: 'center' }}>{t('auth:backToLogin', 'Back to Login')}</button>
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <Card className="w-[360px]">
+        <CardHeader>
+          <CardTitle className="text-center">{t('auth:setNewPassword', 'Set New Password')}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2.5">
+          <Input
+            placeholder={t('auth:newPassword', 'New Password')}
+            type="password"
+            value={pass}
+            onChange={e => setPass(e.target.value)}
+          />
+          <Button className="w-full" onClick={handleSubmit} disabled={loading || !token}>
+            {loading ? t('auth:resetting', 'Resetting...') : t('auth:resetButton', 'Set Password')}
+          </Button>
+          {msg && <p className="text-xs">{msg}</p>}
+          {error && <p role="alert" className="text-destructive text-xs">{error}</p>}
+          <Button variant="outline" className="w-full" onClick={onSwitchToLogin}>
+            {t('auth:backToLogin', 'Back to Login')}
+          </Button>
+        </CardContent>
+      </Card>
     </div>
-  </div></div>
+  )
 }
