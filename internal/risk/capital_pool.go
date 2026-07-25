@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"context"
 	"sync"
 
 	"github.com/lee-econ/orca-core/internal/propfirm"
@@ -31,14 +32,13 @@ type CapitalResult struct {
 }
 
 type CapitalPoolManager struct {
-	mu               sync.RWMutex
-	accountID        string
-	profile          *propfirm.Profile
-	state            *propfirm.State
-	totalBalance     float64
-	totalPeakBalance float64
-	strategies       map[string]*StrategyAllocation
-	positionSizer    *PositionSizer
+	mu            sync.RWMutex
+	poolState     propfirm.PoolState
+	accountID     string
+	profile       *propfirm.Profile
+	state         *propfirm.State
+	strategies    map[string]*StrategyAllocation
+	positionSizer *PositionSizer
 }
 
 func NewCapitalPoolManager(profile *propfirm.Profile, state *propfirm.State) *CapitalPoolManager {
@@ -46,14 +46,14 @@ func NewCapitalPoolManager(profile *propfirm.Profile, state *propfirm.State) *Ca
 	if state != nil {
 		startingBalance = state.StartingBalance
 	}
-	return &CapitalPoolManager{
-		profile:          profile,
-		state:            state,
-		totalBalance:     startingBalance,
-		totalPeakBalance: startingBalance,
-		strategies:       make(map[string]*StrategyAllocation),
-		positionSizer:    NewPositionSizer(profile),
+	cpm := &CapitalPoolManager{
+		profile:       profile,
+		state:         state,
+		strategies:    make(map[string]*StrategyAllocation),
+		positionSizer: NewPositionSizer(profile),
 	}
+	propfirm.InitPoolState(&cpm.poolState, startingBalance)
+	return cpm
 }
 
 func NewCapitalPoolManagerWithAccount(accountID string, profile *propfirm.Profile, state *propfirm.State) *CapitalPoolManager {
@@ -86,14 +86,14 @@ func (c *CapitalPoolManager) UpdateState(state *propfirm.State) {
 	defer c.mu.Unlock()
 	c.state = state
 	if state != nil {
-		c.totalBalance = state.StartingBalance + state.CumulativePnL
-		if c.totalBalance > c.totalPeakBalance {
-			c.totalPeakBalance = c.totalBalance
+		c.poolState.TotalBalance = state.StartingBalance + state.CumulativePnL
+		if c.poolState.TotalBalance > c.poolState.TotalPeakBalance {
+			c.poolState.TotalPeakBalance = c.poolState.TotalBalance
 		}
 	}
 }
 
-func (c *CapitalPoolManager) RequestCapital(req CapitalRequest) CapitalResult {
+func (c *CapitalPoolManager) RequestCapital(ctx context.Context, req CapitalRequest) CapitalResult {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -108,7 +108,7 @@ func (c *CapitalPoolManager) RequestCapital(req CapitalRequest) CapitalResult {
 			StrategyID:  req.StrategyID,
 			OpenLong:    make(map[string]float64),
 			OpenShort:   make(map[string]float64),
-			PeakBalance: c.totalBalance,
+			PeakBalance: c.poolState.TotalBalance,
 		}
 		c.strategies[req.StrategyID] = strat
 	}
@@ -135,27 +135,20 @@ func (c *CapitalPoolManager) RequestCapital(req CapitalRequest) CapitalResult {
 	}
 
 	totalOpen := 0
-	longCount, shortCount := 0, 0
 	for _, s := range c.strategies {
-		for range s.OpenLong {
-			longCount++
-		}
-		for range s.OpenShort {
-			shortCount++
-		}
-		totalOpen += longCount + shortCount
+		totalOpen += len(s.OpenLong) + len(s.OpenShort)
 	}
 	if totalOpen >= p.MaxOpenPositions {
 		return CapitalResult{ApprovedSize: 0, Reason: "max_open_positions"}
 	}
 
 	if c.state != nil {
-		if propfirm.DailyLossExceeded(c.state.StartingBalance, c.totalBalance, p.MaxDailyLossPct) {
+		if propfirm.DailyLossExceeded(c.state.StartingBalance, c.poolState.TotalBalance, p.MaxDailyLossPct) {
 			return CapitalResult{ApprovedSize: 0, Reason: "daily_loss_limit"}
 		}
 	}
 
-	stratDrawdown := propfirm.DrawdownPct(strat.PeakBalance, c.totalBalance)
+	stratDrawdown := propfirm.DrawdownPct(strat.PeakBalance, c.poolState.TotalBalance)
 	maxStratDD := p.MaxDrawdownPct * 0.5
 	if stratDrawdown > maxStratDD {
 		return CapitalResult{ApprovedSize: 0, Reason: "per_strategy_drawdown"}
@@ -186,7 +179,7 @@ func (c *CapitalPoolManager) RecordFill(strategyID, symbol, side string, pnl flo
 			StrategyID:  strategyID,
 			OpenLong:    make(map[string]float64),
 			OpenShort:   make(map[string]float64),
-			PeakBalance: c.totalBalance,
+			PeakBalance: c.poolState.TotalBalance,
 		}
 		c.strategies[strategyID] = s
 	}
@@ -208,16 +201,14 @@ func (c *CapitalPoolManager) RecordFill(strategyID, symbol, side string, pnl flo
 		s.Allocated = 0
 	}
 
-	c.totalBalance += pnl
-	if c.totalBalance > s.PeakBalance {
-		s.PeakBalance = c.totalBalance
+	c.poolState.TotalBalance += pnl
+	if c.poolState.TotalBalance > s.PeakBalance {
+		s.PeakBalance = c.poolState.TotalBalance
 	}
-	if c.totalBalance > c.totalPeakBalance {
-		c.totalPeakBalance = c.totalBalance
-	}
+	propfirm.UpdatePeakBalance(&c.poolState)
 
-	if c.totalBalance > 0 {
-		s.DrawdownPct = propfirm.DrawdownPct(s.PeakBalance, c.totalBalance)
+	if c.poolState.TotalBalance > 0 {
+		s.DrawdownPct = propfirm.DrawdownPct(s.PeakBalance, c.poolState.TotalBalance)
 	}
 }
 
@@ -244,7 +235,7 @@ func (c *CapitalPoolManager) StrategyMetrics() []StrategyAllocation {
 func (c *CapitalPoolManager) TotalBalance() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.totalBalance
+	return c.poolState.TotalBalance
 }
 
 func (c *CapitalPoolManager) TotalExposure() float64 {
@@ -256,3 +247,26 @@ func (c *CapitalPoolManager) TotalExposure() float64 {
 	}
 	return exposure
 }
+
+// Halted returns true when the pool's prop-firm state has been violated.
+func (c *CapitalPoolManager) Halted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.state == nil {
+		return false
+	}
+	return c.state.Violated
+}
+
+// HaltReason returns the violation reason from the prop-firm state.
+func (c *CapitalPoolManager) HaltReason() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.state == nil {
+		return ""
+	}
+	return c.state.ViolationReason
+}
+
+var _ CapitalGate = (*CapitalPoolManager)(nil)
+

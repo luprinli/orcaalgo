@@ -99,8 +99,8 @@ func TestCapitalPoolSim_RecordFill(t *testing.T) {
 
 	sim.RecordFill("s1", "SPY", "BUY", 500, 100)
 
-	if sim.TotalBalance != 100500 {
-		t.Errorf("Expected 100500, got %f", sim.TotalBalance)
+	if sim.PoolState.TotalBalance != 100500 {
+		t.Errorf("Expected 100500, got %f", sim.PoolState.TotalBalance)
 	}
 }
 
@@ -113,11 +113,11 @@ func TestCapitalPoolSim_DrawdownHalt(t *testing.T) {
 
 	sim.RecordFill("s1", "SPY", "BUY", -10000, 100)
 
-	if !sim.Halted {
+	if !sim.PoolState.Halted {
 		t.Error("Sim should be halted after drawdown exceeds limit")
 	}
-	if sim.HaltReason != "max_drawdown" {
-		t.Errorf("Expected halt reason 'max_drawdown', got '%s'", sim.HaltReason)
+	if sim.HaltReason() != "max_drawdown" {
+		t.Errorf("Expected halt reason 'max_drawdown', got '%s'", sim.HaltReason())
 	}
 }
 
@@ -128,14 +128,14 @@ func TestCapitalPoolSim_ResetDaily(t *testing.T) {
 	sim.AddStrategy("s1", &mockRunner{name: "s1"})
 	sim.RecordFill("s1", "SPY", "BUY", 500, 100)
 
-	if sim.DailyPnL != 500 {
-		t.Errorf("Expected daily PnL 500, got %f", sim.DailyPnL)
+	if sim.PoolState.DailyPnL != 500 {
+		t.Errorf("Expected daily PnL 500, got %f", sim.PoolState.DailyPnL)
 	}
 
 	sim.ResetDaily()
 
-	if sim.DailyPnL != 0 {
-		t.Errorf("Expected daily PnL 0 after reset, got %f", sim.DailyPnL)
+	if sim.PoolState.DailyPnL != 0 {
+		t.Errorf("Expected daily PnL 0 after reset, got %f", sim.PoolState.DailyPnL)
 	}
 	if sim.TradingDays != 1 {
 		t.Errorf("Expected 1 trading day, got %d", sim.TradingDays)
@@ -164,7 +164,7 @@ func TestCapitalPoolSim_PerStrategyDrawdown(t *testing.T) {
 	candle := Candle{Time: time.Now(), Open: 100, High: 102, Low: 98, Close: 101, Symbol: "SPY"}
 	signals := sim.EvaluateAll(candle, 1)
 
-	t.Logf("Signals: %d, TotalBalance: %f", len(signals), sim.TotalBalance)
+	t.Logf("Signals: %d, TotalBalance: %f", len(signals), sim.PoolState.TotalBalance)
 	t.Logf("s1 PeakBalance: %f", sim.Strategies["s1"].PeakBalance)
 
 	if _, ok := signals["s1"]; ok {
@@ -174,3 +174,5 @@ func TestCapitalPoolSim_PerStrategyDrawdown(t *testing.T) {
 		t.Logf("Other strategies can still trade")
 	}
 }
+
+

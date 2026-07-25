@@ -244,3 +244,30 @@ func (f *PropFirmEnforcer) maxDailyLossObserved() float64 {
 	}
 	return worst
 }
+
+// --- PropFirmGate adapter methods ---
+
+// CheckDailyLimits combines daily-loss and drawdown checks into a single
+// (ok, reason) return for the PropFirmGate interface.
+func (f *PropFirmEnforcer) CheckDailyLimits() (bool, string) {
+	if f.CheckDailyLoss() {
+		return false, "daily_loss"
+	}
+	if f.CheckDrawdown() {
+		return false, "max_drawdown"
+	}
+	return true, ""
+}
+
+// OnFillAdapter calls the existing OnFill with just pnl. The balance parameter
+// is ignored because PropFirmEnforcer tracks CurrentBalance internally.
+func (f *PropFirmEnforcer) OnFillAdapter(pnl, balance float64) {
+	_ = balance
+	f.OnFill(pnl)
+}
+
+// MarkViolated sets the IsHalted flag and records the reason.
+func (f *PropFirmEnforcer) MarkViolated(reason string) {
+	f.IsHalted = true
+	f.HaltReason = reason
+}

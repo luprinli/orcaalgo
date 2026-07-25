@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -41,12 +42,12 @@ func (m *MultiAccountCapitalPool) GetPool(accountID string) (*CapitalPoolManager
 	return pool, nil
 }
 
-func (m *MultiAccountCapitalPool) RequestCapital(accountID string, req CapitalRequest) (CapitalResult, error) {
+func (m *MultiAccountCapitalPool) RequestCapital(ctx context.Context, accountID string, req CapitalRequest) (CapitalResult, error) {
 	pool, err := m.GetPool(accountID)
 	if err != nil {
 		return CapitalResult{ApprovedSize: 0, Reason: "account_not_found"}, err
 	}
-	return pool.RequestCapital(req), nil
+	return pool.RequestCapital(ctx, req), nil
 }
 
 func (m *MultiAccountCapitalPool) RecordFill(accountID, strategyID, symbol, side string, pnl float64, quantity float64) error {
@@ -141,4 +142,20 @@ func (m *MultiAccountCapitalPool) PoolCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.pools)
+}
+
+// MarkAllViolated iterates all registered capital pools and marks their
+// prop-firm state as violated with the given reason. Called by KillSwitch
+// when an emergency stop fires, so that the capital pool correctly reflects
+// the halted state.
+func (m *MultiAccountCapitalPool) MarkAllViolated(reason string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, pool := range m.pools {
+		pool.UpdateState(&propfirm.State{
+			StartingBalance: pool.TotalBalance(),
+			Violated:        true,
+			ViolationReason: reason,
+		})
+	}
 }

@@ -233,3 +233,57 @@ func DefaultFTMOProfile() *Profile {
 func DefaultProfile() *Profile {
 	return DefaultFTMOProfile()
 }
+
+// --- PropFirmGate adapter methods ---
+
+// OnFill is an alias for RecordFill, matching the risk.PropFirmGate interface.
+func (m *Manager) OnFill(pnl float64, balance float64) {
+	m.RecordFill(pnl, balance)
+}
+
+// OnNewDay is an alias for DailyReset, matching the risk.PropFirmGate interface.
+func (m *Manager) OnNewDay() {
+	m.DailyReset()
+}
+
+// HaltReason returns the violation reason from the active state.
+func (m *Manager) HaltReason() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.ViolationReason
+}
+
+// CurrentPhase returns the active phase number.
+func (m *Manager) CurrentPhase() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.CurrentPhase
+}
+
+// ProfitTargetMet returns whether the active phase's profit target has been met.
+func (m *Manager) ProfitTargetMet() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.state.PhaseTargetMet
+}
+
+// GetPositionSize caps a raw quantity against the profile's MaxPositionPct and
+// applies the consistency multiplier.
+func (m *Manager) GetPositionSize(baseQuantity float64) float64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p := m.profiles[m.active]
+	if p == nil || p.MaxPositionPct <= 0 {
+		return baseQuantity
+	}
+	capPct := p.MaxPositionPct / 100.0
+	s := m.state
+	maxSize := s.StartingBalance * capPct * s.ConsistencyMult
+	if baseQuantity <= 0 {
+		return 0
+	}
+	if baseQuantity > maxSize {
+		return maxSize
+	}
+	return baseQuantity
+}

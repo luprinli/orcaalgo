@@ -1,13 +1,15 @@
 package backtest
 
 import (
+	"context"
+
 	"github.com/lee-econ/orca-core/internal/propfirm"
 )
 
 type PoolSimStrategy struct {
 	ID          string
 	Allocated   float64
-	DailyPnL    float64
+	dailyPnL    float64
 	PeakBalance float64
 	DrawdownPct float64
 	OpenLong    map[string]float64
@@ -23,30 +25,24 @@ type StrategyRunnerInterface interface {
 }
 
 type CapitalPoolSim struct {
-	Profile          *propfirm.Profile
-	TotalBalance     float64
-	TotalPeakBalance float64
-	DailyPnL         float64
-	DailyPnLPct      float64
-	Strategies       map[string]*PoolSimStrategy
-	Halted           bool
-	HaltReason       string
-	TradingDays      int
+	propfirm.PoolState
+	Profile    *propfirm.Profile
+	Strategies map[string]*PoolSimStrategy
 }
 
 func NewCapitalPoolSim(profile *propfirm.Profile, startingBalance float64) *CapitalPoolSim {
-	return &CapitalPoolSim{
-		Profile:          profile,
-		TotalBalance:     startingBalance,
-		TotalPeakBalance: startingBalance,
-		Strategies:       make(map[string]*PoolSimStrategy),
+	c := &CapitalPoolSim{
+		Profile:    profile,
+		Strategies: make(map[string]*PoolSimStrategy),
 	}
+	propfirm.InitPoolState(&c.PoolState, startingBalance)
+	return c
 }
 
 func (c *CapitalPoolSim) AddStrategy(id string, runner StrategyRunnerInterface) {
 	c.Strategies[id] = &PoolSimStrategy{
 		ID:          id,
-		PeakBalance: c.TotalBalance,
+		PeakBalance: c.PoolState.TotalBalance,
 		OpenLong:    make(map[string]float64),
 		OpenShort:   make(map[string]float64),
 		Runner:      runner,
@@ -56,7 +52,7 @@ func (c *CapitalPoolSim) AddStrategy(id string, runner StrategyRunnerInterface) 
 func (c *CapitalPoolSim) EvaluateAll(candle Candle, regime int8) map[string]*Signal {
 	signals := make(map[string]*Signal)
 
-	if c.Halted {
+	if c.PoolState.Halted {
 		return signals
 	}
 
@@ -74,13 +70,13 @@ func (c *CapitalPoolSim) EvaluateAll(candle Candle, regime int8) map[string]*Sig
 			p = propfirm.DefaultFTMOProfile()
 		}
 
-		if c.DailyPnLPct <= -p.MaxDailyLossPct {
-			c.Halted = true
-			c.HaltReason = "daily_loss_limit"
+		if c.PoolState.DailyPnLPct <= -p.MaxDailyLossPct {
+			c.PoolState.Halted = true
+			c.PoolState.HaltReason = "daily_loss_limit"
 			continue
 		}
 
-		stratDD := propfirm.DrawdownPct(strat.PeakBalance, c.TotalBalance)
+		stratDD := propfirm.DrawdownPct(strat.PeakBalance, c.PoolState.TotalBalance)
 		maxStratDD := p.MaxDrawdownPct * 0.5
 		if stratDD > maxStratDD {
 			continue
@@ -109,8 +105,8 @@ func (c *CapitalPoolSim) EvaluateAll(candle Candle, regime int8) map[string]*Sig
 			regimeMult = p.RegimeMultipliers[regime]
 		}
 
-		quantity := (c.TotalBalance * positionPct * regimeMult * correlationMult) / candle.Close.Float64()
-		maxSize := c.TotalBalance * p.MaxPositionPct / 100.0
+		quantity := (c.PoolState.TotalBalance * positionPct * regimeMult * correlationMult) / candle.Close.Float64()
+		maxSize := c.PoolState.TotalBalance * p.MaxPositionPct / 100.0
 		if quantity > maxSize/candle.Close.Float64() {
 			quantity = maxSize / candle.Close.Float64()
 		}
@@ -139,7 +135,7 @@ func (c *CapitalPoolSim) RecordFill(strategyID, symbol, side string, pnl float64
 		return
 	}
 
-	s.DailyPnL += pnl
+	s.dailyPnL += pnl
 	s.Allocated -= quantity * 100.0
 	if s.Allocated < 0 {
 		s.Allocated = 0
@@ -157,34 +153,110 @@ func (c *CapitalPoolSim) RecordFill(strategyID, symbol, side string, pnl float64
 		}
 	}
 
-	c.TotalBalance += pnl
-	c.DailyPnL += pnl
-	if c.TotalBalance > c.TotalPeakBalance {
-		c.TotalPeakBalance = c.TotalBalance
+	propfirm.RecordPoolPnL(&c.PoolState, pnl, c.PoolState.TotalBalance-c.PoolState.DailyPnL)
+	if c.PoolState.TotalBalance > s.PeakBalance {
+		s.PeakBalance = c.PoolState.TotalBalance
 	}
-	if c.TotalBalance > s.PeakBalance {
-		s.PeakBalance = c.TotalBalance
-	}
-
-	if c.Profile != nil && c.TotalBalance > 0 {
-		startBalance := c.TotalBalance - c.DailyPnL
-		if startBalance > 0 {
-			c.DailyPnLPct = c.DailyPnL / startBalance * 100.0
-		}
-	}
-
-	dd := propfirm.DrawdownPct(c.TotalPeakBalance, c.TotalBalance)
-	if c.Profile != nil && c.Profile.MaxDrawdownPct > 0 && dd > c.Profile.MaxDrawdownPct {
-		c.Halted = true
-		c.HaltReason = "max_drawdown"
-	}
+	propfirm.CheckDrawdownHalt(&c.PoolState, c.Profile)
 }
 
 func (c *CapitalPoolSim) ResetDaily() {
-	c.DailyPnL = 0
-	c.DailyPnLPct = 0
-	c.TradingDays++
+	propfirm.ResetPoolDaily(&c.PoolState)
 	for _, s := range c.Strategies {
-		s.DailyPnL = 0
+		s.dailyPnL = 0
 	}
 }
+
+// --- CapitalGate adapter methods ---
+
+// RequestCapital is an adapter for the risk.CapitalGate interface. In the
+// backtest path, capital authorization happens inline inside EvaluateAll;
+// this adapter provides a post-hoc entry point for the RiskPipeline.
+func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req struct {
+	StrategyID string
+	Confidence float64
+	Symbol     string
+	Side       string
+	BaseSize   float64
+}) struct {
+	ApprovedSize float64
+	Reason       string
+} {
+	if c.PoolState.Halted {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: 0, Reason: "pool_halted"}
+	}
+
+	p := c.Profile
+	if p == nil {
+		p = propfirm.DefaultFTMOProfile()
+	}
+
+	strat, ok := c.Strategies[req.StrategyID]
+	if !ok {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: req.BaseSize, Reason: "ok"}
+	}
+
+	if req.Side == "BUY" && strat.OpenLong[req.Symbol] > 0 {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
+	}
+	if req.Side == "SELL" && strat.OpenShort[req.Symbol] > 0 {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
+	}
+
+	totalOpen := 0
+	for _, s := range c.Strategies {
+		totalOpen += len(s.OpenLong) + len(s.OpenShort)
+	}
+	if totalOpen >= p.MaxOpenPositions {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: 0, Reason: "max_open_positions"}
+	}
+
+	if c.PoolState.TotalBalance <= 0 {
+		return struct {
+			ApprovedSize float64
+			Reason       string
+		}{ApprovedSize: 0, Reason: "no_capital"}
+	}
+
+	size := req.BaseSize
+	maxSize := c.PoolState.TotalBalance * p.MaxPositionPct / 100.0 / 100.0
+	if size > maxSize {
+		size = maxSize
+	}
+	if size > c.PoolState.TotalBalance*0.25 {
+		size = c.PoolState.TotalBalance * 0.25
+	}
+
+	return struct {
+		ApprovedSize float64
+		Reason       string
+	}{ApprovedSize: size, Reason: "ok"}
+}
+
+// Halted returns whether the capital pool has been halted.
+func (c *CapitalPoolSim) Halted() bool { return c.PoolState.Halted }
+
+// HaltReason returns the reason the pool was halted.
+func (c *CapitalPoolSim) HaltReason() string { return c.PoolState.HaltReason }
+
+// TotalBalance returns the current pool equity.
+func (c *CapitalPoolSim) TotalBalance() float64 { return c.PoolState.TotalBalance }
+
+
+
+

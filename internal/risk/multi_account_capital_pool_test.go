@@ -1,6 +1,7 @@
 package risk
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lee-econ/orca-core/internal/propfirm"
@@ -22,7 +23,7 @@ func TestMultiAccountCapitalPool_RegisterAndRequest(t *testing.T) {
 		ConsistencyMult: 1.0,
 	})
 
-	result1, err := m.RequestCapital("acct-1", CapitalRequest{
+	result1, err := m.RequestCapital(context.Background(), "acct-1", CapitalRequest{
 		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000,
 	})
 	if err != nil {
@@ -32,7 +33,7 @@ func TestMultiAccountCapitalPool_RegisterAndRequest(t *testing.T) {
 		t.Errorf("expected approved size > 0 for acct-1, got %f", result1.ApprovedSize)
 	}
 
-	result2, err := m.RequestCapital("acct-2", CapitalRequest{
+	result2, err := m.RequestCapital(context.Background(), "acct-2", CapitalRequest{
 		StrategyID: "s2", Confidence: 0.5, Symbol: "QQQ", Side: "BUY", BaseSize: 200000,
 	})
 	if err != nil {
@@ -46,7 +47,7 @@ func TestMultiAccountCapitalPool_RegisterAndRequest(t *testing.T) {
 func TestMultiAccountCapitalPool_AccountNotFound(t *testing.T) {
 	m := NewMultiAccountCapitalPool()
 
-	_, err := m.RequestCapital("nonexistent", CapitalRequest{
+	_, err := m.RequestCapital(context.Background(), "nonexistent", CapitalRequest{
 		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000,
 	})
 	if err == nil {
@@ -66,14 +67,14 @@ func TestMultiAccountCapitalPool_Isolation(t *testing.T) {
 		StartingBalance: 100000.0, PeakBalance: 100000.0,
 	})
 
-	result1, _ := m.RequestCapital("acct-a", CapitalRequest{
+	result1, _ := m.RequestCapital(context.Background(), "acct-a", CapitalRequest{
 		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000,
 	})
 	if result1.ApprovedSize <= 0 {
 		t.Fatalf("first request for acct-a should be approved, got reason: %s", result1.Reason)
 	}
 
-	result2, _ := m.RequestCapital("acct-b", CapitalRequest{
+	result2, _ := m.RequestCapital(context.Background(), "acct-b", CapitalRequest{
 		StrategyID: "s2", Confidence: 0.5, Symbol: "QQQ", Side: "BUY", BaseSize: 100000,
 	})
 	if result2.ApprovedSize <= 0 {
@@ -91,7 +92,7 @@ func TestMultiAccountCapitalPool_RecordFill(t *testing.T) {
 
 	m.RegisterPool("acct-1", profile, state)
 
-	m.RequestCapital("acct-1", CapitalRequest{
+	m.RequestCapital(context.Background(), "acct-1", CapitalRequest{
 		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000,
 	})
 	if err := m.RecordFill("acct-1", "s1", "SPY", "BUY", 500.0, 100.0); err != nil {
@@ -139,8 +140,8 @@ func TestMultiAccountCapitalPool_ResetDaily(t *testing.T) {
 	m.RegisterPool("a1", profile, &propfirm.State{StartingBalance: 100000.0, PeakBalance: 100000.0})
 	m.RegisterPool("a2", profile, &propfirm.State{StartingBalance: 100000.0, PeakBalance: 100000.0})
 
-	m.RequestCapital("a1", CapitalRequest{StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000})
-	m.RequestCapital("a2", CapitalRequest{StrategyID: "s2", Confidence: 0.5, Symbol: "QQQ", Side: "BUY", BaseSize: 100000})
+	m.RequestCapital(context.Background(), "a1", CapitalRequest{StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 100000})
+	m.RequestCapital(context.Background(), "a2", CapitalRequest{StrategyID: "s2", Confidence: 0.5, Symbol: "QQQ", Side: "BUY", BaseSize: 100000})
 
 	m.RecordFill("a1", "s1", "SPY", "BUY", 300.0, 100.0)
 	m.RecordFill("a2", "s2", "QQQ", "BUY", -200.0, 100.0)
@@ -207,3 +208,8 @@ func TestCapitalPoolManager_WithAccount(t *testing.T) {
 		t.Errorf("original pool should have empty accountID, got %s", originalPool.AccountID())
 	}
 }
+
+
+
+
+
