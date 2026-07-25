@@ -24,13 +24,20 @@ export function buildRequestId(): string {
   return `orca-ui-${randomPart}-${requestIdCounter.toString(36)}`
 }
 
-export function getRequestHeaders(): Record<string, string> {
+export function getRequestHeaders(token?: string | null): Record<string, string> {
   startGlobalLoader()
-  return {
+  const headers: Record<string, string> = {
     'X-Request-ID': buildRequestId(),
   }
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  return headers
 }
 
-export function markRequestComplete() {
+export function markRequestComplete(statusCode?: number) {
   stopGlobalLoader()
+  if (statusCode === 401) {
+    localStorage.removeItem('orca_auth')
+  }
 }

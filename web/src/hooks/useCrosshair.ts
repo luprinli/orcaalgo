@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import type { IChartApi, Time } from 'lightweight-charts'
 import { useIndicatorStore } from '../stores/indicatorStore'
@@ -22,6 +22,24 @@ export function useCrosshair(chartRef: React.MutableRefObject<IChartApi | null>,
     return map
   }, [candles])
 
+  const indicatorMapRef = useRef<Map<string, Map<number, Record<string, number>>>>(new Map())
+
+  const indicators = useIndicatorStore(s => s.indicators)
+
+  useEffect(() => {
+    const all = Object.values(indicators)
+    const map = new Map<string, Map<number, Record<string, number>>>()
+    all.forEach(ind => {
+      if (!ind.result) return
+      const timeMap = new Map<number, Record<string, number>>()
+      ind.result.data.forEach(d => {
+        timeMap.set(d.time, d.values)
+      })
+      map.set(ind._id, timeMap)
+    })
+    indicatorMapRef.current = map
+  }, [indicators])
+
   useEffect(() => {
     if (!chartRef.current) return
     const chart = chartRef.current
@@ -35,16 +53,14 @@ export function useCrosshair(chartRef: React.MutableRefObject<IChartApi | null>,
       const ts = typeof param.time === 'number' ? param.time : 0
       const ohlcv = candleTimeMap.get(ts) ?? null
 
-      const indicators: Array<{ name: string; values: Array<{ key: string; value: number }> }> = []
+      const indicatorsArr: Array<{ name: string; values: Array<{ key: string; value: number }> }> = []
       for (const indicator of useIndicatorStore.getState().all()) {
         if (!indicator.result) continue
-        const spec = indicator.spec
-        const data = indicator.result.data
-        const point = data.find(p => p.time === ts)
-        if (point) {
-          const values = Object.entries(point.values).map(([key, value]) => ({ key, value }))
+        const pointValues = indicatorMapRef.current.get(indicator._id)?.get(ts)
+        if (pointValues) {
+          const values = Object.entries(pointValues).map(([key, value]) => ({ key, value }))
           if (values.length > 0) {
-            indicators.push({ name: spec.name, values })
+            indicatorsArr.push({ name: indicator.spec.name, values })
           }
         }
       }
@@ -53,7 +69,7 @@ export function useCrosshair(chartRef: React.MutableRefObject<IChartApi | null>,
         time: param.time,
         timeStr: ts > 0 ? new Date(ts * 1000).toLocaleString() : '',
         ohlcv,
-        indicators,
+        indicators: indicatorsArr,
       })
     }
 

@@ -175,16 +175,14 @@ export default function MonteCarloChart({
     setMedian(toLineData(simulationData.p50))
     setBand75(toLineData(simulationData.p75))
     setBand95(toLineData(simulationData.p95))
-
-    chartRef.current?.timeScale().fitContent()
-  }, [simulationData, baseTime, stepMs, setMedian, setBand75, setBand95, chartRef])
+  }, [simulationData, baseTime, stepMs, setMedian, setBand75, setBand95])
 
   useChartKeyboard(chartRef)
 
   if (!simulationData) {
     return (
-      <div className="card">
-        {title && <div className="card-header"><h3>{title}</h3></div>}
+      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
+        {title && <div className="flex items-center justify-between border-b border-border pb-2 mb-3"><h3>{title}</h3></div>}
         <p className="text-muted">
           Insufficient daily returns data ({dailyReturns.length} days). Need at least 2 days for Monte Carlo simulation.
         </p>
@@ -193,9 +191,9 @@ export default function MonteCarloChart({
   }
 
   return (
-    <div className="card" style={{ position: 'relative' }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ position: 'relative' }}>
       {title && (
-        <div className="card-header">
+        <div className="flex items-center justify-between border-b border-border pb-2 mb-3">
           <h3>{title}</h3>
           <span className="text-muted" style={{ fontSize: 11 }}>
             {simulations} simulations, {forwardDays} days forward, sampling from {dailyReturns.length} daily returns
@@ -210,19 +208,19 @@ export default function MonteCarloChart({
           border: '1px solid var(--border)',
           borderRadius: 6, padding: '8px 10px',
           fontSize: 11, fontFamily: 'monospace',
-          color: 'var(--text-secondary)',
+          color: 'var(--muted-foreground)',
           pointerEvents: 'none',
           boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         }}>
-          <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4, fontSize: 10 }}>
+          <div style={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 4, fontSize: 10 }}>
             {crosshairData.time}
           </div>
           <div>P50 <span style={{ color: 'var(--chart-line)', fontWeight: 600 }}>{crosshairData.p50.toFixed(4)}</span></div>
-          <div>P25 <span style={{ color: 'var(--text-primary)' }}>{crosshairData.p25.toFixed(4)}</span> P75 <span style={{ color: 'var(--text-primary)' }}>{crosshairData.p75.toFixed(4)}</span></div>
-          <div>P5 <span style={{ color: 'var(--text-primary)' }}>{crosshairData.p5.toFixed(4)}</span> P95 <span style={{ color: 'var(--text-primary)' }}>{crosshairData.p95.toFixed(4)}</span></div>
+          <div>P25 <span style={{ color: 'var(--foreground)' }}>{crosshairData.p25.toFixed(4)}</span> P75 <span style={{ color: 'var(--foreground)' }}>{crosshairData.p75.toFixed(4)}</span></div>
+          <div>P5 <span style={{ color: 'var(--foreground)' }}>{crosshairData.p5.toFixed(4)}</span> P95 <span style={{ color: 'var(--foreground)' }}>{crosshairData.p95.toFixed(4)}</span></div>
         </div>
       )}
-      <div className="flex gap-3 mt-2" style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+      <div className="flex gap-3 mt-2" style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>
         <span>95% band (5th–95th percentile)</span>
         <span>75% band (25th–75th percentile)</span>
         <span style={{ color: 'var(--chart-line)' }}>Median</span>

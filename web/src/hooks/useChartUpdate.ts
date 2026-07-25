@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useEffect } from 'react'
 
 export function useChartUpdate() {
   const rafRef = useRef<number | null>(null)
@@ -19,6 +19,14 @@ export function useChartUpdate() {
       rafRef.current = requestAnimationFrame(flush)
     }
   }, [flush])
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+    }
+  }, [])
 
   return { enqueue }
 }

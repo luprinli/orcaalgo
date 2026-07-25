@@ -1,6 +1,6 @@
 ﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
-**Version**: 0.7.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 24 checks · **E2E**: 121/121 pass · **Guardrails**: pre-commit hook + change audit + env guard
+**Version**: 1.0.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **E2E**: 527 Go + 466 Python + 201 Frontend tests · **Guardrails**: pre-commit hook + change audit + env guard
 
 A high-performance algorithmic trading platform purpose-built for **prop firm challenge compliance** (FTMO, TopStep, E8, TFT). Uses a multi-language architecture: **Go** for orchestration and execution, **Python** for strategy IR and canonical mathematics, and **React + TypeScript** for real-time dashboards.
 
@@ -10,8 +10,10 @@ A high-performance algorithmic trading platform purpose-built for **prop firm ch
 |-----------|----------|------|
 | Strategy IR, Math, Calibration | **Python 3.11+** | Pydantic v2 domain models, GKR strategy IR, Kelly/Brier/Platt/Wilson/EWMA, calibration audit, PnL attribution, pre-flight, HMM training, data quality validation |
 | API, Broker, Ingest, Scheduler | **Go 1.25** | HTTP API (Gin), broker adapters (Alpaca/Paper/IBKR), WebSocket market data ingestion (Polygon.io → ring buffer), WebSocket hub, backtest engine (event-driven + walk-forward), risk management, Monte Carlo bootstrapping, DB repository, LLM integration, capability-based broker routing |
-| Web Dashboard | **React 18 + TypeScript 5** | SPA with lightweight-charts, WebSocket live feed, VIX/sentiment/regime gauges, prop dashboard, backtest matrix runner with gate status, Monte Carlo summary + distribution histograms + context card, broker/symbol/strategy management |
+| Web Dashboard | **React 18 + TypeScript 5 + Tailwind CSS 4 + shadcn/ui** | SPA with lightweight-charts, WebSocket live feed, CommandCenter (merged Dashboard+LiveTrading+Risk), backtest matrix runner with gate status, walk-forward analysis, trade analytics, parameter sensitivity heatmap, Monte Carlo charts, broker/symbol/strategy management, emergency mobile page |
 | Time-Series Storage | **PostgreSQL + TimescaleDB** | Hypertables, BIGINT fixed-point price storage, append-only audit logging |
+
+Trading-optimized dark theme (deep navy #090d14) with high-density layouts, tabular numerics, and shadcn/ui components (Button, Card, Dialog, Tabs, Table, Badge, Input, Select, Label, Skeleton, Tooltip, Textarea, AlertDialog)
 
 ## Quick Start
 
@@ -93,7 +95,7 @@ orca attribute --since 90d
 - **Volatility Harvesting** — VIX threshold-based vol premium harvesting
 
 ### Risk Management
-- Kill-switch with `_isLocked` + `_killSwitchInFlight` re-entrancy guard
+- Kill-switch with `isLocked` + `killSwitchReady` re-entrancy guard
 - Multi-account kill-switch iteration
 - Adversarial detection (reject spikes >3/5min, unusual size/symbol, after-hours lockout)
 - Dynamic rate limiter with circuit breaker (10 orders/sec per symbol)
@@ -208,7 +210,7 @@ See [openapi.yaml](docs/openapi.yaml) for the full OpenAPI 3.0 specification.
 ```bash
 orca validate <path>              # Validate .gkr.yaml strategy configs
 orca calibrate --since 90d        # Run calibration audit (quarterly)
-orca preflight [--strict]         # Pre-deployment checklist (24 checks)
+orca preflight [--strict]         # Pre-deployment checklist (12 checks)
 orca attribute --since 90d        # PnL attribution with Wilson CI
 orca simulate calibrate --help    # Simulation subcommands (11 available)
 orca data-validate [--universe]   # Data quality validation
@@ -221,7 +223,7 @@ orca hmm-train --since 3650d      # Train HMM on historical data
 |-----|-------|-------|
 | `python` | `orca/`, `tests/` | ruff, mypy, pytest (coverage ≥ 80%) |
 | `backend` | `internal/`, `cmd/` | golangci-lint, go vet, test (race + coverage ≥ 60%), E2E, provenance gate |
-| `frontend` | `web/` | ESLint, tsc, vite build |
+| `frontend` | `web/` | ESLint, tsc, vite build, vitest (201 tests), playwright |
 | `gkr-validate` | `configs/strategies/` | All `.gkr.yaml` validation |
 | `anti-pattern-scan` | All | 10 hard prohibition enforcement |
 | `security` | All | Gitleaks + govulncheck |
@@ -234,8 +236,13 @@ orca hmm-train --since 3650d      # Train HMM on historical data
 - [Platform Guardrails](docs/PLATFORM_GUARDRAILS.md) — Operations runbook: change audit, env guard, anti-pattern scanner, pre-commit hook
 - [Database Topology](docs/database_topology.md) — TimescaleDB single-source-of-truth, port config, migration guide
 - [Tech Stack Constitution](AGENTS.md) — Language boundaries, 10 hard prohibitions, cross-language integration rules
-- [Strategy Configs](configs/strategies/) — GKR IR strategy definitions (11 active)
+- [Strategy Configs](configs/strategies/) — GKR IR strategy definitions (6 active: grid, intraday_mr, opening_range_breakout, rsi_divergence, session_scalp, trend_following)
 - [API Specification](docs/openapi.yaml) — OpenAPI 3.0 (50+ endpoints)
+- [Frontend Audit Report](docs/frontend_audit_report.md) — Full frontend architecture audit with page inventory, API frequency map, UX assessment
+- [Frontend Remediation Plan](docs/frontend_remediation_plan.md) — 5-phase implementation plan (37/39 tasks, 95% complete)
+- [Test Suite Audit Report](docs/test_suite_audit_report.md) — 1,194 tests cataloged across Go/Python/Frontend
+- [Test Suite Remediation Plan](docs/test_suite_remediation_plan.md) — Test gap coverage plan with priority matrix
+- [Full System Audit](docs/full_system_audit.md) — v3.0.0 post-remediation system audit
 
 ## License
 
@@ -243,4 +250,4 @@ Proprietary. All rights reserved.
 
 ---
 
-*OrcaAlgo v0.7.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform*
+*OrcaAlgo v1.0.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform*

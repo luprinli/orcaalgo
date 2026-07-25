@@ -39,8 +39,8 @@ export default function YearlySummaryTable({ data }: YearlySummaryTableProps) {
   if (years.length === 0) return null
 
   return (
-    <div className="card">
-      <div className="card-header"><h3>Yearly Performance</h3></div>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
+      <div className="flex items-center justify-between border-b border-border pb-2 mb-3"><h3>Yearly Performance</h3></div>
       <div style={{ overflowX: 'auto' }}>
         <table className="data-table" style={{ fontSize: 12 }}>
           <thead>
@@ -57,15 +57,15 @@ export default function YearlySummaryTable({ data }: YearlySummaryTableProps) {
             {years.map((y) => (
               <tr key={y.year}>
                 <td><strong>{y.year}</strong></td>
-                <td style={{ color: y.return_pct >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                <td style={{ color: y.return_pct >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                   {y.return_pct >= 0 ? '+' : ''}{y.return_pct.toFixed(2)}%
                 </td>
                 <td>{y.num_months}</td>
                 <td>{y.positive_months}/{y.num_months}</td>
-                <td style={{ color: 'var(--success)' }}>
+                <td style={{ color: 'var(--trading-success)' }}>
                   {y.best_month ? `${MONTH_LABELS[y.best_month.month - 1]} ${y.best_month.ret >= 0 ? '+' : ''}${y.best_month.ret.toFixed(2)}%` : '--'}
                 </td>
-                <td style={{ color: 'var(--danger)' }}>
+                <td style={{ color: 'var(--trading-danger)' }}>
                   {y.worst_month ? `${MONTH_LABELS[y.worst_month.month - 1]} ${y.worst_month.ret >= 0 ? '+' : ''}${y.worst_month.ret.toFixed(2)}%` : '--'}
                 </td>
               </tr>

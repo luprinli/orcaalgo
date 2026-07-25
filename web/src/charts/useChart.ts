@@ -33,31 +33,21 @@ export function useChart(containerRef: React.RefObject<HTMLDivElement | null>, o
 
     chartRef.current = chart
 
-    const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth })
-      }
-    }
-
-    const resizeObserver = new ResizeObserver(() => handleResize())
-    resizeObserver.observe(containerRef.current)
-    handleResize()
-
-    const themeObserver = new MutationObserver(() => {
-      const fresh = getChartDefaults(height)
-      chart.applyOptions({
-        layout: fresh.layout,
-        grid: fresh.grid,
-        crosshair: fresh.crosshair,
-        timeScale: { ...(fresh.timeScale ?? {}), borderColor: fresh.grid?.vertLines?.color },
-        rightPriceScale: { ...(fresh.rightPriceScale ?? {}), borderColor: fresh.grid?.vertLines?.color },
-      } as DeepPartial<ChartOptions>)
+    const resizeObserver = new ResizeObserver(() => {
+      if (!containerRef.current || !chartRef.current) return
+      chartRef.current.resize(
+        containerRef.current.clientWidth,
+        height || containerRef.current.clientHeight
+      )
     })
-    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
+    resizeObserver.observe(containerRef.current)
+    chart.resize(
+      containerRef.current.clientWidth,
+      height || containerRef.current.clientHeight
+    )
 
     return () => {
       resizeObserver.disconnect()
-      themeObserver.disconnect()
       chart.remove()
       chartRef.current = null
     }
@@ -93,6 +83,7 @@ export function useLineSeries(
     seriesRef.current = series
     markersPluginRef.current = createSeriesMarkers<Time>(series)
     return () => {
+      markersPluginRef.current?.detach()
       // eslint-disable-next-line react-hooks/exhaustive-deps
       chartRef.current?.removeSeries(series)
       seriesRef.current = null
@@ -138,34 +129,13 @@ export function useCandlestickSeries(
     seriesRef.current = series
     markersPluginRef.current = createSeriesMarkers<Time>(series)
     return () => {
+      markersPluginRef.current?.detach()
       // eslint-disable-next-line react-hooks/exhaustive-deps
       chartRef.current?.removeSeries(series)
       seriesRef.current = null
       markersPluginRef.current = null
     }
   }, [chartRef, options])
-
-  useEffect(() => {
-    if (!seriesRef.current) return
-
-    const updateCandleColors = () => {
-      const upColor = options?.upColor ?? (getComputedStyle(document.documentElement).getPropertyValue('--candle-up').trim() || '#26a69a')
-      const downColor = options?.downColor ?? (getComputedStyle(document.documentElement).getPropertyValue('--candle-down').trim() || '#ef5350')
-      seriesRef.current?.applyOptions({
-        upColor,
-        downColor,
-        borderUpColor: upColor,
-        borderDownColor: downColor,
-        wickUpColor: upColor,
-        wickDownColor: downColor,
-      })
-    }
-
-    const themeObserver = new MutationObserver(updateCandleColors)
-    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] })
-
-    return () => themeObserver.disconnect()
-  }, [options])
 
   const setData = (data: CandlestickData[]) => {
     if (data.length === 0) return

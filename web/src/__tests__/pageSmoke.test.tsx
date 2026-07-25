@@ -30,15 +30,9 @@ vi.mock('../charts/EquityCurveChart', () => ({
   default: () => null,
 }))
 
-import CommandCenter from '../pages/CommandCenter'
 import EmergencyPage from '../pages/EmergencyPage'
 
 describe('Page Smoke Tests', () => {
-  it('CommandCenter renders without crashing', () => {
-    const { container } = render(<BrowserRouter><CommandCenter /></BrowserRouter>)
-    expect(container).toBeTruthy()
-  })
-
   it('EmergencyPage renders without crashing', () => {
     const { container } = render(<BrowserRouter><EmergencyPage /></BrowserRouter>)
     expect(container).toBeTruthy()

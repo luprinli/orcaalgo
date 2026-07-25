@@ -34,15 +34,15 @@ interface AuthData {
 }
 
 function getAuth(): AuthData | null {
+  const raw = localStorage.getItem('orca_auth')
+  if (!raw) return null
   try {
-    const raw = localStorage.getItem('orca_auth')
-    if (!raw) return null
     const parsed = JSON.parse(raw)
-    // Handle both old format (plain JWT string) and new format ({ token, username, ... })
     if (typeof parsed === 'string') return { token: parsed, refresh: '', roles: [] }
     return parsed
   } catch {
-    return null
+    if (raw.startsWith('{') || raw.startsWith('[')) return null
+    return { token: raw, refresh: '', roles: [] }
   }
 }
 
@@ -90,13 +90,10 @@ async function request<T>(
   body?: unknown,
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
+  const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...getRequestHeaders(),
-  }
-  const token = getToken()
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+    ...getRequestHeaders(token),
   }
   if (extraHeaders) {
     Object.assign(headers, extraHeaders)
@@ -136,10 +133,10 @@ async function request<T>(
     return res.json() as Promise<T>
   }
 
-  return handleResponse().finally(() => markRequestComplete())
+  return handleResponse().finally(() => markRequestComplete(res.status))
 }
 
-export { setAuth, clearAuth, request }
+export { getToken, getAuth, setAuth, clearAuth, request }
 
 function get<T>(path: string): Promise<T> {
   return request<T>('GET', path)
@@ -314,6 +311,9 @@ export const propfirm = {
 export const settings = {
   get: () => get<AppSettings>('/api/v1/settings'),
   update: (data: AppSettings) => put('/api/v1/settings', data),
+  testNotification: () => post<{ success: boolean; message: string }>('/api/v1/settings/notifications/test'),
+  testLLM: (provider: string, apiKey: string, baseUrl: string, model: string) =>
+    post<{ reachable: boolean; response: string }>('/api/v1/llm/test', { provider, api_key: apiKey, base_url: baseUrl, model }),
 }
 
 export const calibrate = {
@@ -322,10 +322,6 @@ export const calibrate = {
 
 export const attribution = {
   run: () => post<AttributionReportResponse>('/api/v1/attribute'),
-}
-
-export const dataValidate = {
-  run: () => post<DataValidateResponse>('/api/v1/data/validate'),
 }
 
 export const admin = {
@@ -346,6 +342,7 @@ export const admin = {
     return get<ErrorLogEntry[]>(`/api/v1/admin/logs/errors?${q}`)
   },
   seed: (force = false) => post('/api/v1/admin/seed', { force }),
+  killHistory: () => get<{ events: { reason: string; source: string; triggered_at: string; resolved_at?: string }[] }>('/api/v1/admin/kill-history'),
 }
 
 export const indicators = {
@@ -366,10 +363,40 @@ export const simulate = {
     post<SimulateCalibrateResponse>('/api/v1/simulate/calibrate', params),
   validate: (params?: { symbol?: string }) =>
     post<SimulateValidateResponse>('/api/v1/simulate/validate', params || {}),
+  calibrateRegime: (params: { symbols: string[]; timeframe?: string; start?: string; end?: string }) =>
+    post<{ calibrated: boolean; regimes: Record<string, unknown> }>('/api/v1/simulate/calibrate-regime', params),
+  generateTicks: (params: { generation_id: string; symbol: string; ticks_per_minute?: number; spread_bps?: number; seed?: number }) =>
+    post<{ ticks_generated: number; output_path: string }>('/api/v1/simulate/ticks', params),
+  injectSignal: (params: { generation_id: string; strategy: string; strength?: number }) =>
+    post<{ injected: boolean; signal_count: number }>('/api/v1/simulate/inject-signal', params),
+  validateRegime: (params: { generation_id: string; symbol: string; coverage?: number; min_sharpe?: number }) =>
+    post<{ passed: boolean; regime_persistence: { passed: boolean }; coverage: { passed: boolean }; signal_quality: { passed: boolean } }>('/api/v1/simulate/validate-regime', params),
 }
 
 export const monitor = {
   regimeHistory: () => get<{ history: { timestamp: string; regime: number }[] }>('/api/v1/monitor/regime-history'),
+}
+
+export const dataValidate = {
+  run: () => post<DataValidateResponse>('/api/v1/data/validate'),
+}
+
+export const signals = {
+  list: () => get<{ signals: { symbol: string; side: string; confidence: number; reason: string; timestamp: string }[] }>('/api/v1/signals'),
+}
+
+export const models = {
+  register: (data: { model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; metadata?: Record<string, unknown> }) =>
+    post<{ registered: boolean; id: string }>('/api/v1/models/register', data),
+  compare: (modelHash: string) =>
+    get<{ exists: boolean; registered_at?: string }>(`/api/v1/models/compare?model_hash=${encodeURIComponent(modelHash)}`),
+  latest: (modelType: string) =>
+    get<{ model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; registered_at: string }>(`/api/v1/models/latest/${encodeURIComponent(modelType)}`),
+}
+
+export const reconciliation = {
+  daily: (date: string) =>
+    get<{ date: string; matched: number; missing: number; extra: number; price_discrepancies: number; details?: { trade_id: string; internal_price: number; broker_price: number; diff_pct: number }[] }>(`/api/v1/reconciliation/daily?date=${encodeURIComponent(date)}`),
 }
 
 export const universe = {

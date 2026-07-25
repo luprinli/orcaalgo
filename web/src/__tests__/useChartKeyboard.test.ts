@@ -9,6 +9,8 @@ function createChartRef() {
   const scrollPosition = vi.fn().mockReturnValue(500)
   const scrollToPosition = vi.fn()
   const options = vi.fn().mockReturnValue({ barSpacing: 20 })
+  const getVisibleLogicalRange = vi.fn().mockReturnValue({ from: 100, to: 200 })
+  const setVisibleLogicalRange = vi.fn()
 
   const timeScale = {
     applyOptions,
@@ -16,6 +18,8 @@ function createChartRef() {
     scrollPosition,
     scrollToPosition,
     options,
+    getVisibleLogicalRange,
+    setVisibleLogicalRange,
   }
 
   const chartRef: React.MutableRefObject<IChartApi | null> = {
@@ -24,7 +28,7 @@ function createChartRef() {
     } as unknown as IChartApi,
   }
 
-  return { chartRef, mocks: { applyOptions, fitContent, scrollPosition, scrollToPosition, options } }
+  return { chartRef, mocks: { applyOptions, fitContent, scrollPosition, scrollToPosition, options, getVisibleLogicalRange, setVisibleLogicalRange } }
 }
 
 function fireKeyDown(key: string, opts: { ctrlKey?: boolean; metaKey?: boolean; target?: Pick<HTMLElement, 'tagName'> } = {}) {
@@ -60,9 +64,7 @@ describe('useChartKeyboard', () => {
 
     fireKeyDown('+')
 
-    expect(mocks.applyOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ barSpacing: expect.any(Number) }) as unknown as Record<string, unknown>,
-    )
+    expect(mocks.setVisibleLogicalRange).toHaveBeenCalled()
   })
 
   it('dispatches zoom-in on "=" key', () => {
@@ -71,9 +73,7 @@ describe('useChartKeyboard', () => {
 
     fireKeyDown('=')
 
-    expect(mocks.applyOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ barSpacing: expect.any(Number) }) as unknown as Record<string, unknown>,
-    )
+    expect(mocks.setVisibleLogicalRange).toHaveBeenCalled()
   })
 
   it('dispatches zoom-out on "-" key', () => {
@@ -82,9 +82,7 @@ describe('useChartKeyboard', () => {
 
     fireKeyDown('-')
 
-    expect(mocks.applyOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ barSpacing: expect.any(Number) }) as unknown as Record<string, unknown>,
-    )
+    expect(mocks.setVisibleLogicalRange).toHaveBeenCalled()
   })
 
   it('calls fitContent on "0" key', () => {

@@ -38,7 +38,7 @@ export default function CalendarHeatmap({ data, height = 260, onMonthClick }: Ca
 
   function getColor(ret: number): string {
     const abs = Math.max(Math.abs(minRet), Math.abs(maxRet))
-    if (abs === 0) return 'var(--bg-input)'
+    if (abs === 0) return 'var(--input)'
     const intensity = Math.min(Math.abs(ret) / abs, 1)
     if (ret > 0) {
       const g = Math.round(200 - intensity * 160)
@@ -48,13 +48,13 @@ export default function CalendarHeatmap({ data, height = 260, onMonthClick }: Ca
       const r = Math.round(200 + intensity * 55)
       return `rgb(${r}, ${170 - intensity * 90}, ${170 - intensity * 90})`
     }
-    return 'var(--bg-input)'
+    return 'var(--input)'
   }
 
   return (
-    <div className="card" style={{ position: 'relative' }}>
-      <div className="card-header"><h3>Monthly Returns Heatmap</h3></div>
-      <svg width={w} height={Math.min(h, height)} style={{ display: 'block', margin: '0 auto' }}>
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ position: 'relative' }}>
+      <div className="flex items-center justify-between border-b border-border pb-2 mb-3"><h3>Monthly Returns Heatmap</h3></div>
+      <svg width={w} height={Math.min(h, height)} style={{ display: 'block', margin: '0 auto' }} role="img" aria-label="Monthly returns heatmap">
         {years.map((year, yi) => (
           <text key={`y-${year}`} x={padding.left + yi * colW + cellSize / 2} y={padding.top + headerH - 6}
             textAnchor="middle" fill="var(--text-muted)" fontSize={11}>
@@ -94,18 +94,18 @@ export default function CalendarHeatmap({ data, height = 260, onMonthClick }: Ca
         )}
       </svg>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-        <span style={{ color: 'var(--danger)' }}>{minRet.toFixed(2)}%</span>
-        <div style={{ width: 120, height: 12, borderRadius: 3, background: `linear-gradient(to right, rgb(255,${170-90},${170-90}), var(--bg-input), rgb(${200-160}, 230, ${200-160}))` }} />
-        <span style={{ color: 'var(--success)' }}>+{maxRet.toFixed(2)}%</span>
+        <span style={{ color: 'var(--trading-danger)' }}>{minRet.toFixed(2)}%</span>
+        <div style={{ width: 120, height: 12, borderRadius: 3, background: `linear-gradient(to right, rgb(255,${170-90},${170-90}), var(--input), rgb(${200-160}, 230, ${200-160}))` }} />
+        <span style={{ color: 'var(--trading-success)' }}>+{maxRet.toFixed(2)}%</span>
       </div>
       {tooltip && (
         <div style={{
           position: 'fixed', left: tooltip.x, top: tooltip.y - 8, transform: 'translate(-50%, -100%)',
-          background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6,
+          background: 'var(--input)', border: '1px solid var(--border)', borderRadius: 6,
           padding: '6px 10px', fontSize: 12, zIndex: 1000, pointerEvents: 'none', whiteSpace: 'nowrap',
           boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
         }}>
-          {MONTH_LABELS[tooltip.month - 1]} {tooltip.year}: <span style={{ color: tooltip.ret >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+          {MONTH_LABELS[tooltip.month - 1]} {tooltip.year}: <span style={{ color: tooltip.ret >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
             {tooltip.ret >= 0 ? '+' : ''}{tooltip.ret.toFixed(2)}%
           </span>
         </div>

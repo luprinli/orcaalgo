@@ -1,4 +1,5 @@
 import { useRef, useEffect, useMemo, useState } from 'react'
+import { type Time } from 'lightweight-charts'
 import { useChart, useHistogramSeries } from './useChart'
 import { convertToUTCTime } from './chartUtils'
 import CrosshairTooltip from './CrosshairTooltip'
@@ -19,7 +20,9 @@ interface CVDChartProps {
 export default function CVDChart({ data, height = 200, title }: CVDChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useChart(containerRef, { height })
-  const { setData } = useHistogramSeries(chartRef)
+  const { setData, update } = useHistogramSeries(chartRef)
+
+  const prevLenRef = useRef(0)
 
   const histogramData = useMemo(() => {
     return data
@@ -38,9 +41,17 @@ export default function CVDChart({ data, height = 200, title }: CVDChartProps) {
 
   useEffect(() => {
     if (histogramData.length > 0) {
-      setData(histogramData)
+      const prevLen = prevLenRef.current
+      if (prevLen === 0 || histogramData.length < prevLen) {
+        setData(histogramData)
+      } else {
+        for (let i = prevLen; i < histogramData.length; i++) {
+          update(histogramData[i])
+        }
+      }
+      prevLenRef.current = histogramData.length
     }
-  }, [histogramData, setData])
+  }, [histogramData, setData, update])
 
   const dataMap = useMemo(() => {
     const map = new Map<number, any>()
@@ -49,13 +60,15 @@ export default function CVDChart({ data, height = 200, title }: CVDChartProps) {
   }, [data])
 
   const [crosshairData, setCrosshairData] = useState<any>(null)
+  const [crosshairPoint, setCrosshairPoint] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     if (!chartRef.current) return
     const chart = chartRef.current
     const handler = (param: any) => {
-      if (!param.time) {
+      if (!param.time || param.point === undefined) {
         setCrosshairData(null)
+        setCrosshairPoint(null)
         return
       }
       const datum = dataMap.get(param.time as number)
@@ -63,17 +76,15 @@ export default function CVDChart({ data, height = 200, title }: CVDChartProps) {
         setCrosshairData({
           timeStr: new Date((param.time as number) * 1000).toLocaleString(),
           rows: [
-            { label: 'O', value: datum.open?.toFixed(2) ?? '—' },
-            { label: 'H', value: datum.high?.toFixed(2) ?? '—' },
-            { label: 'L', value: datum.low?.toFixed(2) ?? '—' },
-            { label: 'C', value: datum.close?.toFixed(2) ?? '—' },
             { label: 'Delta', value: datum.delta?.toFixed(0) ?? '—' },
             { label: 'Buy Vol', value: String(datum.buy_volume ?? '—') },
             { label: 'Sell Vol', value: String(datum.sell_volume ?? '—') },
           ],
         })
+        setCrosshairPoint({ x: param.point.x, y: param.point.y })
       } else {
         setCrosshairData(null)
+        setCrosshairPoint(null)
       }
     }
     chart.subscribeCrosshairMove(handler)
@@ -81,11 +92,11 @@ export default function CVDChart({ data, height = 200, title }: CVDChartProps) {
   }, [chartRef, dataMap])
 
   return (
-    <div className="card">
-      {title && <div className="card-header"><h3>{title}</h3></div>}
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4">
+      {title && <div className="flex items-center justify-between border-b border-border pb-2 mb-3"><h3>{title}</h3></div>}
       <div style={{ position: 'relative' }}>
-        <div ref={containerRef} role="img" aria-label="CVD chart" />
-        {crosshairData && <CrosshairTooltip data={crosshairData} />}
+        <div ref={containerRef} role="img" aria-label="Cumulative Volume Delta chart" />
+        {crosshairData && <CrosshairTooltip data={crosshairData} position={crosshairPoint ?? undefined} />}
       </div>
     </div>
   )

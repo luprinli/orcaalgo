@@ -22,17 +22,25 @@ export function useChartKeyboard(
       const chart = chartRef.current
       if (!chart) return
       const ts = chart.timeScale()
-      const currentSpacing = ((ts.options() as Record<string, unknown>).barSpacing as number) ?? 10
+
+      const handleZoom = (zoomIn: boolean) => {
+        const range = ts.getVisibleLogicalRange()
+        if (!range) return
+        const mid = (range.from + range.to) / 2
+        const span = range.to - range.from
+        const newSpan = zoomIn ? Math.max(span * 0.7, 10) : span / 0.7
+        ts.setVisibleLogicalRange({ from: mid - newSpan / 2, to: mid + newSpan / 2 })
+      }
 
       switch (e.key) {
         case '+':
         case '=':
           e.preventDefault()
-          ts.applyOptions({ barSpacing: Math.max(5, currentSpacing * zoomStep) } as Record<string, unknown>)
+          handleZoom(true)
           break
         case '-':
           e.preventDefault()
-          ts.applyOptions({ barSpacing: Math.max(1, currentSpacing / zoomStep) } as Record<string, unknown>)
+          handleZoom(false)
           break
         case '0':
           e.preventDefault()

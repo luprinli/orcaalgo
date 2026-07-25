@@ -97,10 +97,9 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
         candleSeriesRef.current?.update({ time: lastTime, open: c.open, high: c.high, low: c.low, close: c.close })
       }
 
-      chartRef.current?.timeScale().fitContent()
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, enqueue, setCandleData, setVolumeData, chartRef])
+  }, [candles, enqueue, setCandleData, setVolumeData])
 
   // Markers
   useEffect(() => {
@@ -166,7 +165,7 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
     <div ref={fullscreenContainerRef} style={{ width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: isFullscreen ? 'var(--chart-bg)' : undefined }}>
       <OHLCVHeader candle={latestCandle} />
       <TimeframeChips variant="toolbar" />
-      <div ref={containerRef} role="img" aria-label="Candlestick chart with indicators" style={{ width: '100%', position: 'relative' }}>
+      <div ref={containerRef} role="img" aria-label="Live trading chart" style={{ width: '100%', position: 'relative' }}>
         <ChartOverlayButtons
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
@@ -183,21 +182,21 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
             border: '1px solid var(--border)',
             borderRadius: 6, padding: '8px 10px',
             fontSize: 11, fontFamily: 'monospace',
-            color: 'var(--text-secondary)',
+            color: 'var(--muted-foreground)',
             minWidth: 180, maxWidth: 280,
             pointerEvents: 'none',
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}>
-            <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4, fontSize: 10 }}>
+            <div style={{ color: 'var(--foreground)', fontWeight: 600, marginBottom: 4, fontSize: 10 }}>
               {crosshairData.timeStr || '—'}
             </div>
             {crosshairData.ohlcv ? (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: crosshairData.indicators.length > 0 ? 6 : 0 }}>
-                <span>O <span style={{ color: 'var(--text-primary)' }}>{crosshairData.ohlcv.o.toFixed(4)}</span></span>
-                <span>H <span style={{ color: 'var(--text-primary)' }}>{crosshairData.ohlcv.h.toFixed(4)}</span></span>
-                <span>L <span style={{ color: 'var(--text-primary)' }}>{crosshairData.ohlcv.l.toFixed(4)}</span></span>
-                <span>C <span style={{ color: 'var(--text-primary)' }}>{crosshairData.ohlcv.c.toFixed(4)}</span></span>
-                <span>V <span style={{ color: 'var(--text-primary)' }}>{crosshairData.ohlcv.v.toLocaleString()}</span></span>
+                <span>O <span style={{ color: 'var(--foreground)' }}>{crosshairData.ohlcv.o.toFixed(4)}</span></span>
+                <span>H <span style={{ color: 'var(--foreground)' }}>{crosshairData.ohlcv.h.toFixed(4)}</span></span>
+                <span>L <span style={{ color: 'var(--foreground)' }}>{crosshairData.ohlcv.l.toFixed(4)}</span></span>
+                <span>C <span style={{ color: 'var(--foreground)' }}>{crosshairData.ohlcv.c.toFixed(4)}</span></span>
+                <span>V <span style={{ color: 'var(--foreground)' }}>{crosshairData.ohlcv.v.toLocaleString()}</span></span>
               </div>
             ) : (
               <span className="text-muted">No data</span>
@@ -207,7 +206,7 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
                 <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{ind.name}</span>
                 {ind.values.map((v) => (
                   <span key={v.key} style={{ marginLeft: 6 }}>
-                    {v.key} <span style={{ color: 'var(--text-primary)' }}>{v.value.toFixed(4)}</span>
+                    {v.key} <span style={{ color: 'var(--foreground)' }}>{v.value.toFixed(4)}</span>
                   </span>
                 ))}
               </div>
@@ -221,34 +220,34 @@ export default function LiveMonitorChart({ candles, height = 500, markers, trade
             border: '1px solid var(--border)',
             borderRadius: 6, padding: '10px 12px',
             fontSize: 11, fontFamily: 'monospace',
-            color: 'var(--text-secondary)',
+            color: 'var(--muted-foreground)',
             minWidth: 180,
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ color: tradeTooltip.side === 'BUY' ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+              <span style={{ color: tradeTooltip.side === 'BUY' ? 'var(--trading-success)' : 'var(--trading-danger)', fontWeight: 600 }}>
                 {tradeTooltip.side} {tradeTooltip.symbol}
               </span>
               <button
                 onClick={() => setTradeTooltip(null)}
-                style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
+                style={{ background: 'none', border: 'none', color: 'var(--muted-foreground)', cursor: 'pointer', fontSize: 14, lineHeight: 1, padding: 0 }}
                 aria-label="Close trade detail"
               >
                 ×
               </button>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
-              <span>Entry <span style={{ color: 'var(--text-primary)' }}>${tradeTooltip.entry_price?.toFixed(2)}</span></span>
-              <span>Exit <span style={{ color: 'var(--text-primary)' }}>${tradeTooltip.exit_price?.toFixed(2)}</span></span>
+              <span>Entry <span style={{ color: 'var(--foreground)' }}>${tradeTooltip.entry_price?.toFixed(2)}</span></span>
+              <span>Exit <span style={{ color: 'var(--foreground)' }}>${tradeTooltip.exit_price?.toFixed(2)}</span></span>
             </div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <span>P&L <span style={{ color: (tradeTooltip.pnl ?? 0) >= 0 ? 'var(--success)' : 'var(--danger)', fontWeight: 600 }}>
+              <span>P&L <span style={{ color: (tradeTooltip.pnl ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)', fontWeight: 600 }}>
                 ${tradeTooltip.pnl?.toFixed(2)} ({tradeTooltip.pnl_pct?.toFixed(2)}%)
               </span></span>
-              <span>Qty <span style={{ color: 'var(--text-primary)' }}>{tradeTooltip.quantity}</span></span>
-              <span>Dur <span style={{ color: 'var(--text-primary)' }}>{tradeTooltip.hold_duration?.toFixed(1)}h</span></span>
+              <span>Qty <span style={{ color: 'var(--foreground)' }}>{tradeTooltip.quantity}</span></span>
+              <span>Dur <span style={{ color: 'var(--foreground)' }}>{tradeTooltip.hold_duration?.toFixed(1)}h</span></span>
             </div>
-            <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
+            <div style={{ marginTop: 4, fontSize: 10, color: 'var(--muted-foreground)' }}>
               {tradeTooltip.exit_reason && <span>Exit: {tradeTooltip.exit_reason}</span>}
               {tradeTooltip.mae !== undefined && <span style={{ marginLeft: 8 }}>MAE: ${tradeTooltip.mae?.toFixed(2)}</span>}
               {tradeTooltip.mfe !== undefined && <span style={{ marginLeft: 8 }}>MFE: ${tradeTooltip.mfe?.toFixed(2)}</span>}

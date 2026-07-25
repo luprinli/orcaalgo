@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { Candle } from '../types/api'
+import type { Time } from 'lightweight-charts'
 
 const TIMEFRAME_MINUTES: Record<string, number> = {
   M1: 1, M5: 5, M15: 15, M30: 30,
@@ -21,7 +22,7 @@ export function useCandleAggregation(candles: Candle[], timeframe: string): Cand
       const existing = buckets.get(bucketTs)
       if (!existing) {
         buckets.set(bucketTs, {
-          time: new Date(bucketTs).toISOString(),
+          time: (bucketTs / 1000) as Time as unknown as string,
           open: c.open,
           high: c.high,
           low: c.low,

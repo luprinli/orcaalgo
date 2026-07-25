@@ -73,6 +73,7 @@ export default function EquityCurveChart({
   const [crosshairData, setCrosshairData] = useState<{
     time: string; equity: number; drawdown: number; overlays?: Array<{ label: string; value: number }>
   } | null>(null)
+  const [crosshairPoint, setCrosshairPoint] = useState<{ x: number; y: number } | null>(null)
 
   const chartRef = useChart(containerRef, {
     height,
@@ -81,13 +82,13 @@ export default function EquityCurveChart({
 
   const colors = getChartColors()
 
-  const { setData: setEquity, seriesRef: equitySeriesRef, setMarkers: setEquityMarkers } = useLineSeries(
+  const { setData: setEquity, update: updateEquity, seriesRef: equitySeriesRef, setMarkers: setEquityMarkers } = useLineSeries(
     chartRef,
     color ?? colors.line,
     { lineWidth: 2, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
   )
 
-  const { setData: setDrawdown } = useAreaSeries(chartRef, {
+  const { setData: setDrawdown, update: updateDrawdown } = useAreaSeries(chartRef, {
     lineColor: 'rgba(239, 83, 80, 0.6)',
     topColor: 'rgba(239, 83, 80, 0.25)',
     bottomColor: 'rgba(239, 83, 80, 0.02)',
@@ -95,7 +96,7 @@ export default function EquityCurveChart({
     priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
   })
 
-  const { setData: setBenchmark } = useLineSeries(
+  const { setData: setBenchmark, update: updateBenchmark } = useLineSeries(
     chartRef,
     'rgba(255, 165, 0, 0.7)',
     { lineWidth: 1, lineStyle: LineStyle.Dashed, lastValueVisible: false, priceFormat: { type: 'price', precision: 2, minMove: 0.01 } },
@@ -107,6 +108,10 @@ export default function EquityCurveChart({
     [benchmarkData, hasBenchmark],
   )
   const drawdownData = useMemo(() => computeDrawdown(data), [data])
+
+  const prevEquityLenRef = useRef(0)
+  const prevBenchmarkLenRef = useRef(0)
+  const prevDrawdownLenRef = useRef(0)
 
   const overlayLineData = useMemo(() => {
     if (!hasOverlays) return []
@@ -159,6 +164,7 @@ export default function EquityCurveChart({
   const handleCrosshair = useCallback((param: any) => {
     if (!param.time || param.point === undefined) {
       setCrosshairData(null)
+      setCrosshairPoint(null)
       return
     }
     const ts = typeof param.time === 'number' ? param.time : 0
@@ -175,6 +181,7 @@ export default function EquityCurveChart({
         drawdown: dd ?? 0,
         overlays: ov,
       })
+      setCrosshairPoint({ x: param.point.x, y: param.point.y })
     }
   }, [equityMap, drawdownMap, overlayLineData, overlayMaps, hasOverlays])
 
@@ -200,6 +207,7 @@ export default function EquityCurveChart({
   // Overlay series lifecycle
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const overlaySeriesRef = useRef<Map<string, any>>(new Map())
+  const prevOverlayLenRef = useRef<Map<string, number>>(new Map())
 
   useEffect(() => {
     if (!chartRef.current || !hasOverlays) return
@@ -209,7 +217,22 @@ export default function EquityCurveChart({
       const o = overlayLineData[i]
       const key = `overlay_${i}_${o.label}`
       currentKeys.add(key)
-      if (overlaySeriesRef.current.has(key)) continue
+
+      if (overlaySeriesRef.current.has(key)) {
+        const series = overlaySeriesRef.current.get(key)
+        const prevLen = prevOverlayLenRef.current.get(key) ?? 0
+        if (o.data.length > 0) {
+          if (prevLen === 0 || o.data.length < prevLen) {
+            series.setData(o.data)
+          } else {
+            for (let j = prevLen; j < o.data.length; j++) {
+              series.update(o.data[j])
+            }
+          }
+          prevOverlayLenRef.current.set(key, o.data.length)
+        }
+        continue
+      }
 
       const overlayColor = o.color ?? OVERLAY_PALETTE[i % OVERLAY_PALETTE.length]
       const series = chartRef.current.addSeries(LineSeries, {
@@ -221,12 +244,14 @@ export default function EquityCurveChart({
       })
       series.setData(o.data)
       overlaySeriesRef.current.set(key, series)
+      prevOverlayLenRef.current.set(key, o.data.length)
     }
 
     for (const [key, series] of overlaySeriesRef.current) {
       if (!currentKeys.has(key)) {
         chartRef.current.removeSeries(series)
         overlaySeriesRef.current.delete(key)
+        prevOverlayLenRef.current.delete(key)
       }
     }
   }, [overlayLineData, chartRef, hasOverlays])
@@ -239,7 +264,15 @@ export default function EquityCurveChart({
 
   useEffect(() => {
     if (lineData.length > 0) {
-      setEquity(lineData)
+      const prevLen = prevEquityLenRef.current
+      if (prevLen === 0 || lineData.length < prevLen) {
+        setEquity(lineData)
+      } else {
+        for (let i = prevLen; i < lineData.length; i++) {
+          updateEquity(lineData[i])
+        }
+      }
+      prevEquityLenRef.current = lineData.length
 
       if (!hwmPriceLineRef.current && equitySeriesRef.current) {
         const startingEquity = lineData[0]?.value
@@ -255,40 +288,52 @@ export default function EquityCurveChart({
         }
       }
     }
-  }, [lineData, setEquity, equitySeriesRef])
+  }, [lineData, setEquity, updateEquity, equitySeriesRef])
 
   useEffect(() => {
     if (benchLineData.length > 0) {
-      setBenchmark(benchLineData)
+      const prevLen = prevBenchmarkLenRef.current
+      if (prevLen === 0 || benchLineData.length < prevLen) {
+        setBenchmark(benchLineData)
+      } else {
+        for (let i = prevLen; i < benchLineData.length; i++) {
+          updateBenchmark(benchLineData[i])
+        }
+      }
+      prevBenchmarkLenRef.current = benchLineData.length
     }
-  }, [benchLineData, setBenchmark])
+  }, [benchLineData, setBenchmark, updateBenchmark])
 
   useEffect(() => {
     if (drawdownData.length > 0) {
-      setDrawdown(drawdownData)
+      const prevLen = prevDrawdownLenRef.current
+      if (prevLen === 0 || drawdownData.length < prevLen) {
+        setDrawdown(drawdownData)
+      } else {
+        for (let i = prevLen; i < drawdownData.length; i++) {
+          updateDrawdown(drawdownData[i])
+        }
+      }
+      prevDrawdownLenRef.current = drawdownData.length
     }
-  }, [drawdownData, setDrawdown])
-
-  useEffect(() => {
-    chartRef.current?.timeScale().fitContent()
-  }, [lineData, drawdownData, chartRef])
+  }, [drawdownData, setDrawdown, updateDrawdown])
 
   useChartKeyboard(chartRef)
 
   return (
-    <div className="card" style={{ position: 'relative' }}>
-      {title && <div className="card-header"><h3>{title}</h3></div>}
+    <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ position: 'relative' }}>
+      {title && <div className="flex items-center justify-between border-b border-border pb-2 mb-3"><h3>{title}</h3></div>}
       <div ref={containerRef} role="img" aria-label="Equity curve chart" />
       <CrosshairTooltip data={crosshairData && {
         timeStr: crosshairData.time,
         rows: [
           { label: 'Equity', value: crosshairData.equity.toFixed(2) },
-          { label: 'Drawdown', value: `${crosshairData.drawdown.toFixed(2)}%`, color: 'var(--danger)' },
+          { label: 'Drawdown', value: `${crosshairData.drawdown.toFixed(2)}%`, color: 'var(--trading-danger)' },
           ...(crosshairData.overlays?.map((o, _i) => ({ label: o.label, value: o.value.toFixed(2) })) ?? []),
         ],
-      }} />
+      }} position={crosshairPoint ?? undefined} />
       {hasOverlays && (
-        <div className="flex gap-3 mt-2" style={{ fontSize: 10, color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+        <div className="flex gap-3 mt-2" style={{ fontSize: 10, color: 'var(--muted-foreground)', flexWrap: 'wrap' }}>
           {overlays!.map((o, i) => (
             <span key={i}>
               <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: OVERLAY_PALETTE[i % OVERLAY_PALETTE.length], marginRight: 3, verticalAlign: 'middle' }} />

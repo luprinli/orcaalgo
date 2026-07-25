@@ -54,5 +54,9 @@ export function getChartDefaults(height: number, colors?: Partial<ChartColors>):
     rightPriceScale: {
       borderColor: c.grid,
     },
+    localization: {
+      locale: 'en-US',
+      dateFormat: 'yyyy-MM-dd',
+    },
   }
 }

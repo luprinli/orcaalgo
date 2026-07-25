@@ -3,34 +3,55 @@
 Verifies that matrix backtests with optimize=true produce optimization
 metadata (best_params, total_trials, oos_sharpe) in each ComboResult.
 
-This test requires the Go server to be running on localhost:8081 with
-the matrix endpoints available. If the server is not running, the test
-skips with a clear message.
+This test requires the Go server to be running.  Set ORCA_API_URL to
+override the default base URL and ORCA_ADMIN_PASSWORD if the dev password
+has been changed.  The matrix endpoint is JWT-protected so a valid token
+is obtained automatically via the /auth/login endpoint.
 """
 
+import os
 import time
 
 import pytest
 import requests
 
-BASE = "http://localhost:8081/api/v1"
+API_BASE = f"{os.environ.get('ORCA_API_URL', 'http://localhost:8081')}/api/v1"
+ADMIN_PASSWORD = os.environ.get("ORCA_ADMIN_PASSWORD", "dev-admin-password-do-not-use-in-production")
+AUTH = {"username": "admin", "password": ADMIN_PASSWORD}
 
 
-def _server_ready():
+def _server_healthy():
     try:
-        r = requests.get(f"{BASE}/backtests/health", timeout=3)
-        return r.status_code < 500
+        r = requests.get(f"{API_BASE}/backtests/health", timeout=3)
+        return r.status_code == 200
     except Exception:
         return False
 
 
+def _get_token():
+    """Obtain a JWT for the test admin user.  Skips the calling test if
+    the auth endpoint is unreachable or returns an error."""
+    try:
+        r = requests.post(f"{API_BASE}/auth/login", json=AUTH, timeout=10)
+    except Exception:
+        pytest.skip(f"Auth endpoint at {API_BASE}/auth/login unreachable — start the Go server")
+    if r.status_code != 200:
+        pytest.skip(
+            f"Auth failed ({r.status_code}) on {API_BASE}/auth/login — "
+            "check ORCA_ADMIN_PASSWORD or server configuration"
+        )
+    return r.json()["access_token"]
+
+
 @pytest.mark.skipif(
-    not _server_ready(),
-    reason="Go server not running on :8081 — start server before running",
+    not _server_healthy(),
+    reason=f"Go server not running on {API_BASE} — start server before running",
 )
 class TestOptimizePath:
     def test_optimized_matrix_populates_best_params(self):
         """Submit 2×2×1 matrix with optimize=true, verify best_params populated."""
+        token = _get_token()
+        headers = {"Authorization": f"Bearer {token}"}
         payload = {
             "strategy_ids": ["ma_crossover", "rsi2_reversion"],
             "symbols": ["EURUSD"],
@@ -41,18 +62,23 @@ class TestOptimizePath:
             "optimize": True,
             "max_trials": 10,
         }
-        r = requests.post(f"{BASE}/backtests/matrix", json=payload, timeout=10)
+        r = requests.post(
+            f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10
+        )
         assert r.status_code == 202, f"Expected 202, got {r.status_code}: {r.text}"
         data = r.json()
         batch_id = data["batch_id"]
         assert data["total_combos"] == 2, f"Expected 2 combos, got {data['total_combos']}"
 
-        # Poll until complete
         timeout_sec = 120
         start = time.time()
         complete = False
         while time.time() - start < timeout_sec:
-            r = requests.get(f"{BASE}/backtests/matrix/{batch_id}/results?since=0", timeout=5)
+            r = requests.get(
+                f"{API_BASE}/backtests/matrix/{batch_id}/results?since=0",
+                headers=headers,
+                timeout=5,
+            )
             if r.status_code == 200:
                 d = r.json()
                 if d.get("complete"):
@@ -71,6 +97,8 @@ class TestOptimizePath:
 
     def test_non_optimized_matrix_has_no_optimization_fields(self):
         """Submit matrix with optimize=false (default), verify no opt fields."""
+        token = _get_token()
+        headers = {"Authorization": f"Bearer {token}"}
         payload = {
             "strategy_ids": ["ma_crossover"],
             "symbols": ["EURUSD"],
@@ -79,7 +107,9 @@ class TestOptimizePath:
             "end_date": "2024-03-31",
             "initial_capital": 100000,
         }
-        r = requests.post(f"{BASE}/backtests/matrix", json=payload, timeout=10)
+        r = requests.post(
+            f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10
+        )
         if r.status_code != 202:
             pytest.skip(f"Matrix endpoint not available: {r.status_code}")
         data = r.json()
@@ -89,7 +119,11 @@ class TestOptimizePath:
         start = time.time()
         complete = False
         while time.time() - start < timeout_sec:
-            r = requests.get(f"{BASE}/backtests/matrix/{batch_id}/results?since=0", timeout=5)
+            r = requests.get(
+                f"{API_BASE}/backtests/matrix/{batch_id}/results?since=0",
+                headers=headers,
+                timeout=5,
+            )
             if r.status_code == 200:
                 d = r.json()
                 if d.get("complete"):
@@ -103,8 +137,8 @@ class TestOptimizePath:
             assert "best_params" not in combo, "best_params should be absent for non-optimized"
 
 
-@pytest.mark.skipif(_server_ready(), reason="Server IS running — skip offline test")
+@pytest.mark.skipif(_server_healthy(), reason="Server IS running — skip offline test")
 def test_offline_matrix_endpoint_not_available():
     """When server is not running, the endpoint should be unreachable."""
     with pytest.raises(Exception):
-        requests.get(f"{BASE}/backtests/health", timeout=2)
+        requests.get(f"{API_BASE}/backtests/health", timeout=2)

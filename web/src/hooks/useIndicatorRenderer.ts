@@ -17,7 +17,7 @@ export function useIndicatorRenderer(chartRef: React.MutableRefObject<IChartApi 
       const paneIndex = indicator.paneIndex
 
       for (const output of spec.outputs) {
-        const seriesKey = `${indicator._id}_${output.name}`
+        const seriesKey = `${indicator._id}:${output.name}`
         if (indicatorSeriesRef.current.has(seriesKey)) continue
 
         const plotOpts = output.plotOptions ?? { color: '#ffffff', lineWidth: 2 }
@@ -56,8 +56,8 @@ export function useIndicatorRenderer(chartRef: React.MutableRefObject<IChartApi 
 
     const currentIds = new Set(useIndicatorStore.getState().all().map(i => i._id))
     for (const [key, series] of indicatorSeriesRef.current) {
-      const indId = key.split('_').slice(0, 2).join('_')
-      if (!currentIds.has(indId) && !currentIds.has(key.split('_')[0])) {
+      const indId = key.split(':')[0]
+      if (!currentIds.has(indId)) {
         chartRef.current?.removeSeries(series)
         indicatorSeriesRef.current.delete(key)
       }

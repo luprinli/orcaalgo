@@ -25,9 +25,15 @@ These are **NEVER** permitted. Violations block PR merge.
 | 5 | **Do not skip calibration audits.** Quarterly `orca calibrate` runs are mandatory for all probability-emitting models. | §9.2 |
 | 6 | **Do not use full Kelly in production.** Fractional Kelly (k=0.25) with all three attenuators (edge discount, fractional multiplier, hard caps) is mandatory. | §3.1.3 |
 | 7 | **Do not mutate domain models.** All Pydantic models use `ConfigDict(frozen=True, extra="forbid")`. All Go structs use unexported fields with constructor-only initialization. | §2.1.2 |
-| 8 | **Do not bypass the kill-switch re-entrancy guard.** `_isLocked` + `_killSwitchInFlight` must both be checked before any kill-switch execution. | §4.2.2 |
+| 8 | **Do not bypass the kill-switch re-entrancy guard.** `isLocked` + `killSwitchReady` must both be checked before any kill-switch execution. | §4.2.2 |
 | 9 | **Do not assume perfect fills at mid-price.** Backtests must model maker fill prices, fill probability, spread crossing, fees, and adverse selection. | §9.1.3 |
 | 10 | **Do not panic/throw for recoverable errors.** Return errors. Only unrecoverable startup failures may terminate. | Antipattern #10 |
+| 11 | **Do not use `setData()` for incremental chart updates.** Use `ISeriesApi.update()` for real-time / polling updates. `setData()` is for initial load or full data replacement only. | §D audit, lightweight-charts docs |
+| 12 | **Do not call `fitContent()` on every data update.** `fitContent()` resets the user's scroll/zoom position. Call it only on initial load, timeframe change, or explicit user action (e.g., "Reset view" button). | §D audit, lightweight-charts docs |
+| 13 | **Do not use `applyOptions({ width })` for chart resize.** Use `chart.resize(width, height)`. `applyOptions` re-applies all chart options on every dimension change — `resize()` is the correct zero-overhead API. | §D audit, lightweight-charts docs |
+| 14 | **Do not use `barSpacing` mutation for keyboard zoom.** Use `getVisibleLogicalRange()` + `setVisibleLogicalRange()` on the time scale. Mutating `barSpacing` conflicts with the chart's internal range calculation. | §D audit |
+| 15 | **Do not leave `requestAnimationFrame` un-cancelled.** All `requestAnimationFrame` calls in chart hooks (`useChartUpdate`, drawing tools) must be cancelled in the `useEffect` cleanup via `cancelAnimationFrame`. | React best practice |
+| 16 | **Do not use `Array.find()` in crosshair handlers.** Crosshair `subscribeCrosshairMove` fires at 60fps. Build `Map<time, value>` lookups in a `useEffect` and use O(1) `.get()` in the handler. | Performance |
 
 ## Language Boundary Rules
 
@@ -111,7 +117,8 @@ Before committing any change, verify:
 2. **Go:** `go build ./... && go test ./internal/... -v -count=1 && golangci-lint run ./...`
 3. **GKR validation:** `orca validate configs/strategies/*.gkr.yaml`
 4. **Anti-pattern scan:** `python scripts/anti_pattern_scan.py` — zero violations
-5. **Guardian tests:** `pytest tests/guardian/ -v` — all critical paths pass
+5. **LWC chart scan:** `node scripts/scan-chart-patterns.mjs` — zero errors (warnings allowed)
+6. **Guardian tests:** `pytest tests/guardian/ -v` — all critical paths pass
 
 ## CI/CD Pipeline
 

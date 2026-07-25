@@ -36,29 +36,35 @@ def _server_reachable(host: str = "localhost", port: int = 8080) -> bool:
         return False
 
 
-# All frontend routes from App.tsx — updated for July 2026 UI state
+# All frontend routes — consolidated post-remediation (17 core routes)
 ALL_PAGES: list[dict[str, Any]] = [
-    {"path": "/", "name": "Dashboard", "key_elements": ["Dashboard", "Equity", "Live"]},
-    {"path": "/live", "name": "LiveTrading", "key_elements": ["Live", "Symbol", "Timeframe", "Indicators"]},
-    {"path": "/execution", "name": "ExecutionPage", "key_elements": ["Execution", "Orders", "Position"]},
-    {"path": "/risk", "name": "RiskPage", "key_elements": ["Risk", "Status", "Kill"]},
-    {"path": "/market-data", "name": "MarketDataPage", "key_elements": ["Market", "Candles", "OHLC"]},
-    {"path": "/calibrate", "name": "CalibratePage", "key_elements": ["Calibrat"]},
-    {"path": "/attribute", "name": "AttributionPage", "key_elements": ["Attribut", "PnL"]},
-    {"path": "/backtest", "name": "BacktestPage", "key_elements": ["Backtest", "Runner", "Strategy"]},
+    {"path": "/", "name": "CommandCenter", "key_elements": ["Command", "Overview", "Equity"]},
+    {"path": "/execution", "name": "ExecutionPage", "key_elements": ["Execution", "Order"]},
+    {"path": "/backtest", "name": "BacktestPage", "key_elements": ["Backtest", "Strategy", "Run"]},
     {"path": "/backtest/history", "name": "BacktestHistory", "key_elements": ["Backtest History", "Compare"]},
     {"path": "/strategies", "name": "StrategiesPage", "key_elements": ["Strateg"]},
-    {"path": "/indicators", "name": "IndicatorsPage", "key_elements": ["Indicator", "SMA", "RSI"]},
-    {"path": "/simulate", "name": "SimulatePage", "key_elements": ["Simulat", "Generate"]},
-    {"path": "/optimization", "name": "OptimizationPage", "key_elements": ["Optimiz", "Walk-Forward"]},
+    {"path": "/strategies/:id/edit", "name": "StrategyEditor", "key_elements": ["Edit", "Valid"]},
+    {"path": "/optimize", "name": "OptimizationPanel", "key_elements": ["Optimiz", "Walk-Forward"]},
     {"path": "/accounts", "name": "AccountsPage", "key_elements": ["Account"]},
     {"path": "/propfirm", "name": "PropFirmPage", "key_elements": ["Prop", "FTMO"]},
-    {"path": "/settings", "name": "SettingsPage", "key_elements": ["Setting"]},
-    {"path": "/settings/2fa", "name": "TwoFAPage", "key_elements": ["2FA", "Two-Factor"]},
+    {"path": "/market-data", "name": "MarketDataPage", "key_elements": ["Market", "Candles"]},
+    {"path": "/indicators", "name": "IndicatorsPage", "key_elements": ["Indicator", "SMA", "RSI"]},
+    {"path": "/calibrate", "name": "CalibratePage", "key_elements": ["Calibrat"]},
+    {"path": "/attribution", "name": "AttributionPage", "key_elements": ["Attribut", "PnL"]},
+    {"path": "/simulate", "name": "SimulatePage", "key_elements": ["Simulat", "Generate"]},
     {"path": "/admin", "name": "AdminPage", "key_elements": ["Admin", "System"]},
-    {"path": "/admin/symbols", "name": "SymbolAdminPage", "key_elements": ["Symbol", "Provider"]},
     {"path": "/admin/universe", "name": "UniversePage", "key_elements": ["Universe"]},
-    {"path": "/nonexistent", "name": "NotFoundPage", "key_elements": ["404", "not found", "Page not found"]},
+    {"path": "/symbols", "name": "SymbolAdminPage", "key_elements": ["Symbol", "Provider"]},
+    {"path": "/settings", "name": "SettingsPage", "key_elements": ["Setting"]},
+    {"path": "/2fa", "name": "TwoFAPage", "key_elements": ["2FA", "Two-Factor"]},
+    {"path": "/credentials", "name": "CredentialManagement", "key_elements": ["Credential", "API"]},
+    {"path": "/webhooks", "name": "WebhookConfig", "key_elements": ["Webhook", "URL"]},
+    {"path": "/llm", "name": "LLMSettings", "key_elements": ["LLM", "Provider"]},
+    {"path": "/brokers", "name": "BrokerManagement", "key_elements": ["Broker", "Adapter"]},
+    {"path": "/data-sources", "name": "DataSources", "key_elements": ["Data", "Source"]},
+    {"path": "/notifications", "name": "NotificationSettings", "key_elements": ["Notification", "Alert"]},
+    {"path": "/emergency", "name": "EmergencyPage", "key_elements": ["Emergency", "Stop"]},
+    {"path": "/nonexistent", "name": "NotFoundPage", "key_elements": ["404", "not found"]},
 ]
 
 REPORT: dict[str, Any] = {
