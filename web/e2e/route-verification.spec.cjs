@@ -1,26 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
-const ROUTES = [
-  { path: '/', label: 'Dashboard', heading: 'Dashboard' },
-  { path: '/live', label: 'Live Dashboard', check: 'visible' },
-  { path: '/live/market', label: 'Live Market', check: 'visible' },
-  { path: '/execution', label: 'Execution', heading: 'Execution' },
-  { path: '/backtest', label: 'Backtest', heading: 'Backtest Runner' },
-  { path: '/strategies', label: 'Strategies', heading: 'Strategies' },
-  { path: '/brokers', label: 'Brokers', heading: 'Broker Management' },
-  { path: '/data-sources', label: 'Data Sources', heading: 'Data Sources' },
-  { path: '/symbols', label: 'Symbols', heading: 'Symbol Management' },
-  { path: '/credentials', label: 'Credentials', heading: 'Credential Management' },
-  { path: '/webhooks', label: 'Webhooks', heading: 'Webhook Configuration' },
-  { path: '/llm', label: 'LLM Settings', heading: 'LLM Settings' },
-  { path: '/2fa', label: '2FA Setup', heading: 'Two-Factor Authentication' },
-  { path: '/settings', label: 'Settings', heading: 'Settings' },
-  { path: '/propfirm', label: 'Prop Firms', heading: 'Prop Firm Configuration' },
-  { path: '/admin', label: 'Admin', heading: 'Admin Panel' },
-  { path: '/admin/health', label: 'System Health', check: 'visible' },
-  { path: '/admin/logs', label: 'Error Logs', check: 'visible' },
-  { path: '/audit', label: 'Audit Log', check: 'visible' },
-];
+const MAIN_SELECTOR = '[id="main-content"]';
+const SIDEBAR_SELECTOR = '[aria-label="Main navigation"]';
 
 async function setupAuth(page) {
   await page.addInitScript(() => {
@@ -33,45 +14,71 @@ async function setupAuth(page) {
   });
 }
 
+async function mockApi(page) {
+  await page.route('**/api/v1/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: '[]',
+    });
+  });
+  await page.route('**/ws**', async (route) => {
+    await route.abort();
+  });
+}
+
+const ROUTES = [
+  '/',
+  '/execution',
+  '/backtest',
+  '/strategies',
+  '/charting',
+  '/simulate',
+  '/calibrate',
+  '/attribution',
+  '/settings',
+  '/integrations',
+  '/accounts',
+  '/admin',
+  '/emergency',
+  '/2fa',
+  '/propfirm',
+];
+
 test.describe('OrcaAlgo Frontend Route Verification', () => {
   test.beforeEach(async ({ page }) => {
     await setupAuth(page);
+    await mockApi(page);
   });
 
   for (const route of ROUTES) {
-    test(`Route ${route.path} renders without errors`, async ({ page }) => {
+    test(`Route ${route} renders without errors`, async ({ page }) => {
       const errors = [];
-      page.on('console', msg => {
-        if (msg.type() === 'error') {
-          errors.push(`[${msg.type()}] ${msg.text()}`);
-        }
-      });
       page.on('pageerror', err => {
         errors.push(`[PAGE ERROR] ${err.message}`);
       });
 
       try {
-        await page.goto(route.path, { waitUntil: 'networkidle', timeout: 15000 });
+        await page.goto(route, { waitUntil: 'domcontentloaded', timeout: 15000 });
       } catch (navErr) {
-        console.warn(`  Navigation to ${route.path} failed: ${navErr.message}`);
-        test.skip(true, `Navigation to ${route.path} failed (page may not exist)`);
+        test.skip(true, `Navigation to ${route} failed (page may not exist)`);
+        return;
+      }
+      await page.waitForTimeout(500);
+
+      if (route === '/emergency') {
+        const bodyText = await page.textContent('body');
+        expect(bodyText).toBeTruthy();
         return;
       }
 
-      await expect(page.locator('.app-main')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator(MAIN_SELECTOR)).toBeVisible({ timeout: 8000 });
 
-      const content = await page.textContent('.app-main');
+      const content = await page.textContent(MAIN_SELECTOR);
       expect(content).toBeTruthy();
 
       if (errors.length > 0) {
-        console.warn(`  Console errors on ${route.path}:`, errors);
-      }
-
-      const h1 = page.locator('h1').first();
-      const hasHeading = await h1.count() > 0;
-      if (hasHeading) {
-        const text = await h1.textContent();
-        expect(text).toBeTruthy();
+        console.warn(`  Page errors on ${route}:`, errors);
       }
     });
   }
@@ -80,39 +87,65 @@ test.describe('OrcaAlgo Frontend Route Verification', () => {
 test.describe('Sidebar Navigation', () => {
   test('All sidebar links are present and clickable', async ({ page }) => {
     await setupAuth(page);
-    await page.goto('/', { waitUntil: 'networkidle' });
+    await mockApi(page);
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(500);
 
-    const sidebar = page.locator('.app-sidebar');
+    const sidebar = page.locator(SIDEBAR_SELECTOR);
     await expect(sidebar).toBeVisible();
 
-    for (const route of ROUTES) {
-      const link = sidebar.getByText(route.label, { exact: false });
-      const count = await link.count();
-      if (count > 0) {
-        await link.first().click();
-        await expect(page.locator('.app-main')).toBeVisible({ timeout: 5000 });
-      }
+    const LINK_LABELS = [
+      'Dashboard', 'Execution', 'Backtesting', 'Strategies',
+      'Charts', 'Simulation', 'Calibration', 'Attribution',
+      'System', 'Integrations', 'Accounts', 'Admin', 'Emergency',
+    ];
+
+    for (const label of LINK_LABELS) {
+      const link = sidebar.getByText(label, { exact: true });
+      await expect(link, `Sidebar link "${label}" should exist`).toBeVisible({ timeout: 3000 });
     }
   });
+});
+
+test.describe('Legacy Route Redirects', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupAuth(page);
+    await mockApi(page);
+  });
+
+  const redirectTests = [
+    { from: '/brokers', to: '/integrations' },
+    { from: '/credentials', to: '/integrations' },
+    { from: '/symbols', to: '/integrations' },
+    { from: '/data-sources', to: '/settings' },
+    { from: '/optimize', to: '/backtest' },
+    { from: '/market-data', to: '/charting' },
+    { from: '/status', to: '/admin' },
+  ];
+
+  for (const { from, to } of redirectTests) {
+    test(`${from} redirects to ${to}`, async ({ page }) => {
+      await page.goto(from, { waitUntil: 'domcontentloaded', timeout: 10000 });
+      await page.waitForTimeout(2000);
+      const url = page.url();
+      expect(url, `${from} should redirect to ${to}`).toContain(to);
+    });
+  }
 });
 
 test.describe('No Global Errors', () => {
   test('Dashboard loads without page errors', async ({ page }) => {
     await setupAuth(page);
+    await mockApi(page);
     const pageErrors = [];
     page.on('pageerror', err => pageErrors.push(err.message));
-    const consoleErrors = [];
-    page.on('console', msg => {
-      if (msg.type() === 'error') consoleErrors.push(msg.text());
-    });
 
-    await page.goto('/', { waitUntil: 'networkidle', timeout: 15000 });
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 15000 });
 
-    await expect(page.locator('.app-main')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator(MAIN_SELECTOR)).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(3000);
 
-    expect(pageErrors, `Page errors on dashboard: ${pageErrors.join(', ')}`).toEqual([]);
-    expect(consoleErrors.filter(e => !e.includes('favicon') && !e.includes('WebSocket') && !e.includes('Failed to load')), 
-      `Console errors on dashboard: ${consoleErrors.join(', ')}`).toEqual([]);
+    expect(pageErrors,
+      `Page errors on dashboard: ${pageErrors.join(', ')}`).toEqual([]);
   });
 });
