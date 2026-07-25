@@ -8,13 +8,23 @@ Architecture specifications, technical references, and operations guides.
 
 | File | Content |
 |------|---------|
-| `executive_summary_2026-07-16.md` | System architecture, trade-off analysis, workflows, test coverage, component readiness |
-| `PLATFORM_GUARDRAILS.md` | Operations runbook: change audit, environment guard, anti-pattern scanner, pre-commit hook |
-| `database_topology.md` | TimescaleDB single-source-of-truth, port configuration, migration guide |
-| `openapi.yaml` | REST API OpenAPI 3.0 specification — all endpoints |
-| `frontend_audit_report.md` | Full frontend architecture audit: 35 pages, API frequency map, UX assessment, framework evaluation, charting audit |
-| `frontend_remediation_plan.md` | 5-phase implementation plan v2.0.0 (37/39 tasks, 95% complete) with completion logs |
-| `test_suite_audit_report.md` | 1,194 tests cataloged across Go (527), Python (466), Frontend (201) with gap analysis |
-| `test_suite_remediation_plan.md` | Test gap coverage plan with priority matrix (5 phases) |
-| `full_system_audit.md` | v3.0.0 post-remediation full system audit (mathematical foundations, data pipeline, backtest engine) |
-| `backtest_live_parity_audit.md` | Backtest-live parity enforcement audit (14 tasks, score 9.5/10) |
+| `frontend-backtest-audit-2026-07-24.md` | Full frontend architecture audit: 23 routes, 4-group/20-item navigation, component catalog, backend capability mapping, duplication analysis, skeleton pages, navigation restructuring plan (3 groups/13 items) |
+| `backtest-hub-ui-audit-2026-07-25.md` | BacktestHub component-by-component audit: Runner/History/Detail views, Promote-to-Live wizard, UX workflow analysis, P0–P3 prioritized remediation plan (22 items, 22h total) |
+| `capital-pool-live-wiring-plan-2026-07-25.md` | 6-wave implementation plan: RiskPipeline interfaces, CapitalGate/PropFirmGate/SignalGate abstractions, BaseCapitalPool extraction, Engine/LiveEngine/API server wiring, per-account strategy isolation, KillSwitch integration (18h total) |
+| `per-strategy-optimization-implementation-2026-07-25.md` | Light optimizer remediation: wiring RunLightOptimize into RunMatrixConcurrent, fixing optimize API handler stub, fixing IVS default-value bug, deterministic symbol selection, scoring metric unification, regression protection |
+| `README.md` | This file — documentation index |
+
+## Archived Documents
+
+The following documents from previous audit cycles have been archived (removed from the active tree). Their findings were addressed and superseded by the current documentation set above:
+
+- `executive_summary_2026-07-16.md`
+- `PLATFORM_GUARDRAILS.md`
+- `database_topology.md`
+- `openapi.yaml`
+- `frontend_audit_report.md`
+- `frontend_remediation_plan.md`
+- `test_suite_audit_report.md`
+- `test_suite_remediation_plan.md`
+- `full_system_audit.md`
+- `backtest_live_parity_audit.md`
