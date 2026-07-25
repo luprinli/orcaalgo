@@ -18,6 +18,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/email"
+	"github.com/lee-econ/orca-core/internal/engine"
 	"github.com/lee-econ/orca-core/internal/llm"
 	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/notify"
@@ -41,6 +42,7 @@ type Server struct {
 	multiCapitalPool *risk.MultiAccountCapitalPool
 	repo           *db.Repository
 	backtestEngine *backtest.Engine
+	liveEngine     *engine.LiveEngine
 	eventBus       *reactive.EventBus
 	emailService   email.EmailService
 	notifyManager  *notify.Manager
@@ -290,6 +292,28 @@ func (s *Server) SetAccountManager(am *broker.AccountManager) {
 
 func (s *Server) SetMultiCapitalPool(mcp *risk.MultiAccountCapitalPool) {
 	s.multiCapitalPool = mcp
+}
+
+// SetLiveEngine wires the live trading engine into the risk pipeline and
+// KillSwitch infrastructure. When set, every ProcessTick runs through the
+// shared pipeline, and KillSwitch triggers propagate to the capital pool.
+func (s *Server) SetLiveEngine(le *engine.LiveEngine) {
+	s.liveEngine = le
+
+	if s.multiCapitalPool != nil {
+		le.SetMultiAccountPool(s.multiCapitalPool)
+
+		pipeline := &risk.RiskPipeline{
+			KellyMult: 0.25,
+		}
+		le.SetRiskPipeline(pipeline)
+	}
+
+	if s.killSwitch != nil && s.multiCapitalPool != nil {
+		s.killSwitch.OnTrigger(func(reason string, _ time.Time) {
+			s.multiCapitalPool.MarkAllViolated(reason)
+		})
+	}
 }
 
 func (s *Server) SetEmailService(svc email.EmailService) {
@@ -731,6 +755,12 @@ func (s *Server) createAccount(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Register per-account isolated strategy instances with the live engine.
+	if s.liveEngine != nil {
+		s.liveEngine.RegisterAccountStrategies(req.ID, nil)
+	}
+
 	if s.repo != nil {
 		if err := s.repo.InsertAccount(c.Request.Context(), acct.ToDBAccount()); err != nil {
 			log.Printf("router: failed to persist account %s: %v", req.ID, err)

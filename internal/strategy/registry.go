@@ -107,6 +107,12 @@ func (r *Registry) SetAllStrategyParams(params map[string]float64) {
 	}
 }
 
+// Factories returns all registered factory constructors. Used by LiveEngine to
+// create per-account isolated strategy instances.
+func (r *Registry) Factories() map[string]func() Strategy {
+	return r.factories
+}
+
 func GlobalRegistry() *Registry {
 	globalRegOnce.Do(func() {
 		globalReg = NewRegistry()
