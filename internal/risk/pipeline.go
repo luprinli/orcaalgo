@@ -3,6 +3,8 @@ package risk
 import (
 	"context"
 	"math"
+
+	"github.com/lee-econ/orca-core/internal/monitor"
 )
 
 // ProcessSignalRequest is the input to RiskPipeline.ProcessSignal.
@@ -44,23 +46,31 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	// 1. Signal gate: volatility halt, running-capital positivity, rate limit.
 	if p.SignalGate != nil {
 		if ok, reason := p.SignalGate.ValidateSignal(req.RunningCapital); !ok {
+			monitor.RecordReject()
+			monitor.RecordSignalReject("signal", req.StrategyID)
 			return ProcessSignalResult{Approved: false, Reason: "signal:" + reason}
 		}
 	}
 
 	// 2. Capital gate halt — don't waste time sizing if the pool is already dead.
 	if p.Capital != nil && p.Capital.Halted() {
+		monitor.RecordReject()
+		monitor.RecordSignalReject("capital_halt", req.StrategyID)
 		return ProcessSignalResult{Approved: false, Reason: "pool_halted:" + p.Capital.HaltReason()}
 	}
 
 	// 3. Prop-firm halt — separate from capital-gate halt (enforcer vs pool).
 	if p.PropFirm != nil && p.PropFirm.IsHalted() {
+		monitor.RecordReject()
+		monitor.RecordSignalReject("propfirm_halt", req.StrategyID)
 		return ProcessSignalResult{Approved: false, Reason: "propfirm_halted:" + p.PropFirm.HaltReason()}
 	}
 
 	// 4. Apply sizing: Kelly, regime, seasonal, confidence.
 	size := req.BaseSize
 	if size <= 0 {
+		monitor.RecordReject()
+		monitor.RecordSignalReject("size_zero", req.StrategyID)
 		return ProcessSignalResult{Approved: false, Reason: "size_zero"}
 	}
 	if p.SignalGate != nil {
@@ -68,6 +78,8 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	}
 	size *= p.KellyMult
 	if size <= 0 {
+		monitor.RecordReject()
+		monitor.RecordSignalReject("size_zero_after_sizing", req.StrategyID)
 		return ProcessSignalResult{Approved: false, Reason: "size_zero_after_sizing"}
 	}
 
@@ -75,6 +87,8 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	if p.SignalGate != nil {
 		notional := math.Abs(size * req.Price)
 		if ok, reason := p.SignalGate.CheckExposure(req.Symbol, req.Side, notional); !ok {
+			monitor.RecordReject()
+			monitor.RecordSignalReject("exposure", req.StrategyID)
 			return ProcessSignalResult{Approved: false, Reason: "exposure:" + reason}
 		}
 	}
@@ -90,6 +104,8 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 		}
 		result := p.Capital.RequestCapital(ctx, capitalReq)
 		if result.ApprovedSize <= 0 {
+			monitor.RecordReject()
+			monitor.RecordSignalReject("capital", req.StrategyID)
 			return ProcessSignalResult{Approved: false, Reason: "capital:" + result.Reason}
 		}
 		size = result.ApprovedSize

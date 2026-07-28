@@ -9,6 +9,7 @@ import { TooltipProvider } from './components/ui/tooltip'
 import { PageSkeleton } from './components/layout/PageSkeleton'
 import ErrorBoundary from './components/ErrorBoundary'
 import { Sidebar } from './components/layout/Sidebar'
+import { useAlertToast } from './hooks/useAlertToast'
 import MonitorPage from './pages/MonitorPage'
 import ExecutionPage from './pages/ExecutionPage'
 import BacktestHub from './pages/BacktestHub'
@@ -41,6 +42,7 @@ const Lazy = ({ Comp, skeleton }: { Comp: React.ComponentType<any>, skeleton?: b
 )
 
 function AuthenticatedApp() {
+  useAlertToast()
   return (
     <div className="flex min-h-screen">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground">
@@ -109,13 +111,11 @@ function AuthenticatedApp() {
             <Route path="/2fa" element={<TwoFAPage />} />
             <Route path="/emergency" element={<EmergencyPage />} />
 
-            {/* Legacy redirects */}
+            {/* Legacy redirects — preserved for bookmarked URLs */}
             <Route path="/admin/health" element={<Navigate to="/admin?tab=health" replace />} />
             <Route path="/admin/logs" element={<Navigate to="/admin?tab=errors" replace />} />
             <Route path="/admin/propfirm" element={<PropFirmPage />} />
             <Route path="/admin/symbols" element={<IntegrationsPage />} />
-            <Route path="/audit" element={<Navigate to="/admin?tab=audit" replace />} />
-            <Route path="/users" element={<Navigate to="/admin?tab=users" replace />} />
           </Routes>
         </ErrorBoundary>
         </main>

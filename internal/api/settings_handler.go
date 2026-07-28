@@ -23,6 +23,7 @@ func (h *SettingsHandler) GetSettings(c *gin.Context) {
 			"notifications": []gin.H{},
 			"trading_hours": gin.H{"start": "09:30", "end": "16:00"},
 			"llm":          gin.H{"active_provider": "openai", "configs": gin.H{}},
+			"grafana_url":  "http://localhost:3000",
 		}})
 		return
 	}
@@ -72,5 +73,6 @@ func defaultSettings() gin.H {
 		"notifications": gin.H{"channels": []gin.H{}},
 		"trading_hours": gin.H{"start": "09:30", "end": "16:00"},
 		"llm":           gin.H{"active_provider": "", "configs": gin.H{}},
+		"grafana_url":   "http://localhost:3000",
 	}
 }

@@ -9,12 +9,13 @@ import OverviewTab from './monitor/OverviewTab'
 import PositionsTab from './monitor/PositionsTab'
 import RiskTab from './monitor/RiskTab'
 import SignalsTab from './monitor/SignalsTab'
+import SystemHealthTab from './monitor/SystemHealthTab'
 import type { LiveMetrics, EquityPoint, Position, Order, TradeSummary, RiskStatus, SystemHealth } from '../types/api'
 import type { WSRiskData } from '../types/ws'
 import type { OverviewComputed } from './monitor/OverviewTab'
 import type { SignalEntry } from './monitor/SignalsTab'
 
-type MonitorTab = 'overview' | 'positions' | 'risk' | 'signals'
+type MonitorTab = 'overview' | 'positions' | 'risk' | 'signals' | 'systemHealth'
 
 export default function MonitorPage() {
   const { t } = useTranslation()
@@ -141,10 +142,11 @@ export default function MonitorPage() {
           <TabsTrigger value="positions">{t('monitor:tab.positions', 'Positions & Orders')}</TabsTrigger>
           <TabsTrigger value="risk">{t('monitor:tab.risk', 'Risk')}</TabsTrigger>
           <TabsTrigger value="signals">{t('monitor:tab.signals', 'Signals')}</TabsTrigger>
+          <TabsTrigger value="systemHealth">Health</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <OverviewTab computed={computed} equity={equity} metrics={metrics} systemHealth={systemHealth} wsConnected={wsConnected} />
+          <OverviewTab computed={computed} equity={equity} metrics={metrics} systemHealth={systemHealth} wsConnected={wsConnected} riskStatus={riskStatus} />
         </TabsContent>
 
         <TabsContent value="positions">
@@ -163,6 +165,10 @@ export default function MonitorPage() {
 
         <TabsContent value="signals">
           <SignalsTab signals={signalEntries} />
+        </TabsContent>
+
+        <TabsContent value="systemHealth">
+          <SystemHealthTab />
         </TabsContent>
       </Tabs>
     </div>

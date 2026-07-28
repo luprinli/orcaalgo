@@ -120,3 +120,13 @@ export interface WSIndicatorUpdateData {
   timestamp_ms: number
   values: Record<string, number>
 }
+
+export interface WSAlertData {
+  name: string
+  severity: 'critical' | 'warning' | 'info'
+  summary: string
+  description: string
+  active: boolean
+  fired_at: string
+  resolved_at?: string
+}

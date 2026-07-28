@@ -1,8 +1,10 @@
 package backtest
 
 import (
-	"github.com/lee-econ/orca-core/internal/propfirm"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/propfirm"
+	"github.com/lee-econ/orca-core/internal/risk"
 )
 
 type PropFirmEnforcer struct {
@@ -17,8 +19,8 @@ type PropFirmEnforcer struct {
 	DailyPnL              float64
 	DailyPnLPct           float64
 	CumulativePnL         float64
-	IsHalted              bool
-	HaltReason            string
+	halted                bool
+	haltReason            string
 	ConsistencyMultiplier float64
 	CurrentRegime         int8
 	RegimeSizeMultipliers [4]float64
@@ -26,9 +28,9 @@ type PropFirmEnforcer struct {
 	ProfitTargetPct       float64
 	MinTradingDays        int
 	TradingDays           int
-	ProfitTargetMet       bool
+	profitTargetMet       bool
 	NewsTradingRestricted bool
-	CurrentPhase          int
+	currentPhase          int
 }
 
 type RuleBreach struct {
@@ -57,7 +59,7 @@ func NewPropFirmEnforcerFromProfile(p *propfirm.Profile, startingBalance float64
 		ProfitTargetPct:       p.ProfitTargetPctPhase1,
 		MinTradingDays:        p.MinTradingDays,
 		NewsTradingRestricted: !p.NewsTradingAllowed,
-		CurrentPhase:          1,
+		currentPhase:          1,
 	}
 }
 
@@ -72,8 +74,8 @@ func (f *PropFirmEnforcer) CheckDailyLoss() bool {
 	dailyChange := propfirm.DailyLossPct(f.StartingBalance, f.CurrentBalance)
 	f.DailyPnLPct = dailyChange
 	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, f.DailyLossLimitPct) {
-		f.IsHalted = true
-		f.HaltReason = "daily_loss_limit"
+		f.halted = true
+		f.haltReason = "daily_loss_limit"
 		f.DailyBreaches = append(f.DailyBreaches, RuleBreach{
 			Date:   time.Now(),
 			Code:   "DAILY_DD",
@@ -94,8 +96,8 @@ func (f *PropFirmEnforcer) CheckDrawdown() bool {
 		return true
 	}
 	if propfirm.DrawdownExceeded(f.PeakBalance, f.CurrentBalance, f.MaxDrawdownPct) {
-		f.IsHalted = true
-		f.HaltReason = "max_drawdown"
+		f.halted = true
+		f.haltReason = "max_drawdown"
 		return false
 	}
 	return true
@@ -124,7 +126,8 @@ func (f *PropFirmEnforcer) GetRegimeMultiplier() float64 {
 	return f.RegimeSizeMultipliers[r] * f.ConsistencyMultiplier
 }
 
-func (f *PropFirmEnforcer) OnFill(pnl float64) {
+func (f *PropFirmEnforcer) OnFill(pnl float64, balance float64) {
+	_ = balance
 	f.CurrentBalance += pnl
 	f.DailyPnL += pnl
 	f.CumulativePnL += pnl
@@ -161,7 +164,7 @@ func (f *PropFirmEnforcer) CheckProfitTarget() bool {
 	}
 	totalReturn := f.CumulativePnL / f.StartingBalance * 100.0
 	if totalReturn >= f.ProfitTargetPct && f.TradingDays >= f.MinTradingDays {
-		f.ProfitTargetMet = true
+		f.profitTargetMet = true
 		return true
 	}
 	return false
@@ -186,8 +189,8 @@ func (f *PropFirmEnforcer) CheckNewsTrading(ts time.Time) bool {
 }
 
 func (f *PropFirmEnforcer) AdvancePhase() {
-	f.CurrentPhase++
-	f.ProfitTargetMet = false
+	f.currentPhase++
+	f.profitTargetMet = false
 	f.DailyPnL = 0
 	f.DailyPnLPct = 0
 	f.CumulativePnL = 0
@@ -205,18 +208,18 @@ func (f *PropFirmEnforcer) TotalReturnPct() float64 {
 
 func (f *PropFirmEnforcer) Summary() ComplianceReport {
 	return ComplianceReport{
-		Passed:            !f.IsHalted,
-		HaltReason:        f.HaltReason,
+		Passed:            !f.halted,
+		HaltReason:        f.haltReason,
 		FinalBalance:      f.CurrentBalance,
 		PeakBalance:       f.PeakBalance,
 		MaxDailyLossPct:   f.maxDailyLossObserved(),
 		NumBreaches:       len(f.DailyBreaches),
 		Breaches:          f.DailyBreaches,
 		TotalReturnPct:    f.TotalReturnPct(),
-		ProfitTargetMet:   f.ProfitTargetMet,
+		ProfitTargetMet:   f.profitTargetMet,
 		TradingDays:       f.TradingDays,
 		MinTradingDays:    f.MinTradingDays,
-		CurrentPhase:      f.CurrentPhase,
+		CurrentPhase:      f.currentPhase,
 	}
 }
 
@@ -259,15 +262,15 @@ func (f *PropFirmEnforcer) CheckDailyLimits() (bool, string) {
 	return true, ""
 }
 
-// OnFillAdapter calls the existing OnFill with just pnl. The balance parameter
-// is ignored because PropFirmEnforcer tracks CurrentBalance internally.
-func (f *PropFirmEnforcer) OnFillAdapter(pnl, balance float64) {
-	_ = balance
-	f.OnFill(pnl)
+// MarkViolated sets the halted flag and records the reason.
+func (f *PropFirmEnforcer) MarkViolated(reason string) {
+	f.halted = true
+	f.haltReason = reason
 }
 
-// MarkViolated sets the IsHalted flag and records the reason.
-func (f *PropFirmEnforcer) MarkViolated(reason string) {
-	f.IsHalted = true
-	f.HaltReason = reason
-}
+func (f *PropFirmEnforcer) IsHalted() bool       { return f.halted }
+func (f *PropFirmEnforcer) HaltReason() string    { return f.haltReason }
+func (f *PropFirmEnforcer) CurrentPhase() int     { return f.currentPhase }
+func (f *PropFirmEnforcer) ProfitTargetMet() bool { return f.profitTargetMet }
+
+var _ risk.PropFirmGate = (*PropFirmEnforcer)(nil)

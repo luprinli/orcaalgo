@@ -10,10 +10,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/ta
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter, AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel } from '../../components/ui/alert-dialog'
 import MetricCard from '../../components/MetricCard'
+import InfrastructureTab from './InfrastructureTab'
+import AlertsTab from './AlertsTab'
 
 export default function AdminPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'health' | 'users' | 'audit' | 'errors' | 'email' | 'seed' | 'models' | 'reconciliation' | 'dataValidate'>('health')
+  const [tab, setTab] = useState<'health' | 'users' | 'audit' | 'errors' | 'email' | 'seed' | 'models' | 'reconciliation' | 'dataValidate' | 'infrastructure' | 'alerts'>('health')
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const [health, setHealth] = useState<any>(null)
   const [systemHealth, setSystemHealth] = useState<any>(null)
@@ -134,17 +136,19 @@ export default function AdminPage() {
     }
   }
 
-  const tabLabels: Record<string, string> = {
-    health: t('admin:health', 'Health'),
-    users: t('admin:users', 'Users'),
-    audit: t('admin:audit', 'Audit'),
-    errors: t('admin:errors', 'Errors'),
-    email: t('admin:email', 'Email'),
-    seed: t('admin:seed', 'Seed'),
-    models: t('admin:models', 'ML Models'),
-    reconciliation: t('admin:reconciliation', 'Reconciliation'),
-    dataValidate: t('admin:dataValidate', 'Data Quality'),
-  }
+	const tabLabels: Record<string, string> = {
+		health: t('admin:health', 'Health'),
+		users: t('admin:users', 'Users'),
+		audit: t('admin:audit', 'Audit'),
+		errors: t('admin:errors', 'Errors'),
+		email: t('admin:email', 'Email'),
+		seed: t('admin:seed', 'Seed'),
+		models: t('admin:models', 'ML Models'),
+		reconciliation: t('admin:reconciliation', 'Reconciliation'),
+		dataValidate: t('admin:dataValidate', 'Data Quality'),
+		infrastructure: 'Infrastructure',
+		alerts: 'Alerts',
+	}
 
   return (
     <div>
@@ -154,7 +158,7 @@ export default function AdminPage() {
 
       <Tabs value={tab} onValueChange={(v) => { setTab(v as typeof tab); setMsg('') }} className="w-full">
         <TabsList className="mb-4 flex-wrap">
-          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate'] as const).map(mt => (
+          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate', 'infrastructure', 'alerts'] as const).map(mt => (
             <TabsTrigger key={mt} value={mt}>{tabLabels[mt]}</TabsTrigger>
           ))}
         </TabsList>
@@ -455,6 +459,14 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+      </TabsContent>
+
+      <TabsContent value="infrastructure">
+        <InfrastructureTab />
+      </TabsContent>
+
+      <TabsContent value="alerts">
+        <AlertsTab />
       </TabsContent>
 
       <AlertDialog open={confirmSeed} onOpenChange={(open) => !open && setConfirmSeed(false)}>

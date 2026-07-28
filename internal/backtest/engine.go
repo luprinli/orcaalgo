@@ -11,6 +11,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/hash"
 	"github.com/lee-econ/orca-core/internal/ml"
 	"github.com/lee-econ/orca-core/internal/model"
+	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/propfirm"
 	"github.com/lee-econ/orca-core/internal/risk"
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
@@ -222,7 +223,6 @@ type DailyReturn struct {
 type Engine struct {
 	db             Database
 	fillSim        *FillSimulator
-	fillModel      model.FillModel
 	feeModel       model.FeeModel
 	latencyModel   model.LatencyModel
 	recorder       model.Recorder
@@ -573,7 +573,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 			continue
 		}
 
-		if e.ftmo != nil && e.ftmo.IsHalted {
+		if e.ftmo != nil && e.ftmo.IsHalted() {
 			continue
 		}
 
@@ -696,7 +696,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				capital = 0
 			}
 			if e.ftmo != nil {
-				e.ftmo.OnFill(ot.PnL)
+				e.ftmo.OnFill(ot.PnL, 0)
 			}
 			if e.pipeline != nil {
 				e.pipeline.ReconcileFillWithoutPropFirm(ot.StrategyID, ot.Symbol, ot.Side, ot.PnL, ot.Quantity, ot.ExitPrice.Float64())
@@ -895,6 +895,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 	if e.ftmo != nil {
 		report := e.ftmo.Summary()
 		result.ComplianceReport = &report
+		if !report.Passed {
+			monitor.RecordPropfirmBreach(report.HaltReason)
+		}
 	}
 
 	if hasHighVIX {
@@ -906,6 +909,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		if result.NumTrades >= 5 {
 			result.SharpeRatio = calculateSharpe(equity, barsPerDay)
 			result.SortinoRatio = calculateSortino(equity, barsPerDay)
+			monitor.SetStrategySharpe(config.StrategyID, "backtest", result.SharpeRatio)
 		}
 		result.MaxDrawdown = calculateMaxDrawdown(equity)
 		result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
@@ -1480,7 +1484,6 @@ type StrategyBacktestMetric struct {
 type EngineMulti struct {
 	db           Database
 	fillSim      *FillSimulator
-	fillModel    model.FillModel
 	feeModel     model.FeeModel
 	latencyModel model.LatencyModel
 	recorder     model.Recorder

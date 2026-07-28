@@ -66,6 +66,7 @@ type Server struct {
 	modelHandler           *ModelHandler
 	indicatorHandler       *IndicatorHandler
 	progressStore          *ProgressStore
+	monitoringHandler      *MonitoringHandler
 	dataSource            string
 }
 
@@ -258,6 +259,10 @@ func (s *Server) registerRoutes() {
 	if s.indicatorHandler != nil {
 		s.indicatorHandler.RegisterRoutes(v1)
 	}
+	if s.monitoringHandler == nil {
+		s.monitoringHandler = NewMonitoringHandler("http://localhost:9090", "http://localhost:9093")
+	}
+	s.monitoringHandler.RegisterRoutes(v1)
 
 	s.router.GET("/ws", func(c *gin.Context) {
 		token := c.Query("token")
@@ -922,9 +927,14 @@ func (s *Server) submitOptimization(c *gin.Context) {
 	}
 
 	if result.AvgOOSSharpe != 0 {
-		mcConfig := backtest.MonteCarloFromTrades(nil, 1000, req.Capital)
-		if r, err := backtest.RunMonteCarloWithContext(c.Request.Context(), mcConfig); err == nil {
-			mcResult = r
+		var oosTrades []backtest.Trade
+		for _, win := range result.Windows {
+			oosTrades = append(oosTrades, backtest.Trade{PnLPct: win.OOSReturnPct})
+		}
+		if len(oosTrades) > 1 {
+			if r, err := backtest.RunMonteCarloFromTrades(oosTrades, 1000, req.Capital); err == nil {
+				mcResult = r
+			}
 		}
 		std := backtest.DefaultMultiMetricStandard()
 		verdict = backtest.EvaluateOOSMultiMetric(owfResult, mcResult, std)

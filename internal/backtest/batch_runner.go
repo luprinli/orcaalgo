@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/risk"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
@@ -168,6 +169,8 @@ func RunMatrix(ctx context.Context, db Database, config MatrixBacktestConfig, on
 func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktestConfig, onProgress MatrixProgressFn) (*MatrixResult, error) {
 	combos := cartesianProduct(config.StrategyIDs, config.Symbols, config.Timeframes)
 
+	monitor.RecordMatrixBatchStart()
+
 	if len(combos) == 0 {
 		return &MatrixResult{RunID: uuid.New().String(), Combos: 0}, nil
 	}
@@ -259,6 +262,9 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 		}
 		g.Go(func() error {
 			defer sem.Release(1)
+			monitor.AdjustMatrixWorkers(1)
+			defer monitor.AdjustMatrixWorkers(-1)
+			start := time.Now()
 			btConfig := BacktestConfig{
 				StrategyID:      combo.Strategy,
 				Symbols:         []string{combo.Symbol},
@@ -287,9 +293,11 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 			}
 			engine := NewEngine(db)
 			result, err := engine.Run(ctx, btConfig)
+			monitor.RecordBacktestDuration(time.Since(start).Seconds())
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
+				monitor.RecordMatrixCombo("failed")
 				results[i] = ComboResult{
 					StrategyID: combo.Strategy,
 					Symbol:     combo.Symbol,
@@ -301,6 +309,7 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				}
 				return nil
 			}
+			monitor.RecordMatrixCombo("completed")
 			results[i] = ComboResult{
 				Symbol:            combo.Symbol,
 				StrategyID:        combo.Strategy,

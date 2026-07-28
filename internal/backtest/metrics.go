@@ -54,6 +54,16 @@ func init() {
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },
 	})
 	RegisterMetric(MetricDef{
+		Name: "max_drawdown_duration_days", Group: "Risk", Description: "Max drawdown duration in trading days",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdownDuration(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) + " days" },
+	})
+	RegisterMetric(MetricDef{
+		Name: "cagr_pct", Group: "Performance", Description: "Compound Annual Growth Rate",
+		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeCAGR(eq) },
+		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
+	})
+	RegisterMetric(MetricDef{
 		Name: "trading_volume", Group: "Performance", Description: "Total trading volume",
 		Compute: func(_ []EquityPoint, trades []Trade) float64 {
 			var vol float64
@@ -81,7 +91,7 @@ func ComputeAllMetrics(equityCurve []EquityPoint, trades []Trade) map[string]flo
 }
 
 func computeSharpe(equity []EquityPoint) float64 {
-	returns := equityToReturns(equity)
+	returns := equityToDailyReturns(equity)
 	if len(returns) < 2 {
 		return 0
 	}
@@ -94,7 +104,7 @@ func computeSharpe(equity []EquityPoint) float64 {
 }
 
 func computeSortino(equity []EquityPoint) float64 {
-	returns := equityToReturns(equity)
+	returns := equityToDailyReturns(equity)
 	if len(returns) < 2 {
 		return 0
 	}
@@ -173,6 +183,59 @@ func computeTotalReturn(equity []EquityPoint) float64 {
 		return 0
 	}
 	return (final - initial) / initial * 100.0
+}
+
+func computeMaxDrawdownDuration(equity []EquityPoint) float64 {
+	return float64(calculateMaxDrawdownDuration(equity))
+}
+
+func computeCAGR(equity []EquityPoint) float64 {
+	if len(equity) < 2 {
+		return 0
+	}
+	initial := equity[0].Value
+	final := equity[len(equity)-1].Value
+	if initial <= 0 || final <= 0 {
+		return 0
+	}
+	days := equity[len(equity)-1].Time.Sub(equity[0].Time).Hours() / 24.0
+	if days < 1 {
+		return 0
+	}
+	years := days / 365.25
+	ratio := final / initial
+	return (math.Pow(ratio, 1.0/years) - 1.0) * 100.0
+}
+
+func equityToDailyReturns(equity []EquityPoint) []float64 {
+	if len(equity) < 2 {
+		return nil
+	}
+	type dayRange struct{ first, last float64 }
+	dayMap := make(map[string]dayRange)
+	var orderedDays []string
+	for _, pt := range equity {
+		key := pt.Time.Format("2006-01-02")
+		if dr, exists := dayMap[key]; !exists {
+			orderedDays = append(orderedDays, key)
+			dayMap[key] = dayRange{first: pt.Value, last: pt.Value}
+		} else {
+			dr.last = pt.Value
+			dayMap[key] = dr
+		}
+	}
+	if len(orderedDays) < 2 {
+		return nil
+	}
+	returns := make([]float64, len(orderedDays)-1)
+	for i := 1; i < len(orderedDays); i++ {
+		prev := dayMap[orderedDays[i-1]].last
+		curr := dayMap[orderedDays[i]].last
+		if prev > 0 {
+			returns[i-1] = (curr - prev) / prev
+		}
+	}
+	return returns
 }
 
 func equityToReturns(equity []EquityPoint) []float64 {

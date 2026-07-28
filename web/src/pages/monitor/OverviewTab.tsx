@@ -4,7 +4,8 @@ import { Progress } from '../../components/ui/progress'
 import { Badge } from '../../components/ui/badge'
 import MetricCard from '../../components/MetricCard'
 import EquityCurveChart from '../../charts/EquityCurveChart'
-import type { LiveMetrics, EquityPoint, SystemHealth } from '../../types/api'
+import { useAuthStore } from '../../stores/authStore'
+import type { LiveMetrics, EquityPoint, SystemHealth, RiskStatus } from '../../types/api'
 
 export interface OverviewComputed {
   halted: boolean
@@ -28,10 +29,12 @@ interface OverviewTabProps {
   metrics: LiveMetrics | null
   systemHealth: SystemHealth | null
   wsConnected: boolean
+  riskStatus: RiskStatus | null
 }
 
-export default function OverviewTab({ computed, equity, metrics, systemHealth, wsConnected }: OverviewTabProps) {
+export default function OverviewTab({ computed, equity, metrics, systemHealth, wsConnected, riskStatus }: OverviewTabProps) {
   const { t } = useTranslation()
+  const isAuth = useAuthStore((s) => s.token) !== null
 
   const c = computed
   const regimeLabels = [t('risk:regime.calm', 'Calm'), t('risk:regime.trending', 'Trending'), t('risk:regime.highVol', 'HighVol'), t('risk:regime.crisis', 'Crisis')]
@@ -94,9 +97,9 @@ export default function OverviewTab({ computed, equity, metrics, systemHealth, w
               {[
                 { l: t('dashboard:brokerOnline', 'Broker Online'), ok: !c.halted },
                 { l: t('dashboard:dataFeedActive', 'Data Feed Active'), ok: wsConnected },
-                { l: t('dashboard:killSwitchActive', 'Kill Switch Active'), ok: true },
+                { l: t('dashboard:killSwitchActive', 'Kill Switch Active'), ok: riskStatus !== null },
                 { l: t('dashboard:dbConnected', 'DB Connected'), ok: (systemHealth?.db_pool_in_use ?? 0) > 0 },
-                { l: t('dashboard:authEnforced', 'Auth Enforced'), ok: true },
+                { l: t('dashboard:authEnforced', 'Auth Enforced'), ok: isAuth },
                 { l: t('dashboard:wsConnected', 'WS Connected'), ok: wsConnected },
               ].map(s => (
                 <div key={s.l} className="flex items-center gap-2 py-2">

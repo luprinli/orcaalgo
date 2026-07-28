@@ -13,11 +13,11 @@ func TestPropFirmEnforcerDailyLoss(t *testing.T) {
 	if f.CheckDailyLoss() {
 		t.Error("should fail at 6% daily loss")
 	}
-	if !f.IsHalted {
+	if !f.IsHalted() {
 		t.Error("should be halted after daily loss breach")
 	}
-	if f.HaltReason != "daily_loss_limit" {
-		t.Errorf("expected halt reason daily_loss_limit, got %s", f.HaltReason)
+	if f.HaltReason() != "daily_loss_limit" {
+		t.Errorf("expected halt reason daily_loss_limit, got %s", f.HaltReason())
 	}
 }
 
@@ -32,11 +32,11 @@ func TestPropFirmEnforcerDrawdown(t *testing.T) {
 	if f.CheckDrawdown() {
 		t.Error("should fail at 11% drawdown")
 	}
-	if !f.IsHalted {
+	if !f.IsHalted() {
 		t.Error("should be halted after drawdown breach")
 	}
-	if f.HaltReason != "max_drawdown" {
-		t.Errorf("expected halt reason max_drawdown, got %s", f.HaltReason)
+	if f.HaltReason() != "max_drawdown" {
+		t.Errorf("expected halt reason max_drawdown, got %s", f.HaltReason())
 	}
 }
 

@@ -16,8 +16,18 @@ var allowedOrigins = func() string {
 	if o := os.Getenv("ORCA_WS_ORIGINS"); o != "" {
 		return o
 	}
-	return "http://localhost:5173"
+	return 	"http://localhost:5173"
 }()
+
+type WSAlert struct {
+	Name        string `json:"name"`
+	Severity    string `json:"severity"`
+	Summary     string `json:"summary"`
+	Description string `json:"description"`
+	Active      bool   `json:"active"`
+	FiredAt     string `json:"fired_at"`
+	ResolvedAt  string `json:"resolved_at,omitempty"`
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -205,6 +215,10 @@ func (h *WSHub) Clients() []*WSClient {
 		clients = append(clients, c)
 	}
 	return clients
+}
+
+func (h *WSHub) PushAlert(alert WSAlert) {
+	h.Broadcast("alerts", alert)
 }
 
 func (h *WSHub) StartPerformanceBroadcast(interval time.Duration, getData func() interface{}) {

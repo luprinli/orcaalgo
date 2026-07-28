@@ -82,6 +82,7 @@ func (h *HealthMonitor) check() {
 
 	var components []ComponentStatus
 	healthy := true
+	anyAccountOk := false
 
 	dbStatus := h.checkDatabase(ctx)
 	components = append(components, dbStatus)
@@ -93,11 +94,16 @@ func (h *HealthMonitor) check() {
 		for _, acct := range h.accountMgr.ListAccountsByUser(ctx, "") {
 			accStatus := h.checkAccount(ctx, acct.ID)
 			components = append(components, accStatus)
+			if accStatus.Status == "ok" {
+				anyAccountOk = true
+			}
 			if accStatus.Status != "ok" {
 				healthy = false
 			}
 		}
 	}
+
+	SetBrokerConnected(anyAccountOk)
 
 	h.mu.Lock()
 	h.status = HealthStatus{

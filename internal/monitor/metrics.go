@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"net/http"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -51,7 +52,58 @@ var (
 		Name: "orca_ws_auth_failures_total",
 		Help: "WebSocket connection attempts rejected due to invalid JWT token",
 	})
+	rejectCountTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "orca_reject_count_total",
+		Help: "Total signal rejections by the risk pipeline",
+	})
+	signalRejects = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "orca_signal_rejects_total",
+		Help: "Signals rejected by pipeline stage",
+	}, []string{"stage", "strategy_id"})
+	brokerConnected = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "orca_broker_connected",
+		Help: "Broker connection status (1=connected, 0=disconnected)",
+	})
+	dbPoolInUse = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "orca_db_pool_in_use",
+		Help: "Database connections currently in use",
+	}, func() float64 { return float64(atomic.LoadInt64(&dbPoolInUseVal)) })
+	heapInUseBytes = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "orca_heap_inuse_bytes",
+		Help: "Go heap memory currently in use",
+	}, func() float64 {
+		var m runtime.MemStats
+		runtime.ReadMemStats(&m)
+		return float64(m.HeapInuse)
+	})
+	matrixActiveWorkers = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "orca_matrix_active_workers",
+		Help: "Number of backtest workers currently executing",
+	})
+	matrixCombosCompleted = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "orca_matrix_combos_completed_total",
+		Help: "Total matrix backtest combos completed",
+	}, []string{"status"})
+	matrixBatchesTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "orca_matrix_batches_total",
+		Help: "Total matrix backtest batches submitted",
+	})
+	backtestDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:    "orca_backtest_duration_seconds",
+		Help:    "Per-combo backtest duration in seconds",
+		Buckets: []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300},
+	})
+	propfirmBreach = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "orca_propfirm_breach_total",
+		Help: "Prop-firm rule breach events",
+	}, []string{"breach_type"})
+	strategySharpe = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "orca_strategy_sharpe",
+		Help: "Rolling Sharpe ratio per strategy",
+	}, []string{"strategy_id", "window"})
 )
+
+var dbPoolInUseVal int64
 
 func init() {
 	prometheus.MustRegister(
@@ -65,6 +117,15 @@ func init() {
 		wsConnections,
 		wsBroadcastDropped,
 		wsAuthFailures,
+		rejectCountTotal,
+		signalRejects,
+		brokerConnected,
+		matrixActiveWorkers,
+		matrixCombosCompleted,
+		matrixBatchesTotal,
+		backtestDuration,
+		propfirmBreach,
+		strategySharpe,
 	)
 }
 
@@ -150,4 +211,48 @@ func RecordWSAuthFailure() {
 
 func AtomicGetTickCount() int64 {
 	return atomic.LoadInt64(&metricsTickCounter)
+}
+
+func RecordReject() {
+	rejectCountTotal.Inc()
+}
+
+func RecordSignalReject(stage, strategyID string) {
+	signalRejects.WithLabelValues(stage, strategyID).Inc()
+}
+
+func SetBrokerConnected(connected bool) {
+	if connected {
+		brokerConnected.Set(1)
+	} else {
+		brokerConnected.Set(0)
+	}
+}
+
+func SetDBPoolInUse(count int) {
+	atomic.StoreInt64(&dbPoolInUseVal, int64(count))
+}
+
+func RecordMatrixBatchStart() {
+	matrixBatchesTotal.Inc()
+}
+
+func RecordMatrixCombo(status string) {
+	matrixCombosCompleted.WithLabelValues(status).Inc()
+}
+
+func AdjustMatrixWorkers(delta int) {
+	matrixActiveWorkers.Add(float64(delta))
+}
+
+func RecordBacktestDuration(seconds float64) {
+	backtestDuration.Observe(seconds)
+}
+
+func RecordPropfirmBreach(breachType string) {
+	propfirmBreach.WithLabelValues(breachType).Inc()
+}
+
+func SetStrategySharpe(strategyID, window string, sharpe float64) {
+	strategySharpe.WithLabelValues(strategyID, window).Set(sharpe)
 }

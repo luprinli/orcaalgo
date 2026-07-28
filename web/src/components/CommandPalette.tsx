@@ -21,7 +21,7 @@ const pages = [
   { label: "Simulation", path: "/simulate", keys: "i" },
   { label: "Calibration", path: "/calibrate" },
   { label: "Attribution", path: "/attribution" },
-  { label: "Optimization", path: "/optimize" },
+  { label: "Optimization", path: "/backtest?view=optimize" },
   { label: "Accounts", path: "/accounts" },
   { label: "Prop Firms", path: "/propfirm" },
   { label: "Settings", path: "/settings" },

@@ -30,7 +30,7 @@ groups:
           description: "Market data ring buffer has overflowed. Data loss is occurring."
 
       - alert: LatencySpike
-        expr: histogram_quantile(0.99, rate(orca_tick_processing_latency_seconds_bucket[5m])) > 0.0001
+        expr: histogram_quantile(0.99, rate(orca_engine_latency_us_bucket[5m])) > 100.0
         for: 5m
         labels:
           severity: warning
@@ -48,7 +48,7 @@ groups:
           description: "The broker connection has been lost."
 
       - alert: HighDrawdown
-        expr: orca_daily_loss_pct > 4.0
+        expr: orca_daily_pnl_pct < -4.0
         for: 1m
         labels:
           severity: warning
@@ -57,7 +57,7 @@ groups:
           description: "Daily loss is over 4%, approaching the 5% limit."
 
       - alert: RegimeChange
-        expr: orca_hmm_regime > 2
+        expr: orca_regime_state > 2
         for: 5m
         labels:
           severity: info

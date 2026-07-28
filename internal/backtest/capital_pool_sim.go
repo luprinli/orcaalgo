@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lee-econ/orca-core/internal/propfirm"
+	"github.com/lee-econ/orca-core/internal/risk"
 )
 
 type PoolSimStrategy struct {
@@ -172,21 +173,9 @@ func (c *CapitalPoolSim) ResetDaily() {
 // RequestCapital is an adapter for the risk.CapitalGate interface. In the
 // backtest path, capital authorization happens inline inside EvaluateAll;
 // this adapter provides a post-hoc entry point for the RiskPipeline.
-func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req struct {
-	StrategyID string
-	Confidence float64
-	Symbol     string
-	Side       string
-	BaseSize   float64
-}) struct {
-	ApprovedSize float64
-	Reason       string
-} {
+func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req risk.CapitalRequest) risk.CapitalResult {
 	if c.PoolState.Halted {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: 0, Reason: "pool_halted"}
+		return risk.CapitalResult{ApprovedSize: 0, Reason: "pool_halted"}
 	}
 
 	p := c.Profile
@@ -196,23 +185,14 @@ func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req struct {
 
 	strat, ok := c.Strategies[req.StrategyID]
 	if !ok {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: req.BaseSize, Reason: "ok"}
+		return risk.CapitalResult{ApprovedSize: req.BaseSize, Reason: "ok"}
 	}
 
 	if req.Side == "BUY" && strat.OpenLong[req.Symbol] > 0 {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
+		return risk.CapitalResult{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
 	}
 	if req.Side == "SELL" && strat.OpenShort[req.Symbol] > 0 {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
+		return risk.CapitalResult{ApprovedSize: req.BaseSize * 0.5, Reason: "correlation_limit"}
 	}
 
 	totalOpen := 0
@@ -220,17 +200,11 @@ func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req struct {
 		totalOpen += len(s.OpenLong) + len(s.OpenShort)
 	}
 	if totalOpen >= p.MaxOpenPositions {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: 0, Reason: "max_open_positions"}
+		return risk.CapitalResult{ApprovedSize: 0, Reason: "max_open_positions"}
 	}
 
 	if c.PoolState.TotalBalance <= 0 {
-		return struct {
-			ApprovedSize float64
-			Reason       string
-		}{ApprovedSize: 0, Reason: "no_capital"}
+		return risk.CapitalResult{ApprovedSize: 0, Reason: "no_capital"}
 	}
 
 	size := req.BaseSize
@@ -242,10 +216,7 @@ func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req struct {
 		size = c.PoolState.TotalBalance * 0.25
 	}
 
-	return struct {
-		ApprovedSize float64
-		Reason       string
-	}{ApprovedSize: size, Reason: "ok"}
+	return risk.CapitalResult{ApprovedSize: size, Reason: "ok"}
 }
 
 // Halted returns whether the capital pool has been halted.
@@ -257,6 +228,5 @@ func (c *CapitalPoolSim) HaltReason() string { return c.PoolState.HaltReason }
 // TotalBalance returns the current pool equity.
 func (c *CapitalPoolSim) TotalBalance() float64 { return c.PoolState.TotalBalance }
 
-
-
+var _ risk.CapitalGate = (*CapitalPoolSim)(nil)
 

@@ -89,8 +89,14 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-change_me}
+      ORCA_JWT_SECRET: ${ORCA_JWT_SECRET:-dev-secret-change-in-production}
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./configs/grafana/grafana.ini:/etc/grafana/grafana.ini
+      - ./configs/grafana/jwt_secret.txt:/etc/grafana/jwt_secret.txt
+      - ./configs/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./configs/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docs/grafana/dashboards:/etc/grafana/dashboards
     depends_on:
       - prometheus
     networks:

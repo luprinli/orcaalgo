@@ -11,13 +11,14 @@ import (
 )
 
 func TestMidPriceFillMatchesBaseline(t *testing.T) {
-	eng := NewEngine(nil)
-	eng.fillModel = model.MidPriceFill{}
-	eng.feeModel = model.ZeroFee{}
-	eng.latencyModel = model.ZeroLatency{}
-
-	if eng.fillModel == nil || eng.feeModel == nil || eng.latencyModel == nil {
-		t.Error("fill/fee/latency models should be set")
+	fm := model.MidPriceFill{}
+	prob := fm.FillProbability(100000, 100000, 100, 5000, 10.0)
+	if prob != 1.0 {
+		t.Errorf("MidPriceFill should always fill, got %.4f", prob)
+	}
+	fp := fm.FillPrice(101000, 100000, "BUY", 0)
+	if fp != 100000 {
+		t.Errorf("MidPriceFill should return mid price, got %d", fp)
 	}
 }
 

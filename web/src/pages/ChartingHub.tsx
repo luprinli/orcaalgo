@@ -263,8 +263,9 @@ function IndicatorsPanel({
     volumeSeriesRef.current = vs
 
     const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
+      if (chartContainerRef.current && chartRef.current) {
+        const { clientWidth, clientHeight } = chartContainerRef.current
+        chartRef.current.resize(clientWidth, clientHeight)
       }
     }
     window.addEventListener('resize', handleResize)
@@ -278,11 +279,13 @@ function IndicatorsPanel({
 
   useEffect(() => {
     if (activeTab === 'indicators') {
-      requestAnimationFrame(() => {
+      const id = requestAnimationFrame(() => {
         if (chartContainerRef.current && chartRef.current) {
-          chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth })
+          const { clientWidth, clientHeight } = chartContainerRef.current
+          chartRef.current.resize(clientWidth, clientHeight)
         }
       })
+      return () => cancelAnimationFrame(id)
     }
   }, [activeTab])
 
