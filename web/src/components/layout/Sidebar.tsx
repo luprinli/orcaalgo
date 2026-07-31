@@ -13,8 +13,9 @@ import {
   CandlestickChart, Target, Grid3x3, Play,
   Settings, Globe, Users, FileText, AlertTriangle,
   PanelLeftClose, PanelLeftOpen, LogOut, ChevronsUpDown,
-  UserRound, Fish, SunMoon, ShieldAlert,
+  UserRound, SunMoon, ShieldAlert,
 } from 'lucide-react'
+import OrcaIcon from '../OrcaIcon'
 
 // ── Icon lookup map ────────────────────────────────────────────────────────
 const navIcons: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -189,7 +190,7 @@ export function Sidebar() {
         onKeyDown={e => e.key === 'Enter' && nav('/')}
       >
         <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-          <Fish className="size-5" />
+          <OrcaIcon className="size-5" />
         </div>
         {!collapsed && (
           <div className="grid flex-1 text-left text-sm leading-tight">
