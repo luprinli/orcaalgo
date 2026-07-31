@@ -10,7 +10,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-orca}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-orca} -d ${DB_NAME:-orca_core}"]
       interval: 5s
       timeout: 5s
       retries: 5
