@@ -155,6 +155,7 @@ export function Sidebar() {
     const button = (
       <Link
         to={item.path}
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.location.href = item.path }}
         className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
           ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
           ${active ? activeStyle : idleStyle}`}
