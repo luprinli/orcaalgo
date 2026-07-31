@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ThemeToggle } from '../ThemeToggle'
 import { Avatar, AvatarFallback } from '../ui/avatar'
@@ -136,7 +136,6 @@ function NavUser({ collapsed }: { collapsed: boolean }) {
 
 // ── Main Sidebar ───────────────────────────────────────────────────────────
 export function Sidebar() {
-  const nav = useNavigate()
   const loc = useLocation()
   const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(false)
@@ -154,16 +153,15 @@ export function Sidebar() {
     const active = isActive(item.path)
 
     const button = (
-      <button
-        type="button"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(item.path) }}
+      <Link
+        to={item.path}
         className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
           ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
           ${active ? activeStyle : idleStyle}`}
       >
         <Icon className="size-4 shrink-0" />
         {!collapsed && <span className="truncate">{item.label}</span>}
-      </button>
+      </Link>
     )
     if (collapsed) {
       return (
@@ -185,12 +183,11 @@ export function Sidebar() {
       aria-label="Main navigation"
     >
       {/* ── Brand Header ── */}
-      <div
-        className={`flex items-center gap-2.5 py-3.5 cursor-pointer select-none ${collapsed ? 'justify-center px-2' : 'px-3'}`}
-        onClick={(e) => { e.preventDefault(); nav('/') }}
+      <Link
+        to="/"
+        className={`flex items-center gap-2.5 py-3.5 select-none ${collapsed ? 'justify-center px-2' : 'px-3'}`}
         role="link"
         tabIndex={0}
-        onKeyDown={e => e.key === 'Enter' && nav('/')}
       >
         <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
           <OrcaIcon className="size-5" />
@@ -205,7 +202,7 @@ export function Sidebar() {
             </span>
           </div>
         )}
-      </div>
+      </Link>
 
       {/* ── Nav Groups ── */}
       <nav className="flex-1 flex flex-col gap-1 overflow-y-auto px-1.5 py-2">
