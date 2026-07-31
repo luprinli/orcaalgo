@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -577,6 +578,13 @@ func (s *Server) getCandles(c *gin.Context) {
 	candles, err := s.repo.LoadCandles(c.Request.Context(), []string{symbol}, start, end)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// If no candles in DB, return synthetic sample data so the chart renders
+	// immediately (TradingView demo pattern). 1 day of 1-minute candles for SPY.
+	if len(candles) == 0 || len(candles[0]) == 0 {
+		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticSPYCandles(rangeStr)})
 		return
 	}
 
@@ -1877,6 +1885,48 @@ func (s *Server) getSystemHealth(c *gin.Context) {
 		"engine_version": version.Engine(),
 		"status":         "ok",
 	})
+}
+
+// syntheticSPYCandles returns plausible 1-minute SPY candles for demo display
+// when the database has no candle data yet. Follows TradingView's pattern of
+// showing meaningful sample data rather than an empty chart.
+func syntheticSPYCandles(rangeStr string) []gin.H {
+	var count int
+	switch rangeStr {
+	case "1D":
+		count = 390
+	case "1W":
+		count = 1950
+	case "1M":
+		count = 8190
+	default:
+		count = 390
+	}
+	if count > 1950 {
+		count = 1950
+	}
+
+	base := 450.0
+	now := time.Now()
+	candles := make([]gin.H, count)
+	for i := 0; i < count; i++ {
+		t := now.Add(-time.Duration(count-i) * time.Minute)
+		drift := (float64(i)/float64(count)*2 - 1) * 2.0
+		vol := 0.5 + 0.5*float64(i%7)/6
+		open := base + drift + -2 + float64(i%13)*0.05
+		high := open + vol*0.3
+		low := open - vol*0.3
+		close := low + (high-low)*(0.4+0.2*float64(i%5)/4)
+		candles[i] = gin.H{
+			"time":   t.Format(time.RFC3339),
+			"open":   math.Round(open*100) / 100,
+			"high":   math.Round(high*100) / 100,
+			"low":    math.Round(low*100) / 100,
+			"close":  math.Round(close*100) / 100,
+			"volume": math.Round(vol*10000),
+		}
+	}
+	return candles
 }
 
 func (s *Server) listBrokers(c *gin.Context) {
