@@ -1326,7 +1326,7 @@ def main() -> None:
     print()
     print(f"  API:        {COLORS['cyan']}http://localhost:8080{COLORS['reset']}")
     if not args.no_monitoring and "Metrics" not in skip_names:
-        print(f"  Metrics:    {COLORS['cyan']}http://localhost:9090/metrics{COLORS['reset']}")
+        print(f"  Metrics:    {COLORS['cyan']}http://localhost:9091/metrics{COLORS['reset']}")
     if "React Dev" not in skip_names:
         print(f"  Dashboard:  {COLORS['cyan']}http://localhost:5173{COLORS['reset']}")
     if not args.no_monitoring:

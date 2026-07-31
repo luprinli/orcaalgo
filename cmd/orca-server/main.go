@@ -159,9 +159,13 @@ func main() {
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) { monitor.MetricsHandler().ServeHTTP(w, r) })
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); w.Write([]byte(`{"status":"ok"}`)) })
 
+	metricsPort := os.Getenv("ORCA_METRICS_PORT")
+	if metricsPort == "" {
+		metricsPort = ":9091"
+	}
 	go func() {
-		slog.Info("metrics server starting", "addr", ":9090")
-		if err := http.ListenAndServe(":9090", mux); err != nil { slog.Error("metrics error", "error", err) }
+		slog.Info("metrics server starting", "addr", metricsPort)
+		if err := http.ListenAndServe(metricsPort, mux); err != nil { slog.Error("metrics error", "error", err) }
 	}()
 	go func() {
 		if err := wsClientConnect(ctx, ringBuf, metrics); err != nil { slog.Error("ws connect error", "error", err) }
@@ -258,7 +262,7 @@ func main() {
 		}
 	}()
 
-	slog.Info("Orca Core v0.5.0 starting", "api", "http://localhost:8080", "metrics", "http://localhost:9090/metrics", "health", "http://localhost:9090/healthz", "ws", "ws://localhost:8080/ws", "paper", usePaper, "db", true, "data_mode", dataMode)
+	slog.Info("Orca Core v0.5.0 starting", "api", "http://localhost:8080", "metrics", "http://localhost"+metricsPort+"/metrics", "health", "http://localhost"+metricsPort+"/healthz", "ws", "ws://localhost:8080/ws", "paper", usePaper, "db", true, "data_mode", dataMode)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

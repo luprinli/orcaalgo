@@ -516,7 +516,7 @@ Wave 4 (P3) ── Governance + Longevity ── Independent, parallelizable
 
 Execute Wave 1 (1 day) — fix all broken alert wiring. This has zero side effects (only adds new metric registrations and corrects names in existing config files) and is the single highest-impact change: it makes 4 silent alert rules functional and enables signal quality monitoring.
 
-**Verification gate:** After Wave 1, `curl localhost:9090/metrics | grep orca_` should show all 14 instrumented metrics. The Prometheus "Alerts" page should show 0 "unhealthy" rules.
+**Verification gate:** After Wave 1, `curl localhost:9091/metrics | grep orca_` should show all 14 instrumented metrics. The Prometheus "Alerts" page should show 0 "unhealthy" rules.
 
 ---
 
