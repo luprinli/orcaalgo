@@ -571,7 +571,7 @@ func (s *Server) getCandles(c *gin.Context) {
 	}
 
 	if s.repo == nil {
-		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": []gin.H{}})
+		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticCandles(symbol, rangeStr)})
 		return
 	}
 
