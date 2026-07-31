@@ -33,10 +33,12 @@ services:
 
   # Optional: Docker-based API server. For production, use the native binary
   # started by scripts/orchestrate.py --production instead.
-  # Start manually: docker compose up app
+  # Start manually: docker compose --profile prod up app
   app:
     image: orca-core:latest
     container_name: orca-server
+    profiles:
+      - prod
     ports:
       - "8080:8080"
       - "9091:9090"
@@ -79,7 +81,8 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
     depends_on:
-      - app
+      - postgres
+      - redis
     networks:
       - orca-net
 
