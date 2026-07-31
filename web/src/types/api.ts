@@ -410,6 +410,7 @@ export interface CandleResponse {
   symbol: string
   range: string
   candles: Candle[]
+  warning?: string
 }
 
 export interface UniverseEntry {

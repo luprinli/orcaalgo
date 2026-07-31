@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -571,20 +570,18 @@ func (s *Server) getCandles(c *gin.Context) {
 	}
 
 	if s.repo == nil {
-		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticCandles(symbol, rangeStr)})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
 		return
 	}
 
 	candles, err := s.repo.LoadCandles(c.Request.Context(), []string{symbol}, start, end)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load candles: " + err.Error()})
 		return
 	}
 
-	// If no candles in DB, return synthetic sample data so the chart renders
-	// immediately (TradingView demo pattern). Price range derived from symbol name hash.
 	if len(candles) == 0 || len(candles[0]) == 0 {
-		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticCandles(symbol, rangeStr)})
+		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": []gin.H{}, "warning": "no candle data available for this symbol and range"})
 		return
 	}
 
@@ -1885,57 +1882,6 @@ func (s *Server) getSystemHealth(c *gin.Context) {
 		"engine_version": version.Engine(),
 		"status":         "ok",
 	})
-}
-
-// syntheticCandles returns plausible 5-minute candles for any symbol for demo
-// display when the database has no candle data yet. Price range is derived from
-// a deterministic hash of the symbol name (e.g. SPY≈450, AAPL≈190, TSLA≈250).
-func syntheticCandles(symbol, rangeStr string) []gin.H {
-	var count int
-	switch rangeStr {
-	case "1D":
-		count = 78
-	case "1W":
-		count = 390
-	case "1M":
-		count = 1638
-	default:
-		count = 78
-	}
-	if count > 1638 {
-		count = 1638
-	}
-
-	h := uint32(0)
-	for _, c := range symbol {
-		h = h*31 + uint32(c)
-	}
-	base := 50.0 + float64(h%9000)/10.0
-	if base < 20 {
-		base = 100
-	}
-
-	now := time.Now()
-	candles := make([]gin.H, count)
-	for i := 0; i < count; i++ {
-		t := now.Add(-time.Duration(count-i) * 5 * time.Minute)
-		drift := (float64(i)/float64(count)*2 - 1) * (base * 0.005)
-		jitter := float64((i*7+int(h%13))%19) * (base * 0.0002)
-		vol := 0.3 + 0.7*float64(i%11)/10
-		open := base + drift + jitter
-		high := open + vol*base*0.001
-		low := open - vol*base*0.001
-		close := low + (high-low)*(0.4+0.2*float64(i%5)/4)
-		candles[i] = gin.H{
-			"time":   t.Format(time.RFC3339),
-			"open":   math.Round(open*100) / 100,
-			"high":   math.Round(high*100) / 100,
-			"low":    math.Round(low*100) / 100,
-			"close":  math.Round(close*100) / 100,
-			"volume": math.Round(vol*10000),
-		}
-	}
-	return candles
 }
 
 func (s *Server) listBrokers(c *gin.Context) {

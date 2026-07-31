@@ -36,6 +36,7 @@ export default function ChartingHub() {
     try {
       const res = await candles.get(symbol, range)
       setCandleData(res.candles ?? [])
+      if (res.warning) setError(res.warning)
     } catch (err) {
       setError(err instanceof Error ? err.message : t('chartingHub:failedToLoad', 'Failed to load candles'))
     } finally {
