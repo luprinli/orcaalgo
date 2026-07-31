@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+  </defs>
+  <!-- Orca whale body -->
+  <ellipse cx="26" cy="38" rx="20" ry="12" fill="url(#g)" stroke="#0284c7" stroke-width="1.5"/>
+  <!-- White belly patch -->
+  <ellipse cx="28" cy="44" rx="12" ry="6" fill="#f8fafc"/>
+  <!-- White eye patch -->
+  <ellipse cx="20" cy="30" rx="4" ry="3" fill="#f8fafc"/>
+  <circle cx="18" cy="30" r="1.5" fill="#0f172a"/>
+  <!-- Dorsal fin -->
+  <path d="M34 28 L40 16 L36 26" fill="#0284c7" stroke="#0369a1" stroke-width="1"/>
+  <!-- Tail flukes -->
+  <path d="M8 38 Q2 28 0 30" fill="url(#g)" stroke="#0284c7" stroke-width="1.5"/>
+  <path d="M8 38 Q2 48 0 46" fill="url(#g)" stroke="#0284c7" stroke-width="1.5"/>
+</svg>
