@@ -134,6 +134,36 @@ function NavUser({ collapsed }: { collapsed: boolean }) {
   )
 }
 
+const activeStyle = "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+const idleStyle   = "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+
+function NavItemButton({ item, collapsed, active }: { item: NavItem; collapsed: boolean; active: boolean }) {
+  const Icon = navIcons[item.icon] ?? LayoutDashboard
+
+  const button = (
+    <Link
+      to={item.path}
+      className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
+        ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
+        ${active ? activeStyle : idleStyle}`}
+    >
+      <Icon className="size-4 shrink-0" />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+    </Link>
+  )
+  if (collapsed) {
+    return (
+      <Tooltip delayDuration={500}>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        <TooltipContent side="right" align="center">
+          {item.label}
+        </TooltipContent>
+      </Tooltip>
+    )
+  }
+  return button
+}
+
 // ── Main Sidebar ───────────────────────────────────────────────────────────
 export function Sidebar() {
   const loc = useLocation()
@@ -143,38 +173,6 @@ export function Sidebar() {
   const isActive = (p: string) => {
     const pathOnly = p.split('?')[0]
     return loc.pathname === pathOnly || (pathOnly !== '/' && loc.pathname.startsWith(pathOnly))
-  }
-
-  const activeStyle = "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-  const idleStyle   = "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-
-  const NavItemButton = ({ item }: { item: NavItem }) => {
-    const Icon = navIcons[item.icon] ?? LayoutDashboard
-    const active = isActive(item.path)
-
-    const button = (
-      <Link
-        to={item.path}
-        onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.location.href = item.path }}
-        className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
-          ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
-          ${active ? activeStyle : idleStyle}`}
-      >
-        <Icon className="size-4 shrink-0" />
-        {!collapsed && <span className="truncate">{item.label}</span>}
-      </Link>
-    )
-    if (collapsed) {
-      return (
-        <Tooltip delayDuration={500}>
-          <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent side="right" align="center">
-            {item.label}
-          </TooltipContent>
-        </Tooltip>
-      )
-    }
-    return button
   }
 
   return (
@@ -215,7 +213,7 @@ export function Sidebar() {
               {g.label}
             </div>
             {g.items.map(i => (
-              <NavItemButton key={i.path} item={i} />
+              <NavItemButton key={i.path} item={i} collapsed={collapsed} active={isActive(i.path)} />
             ))}
           </div>
         ))}
