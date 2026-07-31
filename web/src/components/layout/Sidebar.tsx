@@ -153,26 +153,29 @@ export function Sidebar() {
     const Icon = navIcons[item.icon] ?? LayoutDashboard
     const active = isActive(item.path)
 
-    return (
-      <Tooltip delayDuration={500}>
-        <TooltipTrigger asChild>
-          <button
-            onClick={() => nav(item.path)}
-            className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
-              ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
-              ${active ? activeStyle : idleStyle}`}
-          >
-            <Icon className="size-4 shrink-0" />
-            {!collapsed && <span className="truncate">{item.label}</span>}
-          </button>
-        </TooltipTrigger>
-        {collapsed && (
+    const button = (
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); nav(item.path) }}
+        className={`flex w-full items-center gap-2 rounded-md text-[13px] transition-colors
+          ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5'}
+          ${active ? activeStyle : idleStyle}`}
+      >
+        <Icon className="size-4 shrink-0" />
+        {!collapsed && <span className="truncate">{item.label}</span>}
+      </button>
+    )
+    if (collapsed) {
+      return (
+        <Tooltip delayDuration={500}>
+          <TooltipTrigger asChild>{button}</TooltipTrigger>
           <TooltipContent side="right" align="center">
             {item.label}
           </TooltipContent>
-        )}
-      </Tooltip>
-    )
+        </Tooltip>
+      )
+    }
+    return button
   }
 
   return (
@@ -184,8 +187,8 @@ export function Sidebar() {
       {/* ── Brand Header ── */}
       <div
         className={`flex items-center gap-2.5 py-3.5 cursor-pointer select-none ${collapsed ? 'justify-center px-2' : 'px-3'}`}
-        onClick={() => nav('/')}
-        role="button"
+        onClick={(e) => { e.preventDefault(); nav('/') }}
+        role="link"
         tabIndex={0}
         onKeyDown={e => e.key === 'Enter' && nav('/')}
       >
@@ -229,6 +232,7 @@ export function Sidebar() {
         </div>
         {/* Collapse */}
         <button
+          type="button"
           className={`flex items-center rounded-md transition-colors hover:bg-sidebar-accent/50 ${collapsed ? 'justify-center p-1.5' : 'px-2 py-1.5 gap-2'}`}
           onClick={() => setCollapsed(c => !c)}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}

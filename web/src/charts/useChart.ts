@@ -116,8 +116,10 @@ export function useCandlestickSeries(
 
   useEffect(() => {
     if (!chartRef.current) return
-    const upColor = options?.upColor ?? (getComputedStyle(document.documentElement).getPropertyValue('--candle-up').trim() || '#26a69a')
-    const downColor = options?.downColor ?? (getComputedStyle(document.documentElement).getPropertyValue('--candle-down').trim() || '#ef5350')
+    const rawUp = getComputedStyle(document.documentElement).getPropertyValue('--candle-up').trim()
+    const rawDown = getComputedStyle(document.documentElement).getPropertyValue('--candle-down').trim()
+    const upColor = options?.upColor ?? ((!rawUp || rawUp.startsWith('oklch(')) ? '#26a69a' : rawUp)
+    const downColor = options?.downColor ?? ((!rawDown || rawDown.startsWith('oklch(')) ? '#ef5350' : rawDown)
     const series = chartRef.current.addSeries(CandlestickSeries, {
       upColor,
       downColor,

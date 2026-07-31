@@ -2,9 +2,16 @@ import { ColorType, type DeepPartial, type ChartOptions } from 'lightweight-char
 
 function getCSSVar(name: string, fallback: string): string {
   if (typeof window === 'undefined') return fallback
-  const style = getComputedStyle(document.documentElement)
-  const val = style.getPropertyValue(name).trim()
-  return val || fallback
+  try {
+    const style = getComputedStyle(document.documentElement)
+    const val = style.getPropertyValue(name).trim()
+    if (!val) return fallback
+    // OKLCH colors are not supported by lightweight-charts — fall back
+    if (val.startsWith('oklch(')) return fallback
+    return val
+  } catch {
+    return fallback
+  }
 }
 
 export interface ChartColors {
