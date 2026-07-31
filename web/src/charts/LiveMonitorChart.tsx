@@ -23,6 +23,7 @@ interface LiveMonitorChartProps {
   candles: Candle[]
   symbol: string
   range: string
+  symbols: string[]
   onSymbolChange: (symbol: string) => void
   onRangeChange: (range: string) => void
   onLoad: () => void
@@ -46,7 +47,7 @@ const DEFAULT_PARAMS: Record<string, Record<string, number | string>> = {
 }
 
 export default function LiveMonitorChart({
-  candles, symbol, range, onSymbolChange, onRangeChange, onLoad,
+  candles, symbol, range, symbols, onSymbolChange, onRangeChange, onLoad,
   indicatorSpecs, height = 500, markers, trades, loading, error,
 }: LiveMonitorChartProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -217,46 +218,42 @@ export default function LiveMonitorChart({
 
   return (
     <div ref={fullscreenContainerRef} style={{ width: '100%', borderRadius: 8, overflow: 'hidden', position: 'relative', background: isFullscreen ? 'var(--chart-bg)' : undefined }}>
-      {/* Toolbar — symbol + timeframe + range + indicators */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', background: 'var(--muted)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap' }}>
-        <input
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 8px', background: 'var(--muted)', borderBottom: '1px solid var(--border)', flexWrap: 'wrap', fontSize: 11 }}>
+        {/* Symbol dropdown */}
+        <select
           value={symbol}
-          onChange={e => onSymbolChange(e.target.value.toUpperCase())}
-          onKeyDown={e => { if (e.key === 'Enter') onLoad() }}
-          placeholder="Symbol"
+          onChange={e => { const sym = e.target.value; onSymbolChange(sym); setTimeout(onLoad, 0) }}
           style={{
-            width: 80, padding: '3px 6px', fontSize: 12, fontFamily: 'monospace', fontWeight: 600,
-            background: 'var(--card)', color: 'var(--foreground)', border: '1px solid var(--border)',
-            borderRadius: 4, outline: 'none',
+            padding: '3px 6px', fontSize: 11, fontWeight: 600, fontFamily: 'monospace',
+            background: 'var(--card)', color: 'var(--foreground)',
+            border: '1px solid var(--border)', borderRadius: 4, outline: 'none',
+            cursor: 'pointer', minWidth: 80,
           }}
-        />
+        >
+          {symbols.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+
+        {/* Range selector */}
+        <span style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>Range:</span>
         <div style={{ display: 'flex', gap: 1 }}>
           {RANGES.map(r => (
-            <button
-              key={r}
-              onClick={() => onRangeChange(r)}
-              style={{
-                padding: '3px 8px', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-                border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: range === r ? 'var(--accent)' : 'transparent',
-                color: range === r ? '#fff' : 'var(--muted-foreground)',
-              }}
-            >
-              {r}
-            </button>
+            <button key={r} onClick={() => onRangeChange(r)} style={{
+              padding: '3px 8px', fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+              border: 'none', borderRadius: 4, cursor: 'pointer',
+              background: range === r ? 'var(--accent)' : 'transparent',
+              color: range === r ? '#fff' : 'var(--muted-foreground)',
+            }}>{r}</button>
           ))}
         </div>
+
+        {/* Indicators */}
         <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setIndicatorOpen(v => !v)}
-            style={{
-              padding: '3px 8px', fontSize: 11, fontFamily: 'inherit',
-              border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
-              background: 'var(--card)', color: 'var(--foreground)',
-            }}
-          >
-            Indicators ▾
-          </button>
+          <button onClick={() => setIndicatorOpen(v => !v)} style={{
+            padding: '3px 8px', fontSize: 11, fontFamily: 'inherit',
+            border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer',
+            background: 'var(--card)', color: 'var(--foreground)',
+          }}>Indicators ▾</button>
           {indicatorOpen && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, zIndex: 60,
@@ -296,6 +293,7 @@ export default function LiveMonitorChart({
           )}
         </div>
         <div style={{ flex: 1 }} />
+        <span style={{ color: 'var(--muted-foreground)', fontSize: 10 }}>Bars:</span>
         <TimeframeChips variant="toolbar" />
         {loading && <span style={{ fontSize: 11, color: 'var(--muted-foreground)' }}>Loading...</span>}
       </div>

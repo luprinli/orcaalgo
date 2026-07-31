@@ -8,7 +8,7 @@ function loadPersistedTimeframe(): string {
       return stored
     }
   } catch { /* localStorage unavailable */ }
-  return 'M1'
+  return 'M5'
 }
 
 interface TimeframeState {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { candles, indicators as indicatorsApi } from '../api/client'
+import { candles, indicators as indicatorsApi, symbols as symbolsApi } from '../api/client'
 import { useWebSocket } from '../hooks/useWebSocket'
 import LiveMonitorChart from '../charts/LiveMonitorChart'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card'
@@ -15,6 +15,7 @@ export default function ChartingHub() {
   const [range, setRange] = useState('1D')
   const [candleData, setCandleData] = useState<Candle[]>([])
   const [indicatorSpecs, setIndicatorSpecs] = useState<IndicatorSpec[]>([])
+  const [symbolList, setSymbolList] = useState<string[]>(['SPY', 'AAPL', 'MSFT', 'GOOGL', 'TSLA', 'AMZN'])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -48,6 +49,9 @@ export default function ChartingHub() {
     indicatorsApi.list()
       .then(d => setIndicatorSpecs(d.indicators ?? []))
       .catch(() => {})
+    symbolsApi.list()
+      .then(s => { if (s?.length) setSymbolList((s as {ticker: string}[]).map(x => x.ticker)) })
+      .catch(() => {})
   }, [])
 
   return (
@@ -63,6 +67,7 @@ export default function ChartingHub() {
         candles={candleData}
         symbol={symbol}
         range={range}
+        symbols={symbolList}
         onSymbolChange={setSymbol}
         onRangeChange={setRange}
         onLoad={fetchCandles}

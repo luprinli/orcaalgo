@@ -582,9 +582,9 @@ func (s *Server) getCandles(c *gin.Context) {
 	}
 
 	// If no candles in DB, return synthetic sample data so the chart renders
-	// immediately (TradingView demo pattern). 1 day of 1-minute candles for SPY.
+	// immediately (TradingView demo pattern). Price range derived from symbol name hash.
 	if len(candles) == 0 || len(candles[0]) == 0 {
-		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticSPYCandles(rangeStr)})
+		c.JSON(http.StatusOK, gin.H{"symbol": symbol, "range": rangeStr, "candles": syntheticCandles(symbol, rangeStr)})
 		return
 	}
 
@@ -1887,35 +1887,44 @@ func (s *Server) getSystemHealth(c *gin.Context) {
 	})
 }
 
-// syntheticSPYCandles returns plausible 1-minute SPY candles for demo display
-// when the database has no candle data yet. Follows TradingView's pattern of
-// showing meaningful sample data rather than an empty chart.
-func syntheticSPYCandles(rangeStr string) []gin.H {
+// syntheticCandles returns plausible 5-minute candles for any symbol for demo
+// display when the database has no candle data yet. Price range is derived from
+// a deterministic hash of the symbol name (e.g. SPY≈450, AAPL≈190, TSLA≈250).
+func syntheticCandles(symbol, rangeStr string) []gin.H {
 	var count int
 	switch rangeStr {
 	case "1D":
-		count = 390
+		count = 78
 	case "1W":
-		count = 1950
-	case "1M":
-		count = 8190
-	default:
 		count = 390
+	case "1M":
+		count = 1638
+	default:
+		count = 78
 	}
-	if count > 1950 {
-		count = 1950
+	if count > 1638 {
+		count = 1638
 	}
 
-	base := 450.0
+	h := uint32(0)
+	for _, c := range symbol {
+		h = h*31 + uint32(c)
+	}
+	base := 50.0 + float64(h%9000)/10.0
+	if base < 20 {
+		base = 100
+	}
+
 	now := time.Now()
 	candles := make([]gin.H, count)
 	for i := 0; i < count; i++ {
-		t := now.Add(-time.Duration(count-i) * time.Minute)
-		drift := (float64(i)/float64(count)*2 - 1) * 2.0
-		vol := 0.5 + 0.5*float64(i%7)/6
-		open := base + drift + -2 + float64(i%13)*0.05
-		high := open + vol*0.3
-		low := open - vol*0.3
+		t := now.Add(-time.Duration(count-i) * 5 * time.Minute)
+		drift := (float64(i)/float64(count)*2 - 1) * (base * 0.005)
+		jitter := float64((i*7+int(h%13))%19) * (base * 0.0002)
+		vol := 0.3 + 0.7*float64(i%11)/10
+		open := base + drift + jitter
+		high := open + vol*base*0.001
+		low := open - vol*base*0.001
 		close := low + (high-low)*(0.4+0.2*float64(i%5)/4)
 		candles[i] = gin.H{
 			"time":   t.Format(time.RFC3339),
