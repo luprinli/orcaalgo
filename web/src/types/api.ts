@@ -94,6 +94,7 @@ export interface BacktestRequest {
 
 export interface ComboResult {
   batch_id?: string
+  run_id?: string
   symbol: string
   strategy_id: string
   timeframe: string
@@ -107,11 +108,26 @@ export interface ComboResult {
   avg_win: number
   avg_loss: number
   num_trades: number
+  num_wins?: number
+  num_losses?: number
   error?: string
   gate_passed?: boolean
   adverse_selection_rate?: number
   optimized?: boolean
   best_params?: Record<string, number>
+  strategy_params?: Record<string, number>
+  long_trades?: number
+  short_trades?: number
+  long_win_rate?: number
+  short_win_rate?: number
+  long_gross_pnl?: number
+  short_gross_pnl?: number
+  long_profit_factor?: number
+  short_profit_factor?: number
+  avg_mae?: number
+  avg_mfe?: number
+  equity_curve?: EquityPoint[]
+  trades?: TradeSummary[]
 }
 
 export interface MatrixResultsResponse {
@@ -218,6 +234,12 @@ export interface TradeSummary {
   strategy_id: string
   exit_reason: string
   commission: number
+  hmm_regime: number
+  stop_price: number
+  take_price: number
+  slippage_mid_bps: number
+  slippage_last_bps: number
+  adverse_selection: boolean
 }
 
 export interface DailyReturn {
@@ -663,4 +685,19 @@ export interface SimulateValidateResponse {
   }
   overall_passed?: boolean
   error?: string
+}
+
+export interface ParamVersion {
+  id: string
+  strategy_id: string
+  version_tag: string
+  params: Record<string, number>
+  in_sample_start?: string
+  in_sample_end?: string
+  oos_sharpe?: number
+  oos_max_dd?: number
+  oos_return_pct?: number
+  objective_score?: number
+  is_active: boolean
+  created_at: string
 }

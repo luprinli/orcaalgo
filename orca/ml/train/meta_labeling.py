@@ -31,6 +31,7 @@ from orca.ml.config import (
 )
 from orca.ml.dataset import FeatureDataset, split_temporal
 from orca.ml.purge_cv import PurgedKFold
+from orca.math.platt import platt_scale
 
 logger = logging.getLogger("orca.ml.train.meta_labeling")
 
@@ -157,6 +158,17 @@ class MetaLabelingTrainer:
 
         roc_auc = _compute_roc_auc(y_test, y_prob_test)
 
+        platt_result = platt_scale(y_prob_val, y_val, val_raw_p=y_prob_test, val_y=y_test)
+        platt_a = platt_result.a
+        platt_b = platt_result.b
+        platt_recommended = platt_result.recommended
+        if platt_recommended:
+            logger.info("platt scaling recommended: a=%.4f b=%.4f train_brier=%.4f val_brier=%.4f",
+                         platt_a, platt_b, platt_result.train_brier, platt_result.val_brier)
+        else:
+            platt_a = 1.0
+            platt_b = 0.0
+
         importance = {dataset.feature_names[i]: float(imp)
                       for i, imp in enumerate(model.feature_importances_)
                       if i < len(dataset.feature_names)}
@@ -241,6 +253,10 @@ class MetaLabelingTrainer:
                 "test_samples": len(X_test),
                 "train_brier": brier_train,
                 "val_brier": brier_val,
+                "platt_a": platt_a,
+                "platt_b": platt_b,
+                "platt_recommended": platt_recommended,
+                "platt_val_brier": platt_result.val_brier,
             },
         )
 

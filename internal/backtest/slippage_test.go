@@ -90,6 +90,115 @@ func TestFillSimulator_MultipleSymbols(t *testing.T) {
 	}
 }
 
+func TestLimitFillProbability_AtMid(t *testing.T) {
+	m := DefaultEquitySlippage()
+	p := m.LimitFillProbability(0)
+	if p < 0.95 || p > 1.0 {
+		t.Errorf("At mid should have near-certain fill, got %f", p)
+	}
+}
+
+func TestLimitFillProbability_FarFromMid(t *testing.T) {
+	m := DefaultEquitySlippage()
+	p := m.LimitFillProbability(10.0)
+	if p > 0.5 {
+		t.Errorf("10 bps from mid should have <50%% fill prob, got %f", p)
+	}
+	p = m.LimitFillProbability(50.0)
+	if p < 0.04 || p > 0.15 {
+		t.Errorf("50 bps should decay significantly, got %f", p)
+	}
+}
+
+func TestLimitFillProbability_Clamped(t *testing.T) {
+	m := DefaultEquitySlippage()
+	p := m.LimitFillProbability(1000.0)
+	if p < 0.04 || p > 0.06 {
+		t.Errorf("Very far from mid should clamp near minimum, got %f", p)
+	}
+}
+
+func TestCalibrateSlippageModel_InsufficientSamples(t *testing.T) {
+	m := DefaultEquitySlippage()
+	original := m.SpreadBps
+	calibrated := CalibrateSlippageModel(m, 5.0, 5)
+	if calibrated.SpreadBps != original {
+		t.Error("Insufficient samples should not change model")
+	}
+}
+
+func TestCalibrateSlippageModel_AdjustsUp(t *testing.T) {
+	m := DefaultEquitySlippage()
+	observed := m.SpreadBps + m.AdverseSelectBps + m.MaxSlippage*0.4 + 2.0
+	calibrated := CalibrateSlippageModel(m, observed, 50)
+	if calibrated.SpreadBps <= m.SpreadBps {
+		t.Error("Higher observed slippage should increase model spread")
+	}
+}
+
+func TestCalibrateSlippageModel_AdjustsDown(t *testing.T) {
+	m := DefaultEquitySlippage()
+	observed := 0.1
+	calibrated := CalibrateSlippageModel(m, observed, 50)
+	if calibrated.SpreadBps >= m.SpreadBps {
+		t.Error("Lower observed slippage should decrease model spread")
+	}
+}
+
+func TestAdverseSelectBps_IncreasesSlippage(t *testing.T) {
+	mNoAS := SlippageModel{SpreadBps: 0.5, MaxSlippage: 0, AdverseSelectBps: 0}
+	mWithAS := SlippageModel{SpreadBps: 0.5, MaxSlippage: 0, AdverseSelectBps: 2.0}
+	fsNoAS := NewFillSimulatorWithSeed(mNoAS, 42)
+	fsWithAS := NewFillSimulatorWithSeed(mWithAS, 42)
+
+	fillNo := fsNoAS.SimulateFillWithTCA(1, "SPY", 500, 100, "BUY", 500, time.Now(), 500, 500, 0)
+	fillWith := fsWithAS.SimulateFillWithTCA(1, "SPY", 500, 100, "BUY", 500, time.Now(), 500, 500, 0)
+
+	if fillWith.FillPrice.Float64() <= fillNo.FillPrice.Float64() {
+		t.Errorf("Adverse selection should increase fill price for BUY: noAS=%.4f withAS=%.4f",
+			fillNo.FillPrice.Float64(), fillWith.FillPrice.Float64())
+	}
+}
+
+func TestVolumeImpact_SqrtModel(t *testing.T) {
+	m := SlippageModel{SpreadBps: 0, MaxSlippage: 0, AdverseSelectBps: 0, VolumeImpactFactor: 0.5}
+	fs := NewFillSimulatorWithSeed(m, 1)
+
+	fillSmall := fs.SimulateFillWithTCA(1, "SPY", 500, 10, "BUY", 500, time.Now(), 500, 500, 100000)
+	fillLarge := fs.SimulateFillWithTCA(1, "SPY", 500, 1000, "BUY", 500, time.Now(), 500, 500, 100000)
+
+	if fillLarge.FillPrice.Float64() <= fillSmall.FillPrice.Float64() {
+		t.Errorf("Larger qty should have higher fill price due to volume impact: small=%.4f large=%.4f",
+			fillSmall.FillPrice.Float64(), fillLarge.FillPrice.Float64())
+	}
+}
+
+func TestNewFillSimulatorWithSeed_Deterministic(t *testing.T) {
+	m := DefaultEquitySlippage()
+	fs1 := NewFillSimulatorWithSeed(m, 42)
+	fs2 := NewFillSimulatorWithSeed(m, 42)
+
+	tickTime := time.Date(2025, 1, 15, 10, 30, 0, 0, time.UTC)
+	f1 := fs1.SimulateFill(1, "AAPL", 185.0, 50.0, "BUY", 185.0, tickTime)
+	f2 := fs2.SimulateFill(1, "AAPL", 185.0, 50.0, "BUY", 185.0, tickTime)
+	if f1.FillPrice != f2.FillPrice || f1.FillQuantity != f2.FillQuantity {
+		t.Errorf("With same seed, fills should be deterministic: price(%f vs %f) qty(%f vs %f)",
+			f1.FillPrice.Float64(), f2.FillPrice.Float64(), f1.FillQuantity, f2.FillQuantity)
+	}
+}
+
+func TestFillSimulator_SlippageMidLast(t *testing.T) {
+	m := SlippageModel{SpreadBps: 0.5, MaxSlippage: 0, AdverseSelectBps: 0}
+	fs := NewFillSimulatorWithSeed(m, 99)
+	fill := fs.SimulateFillWithTCA(1, "AAPL", 185.0, 100, "BUY", 185.0, time.Now(), 184.5, 184.0, 0)
+	if fill.SlippageMidBps <= 0 {
+		t.Error("BUY above mid should have positive SlippageMidBps")
+	}
+	if fill.SlippageLastBps <= 0 {
+		t.Error("BUY above last should have positive SlippageLastBps")
+	}
+}
+
 func TestLowLatencySlippage(t *testing.T) {
 	m := LowLatencySlippage()
 	if m.LatencyMs >= 5.0 {

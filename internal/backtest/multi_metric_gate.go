@@ -148,7 +148,7 @@ func EvaluateOOSMultiMetric(owr *OptimizedWalkForwardResult, mcResult *MonteCarl
 	if standard.MinSortinoRatio > 0 {
 		var totalSortino float64
 		for _, w := range owr.Windows {
-			totalSortino += w.InSampleSharpe
+			totalSortino += w.OutSampleSortino
 		}
 		avgSortino := 0.0
 		if len(owr.Windows) > 0 {

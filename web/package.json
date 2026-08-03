@@ -12,6 +12,10 @@
     "format": "prettier --check src/",
     "format:fix": "prettier --write src/",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npx playwright test",
     "prepare": "husky"
   },
   "dependencies": {

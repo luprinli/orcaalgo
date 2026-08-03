@@ -107,3 +107,19 @@ class TestMetaLabelingTrainer:
         X, _ = dataset.to_numpy()
         proba = predict(loaded, X)
         assert len(proba) == len(dataset.samples)
+
+    def test_platt_calibration_metadata(self):
+        dataset = make_synthetic_dataset(300)
+        trainer = MetaLabelingTrainer(n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5)
+        result = trainer.train(dataset)
+
+        assert "platt_a" in result.metadata, "Platt a should be in metadata"
+        assert "platt_b" in result.metadata, "Platt b should be in metadata"
+        assert "platt_recommended" in result.metadata, "Platt recommended flag should be in metadata"
+        assert "platt_val_brier" in result.metadata, "Platt val Brier should be in metadata"
+
+        a = result.metadata["platt_a"]
+        b = result.metadata["platt_b"]
+        assert a > 0, f"Platt a should be positive, got {a}"
+        assert isinstance(a, float)
+        assert isinstance(b, float)

@@ -16,6 +16,7 @@ type StrategyAllocation struct {
 	DrawdownPct float64
 	OpenLong    map[string]float64
 	OpenShort   map[string]float64
+	Suspended   bool
 }
 
 type CapitalRequest struct {
@@ -151,7 +152,12 @@ func (c *CapitalPoolManager) RequestCapital(ctx context.Context, req CapitalRequ
 	stratDrawdown := propfirm.DrawdownPct(strat.PeakBalance, c.poolState.TotalBalance)
 	maxStratDD := p.MaxDrawdownPct * 0.5
 	if stratDrawdown > maxStratDD {
-		return CapitalResult{ApprovedSize: 0, Reason: "per_strategy_drawdown"}
+		strat.Suspended = true
+		return CapitalResult{ApprovedSize: 0, Reason: "per_strategy_drawdown_suspended"}
+	}
+
+	if strat.Suspended {
+		return CapitalResult{ApprovedSize: 0, Reason: "strategy_suspended"}
 	}
 
 	size := c.positionSizer.ComputeSize(req.Confidence, req.BaseSize, req.Symbol, strat.Allocated, 0)
@@ -232,6 +238,30 @@ func (c *CapitalPoolManager) StrategyMetrics() []StrategyAllocation {
 	return metrics
 }
 
+// ResumeStrategy clears the Suspended flag for a strategy and resets its
+// peak balance to the current total balance so it can trade again.
+func (c *CapitalPoolManager) ResumeStrategy(strategyID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if s, ok := c.strategies[strategyID]; ok {
+		s.Suspended = false
+		s.PeakBalance = c.poolState.TotalBalance
+	}
+}
+
+// SuspendedStrategies returns the IDs of all currently suspended strategies.
+func (c *CapitalPoolManager) SuspendedStrategies() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	var ids []string
+	for id, s := range c.strategies {
+		if s.Suspended {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 func (c *CapitalPoolManager) TotalBalance() float64 {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -269,4 +299,20 @@ func (c *CapitalPoolManager) HaltReason() string {
 }
 
 var _ CapitalGate = (*CapitalPoolManager)(nil)
+
+// HasOpenPosition returns true if any strategy has an open position on the
+// given symbol + side. Used for cross-strategy correlation braking.
+func (c *CapitalPoolManager) HasOpenPosition(symbol, side string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, s := range c.strategies {
+		if side == "BUY" && s.OpenLong[symbol] > 0 {
+			return true
+		}
+		if side == "SELL" && s.OpenShort[symbol] > 0 {
+			return true
+		}
+	}
+	return false
+}
 

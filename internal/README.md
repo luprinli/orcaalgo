@@ -24,7 +24,7 @@ HTTP API server using the Gin framework. 50+ endpoints organized by domain.
 | `backtest_history_handler.go` | Backtest result storage and retrieval |
 | `universe_handler.go` | Universe snapshot and configuration |
 | `settings_handler.go` | User settings (notifications, risk) |
-| `data_source_handler.go` | Market data source management |
+| `param_version_handler.go` | Parameter version management: list versions, get active, activate/deactivate |
 | `middleware/middleware.go` | JWT auth middleware, CORS, rate limiting |
 
 ### `internal/broker/` — Broker Adapters
@@ -63,15 +63,21 @@ Plugin registry pattern with `Adapter` interface.
 | `batch_runner.go` | Matrix backtest orchestrator with Warnings and GatePassed propagation |
 | `multi_metric_gate.go` | Multi-Metric Gate with Default/Lenient/Strict profiles, auto-applied via ApplyGate |
 
-**Strategy runners** (`internal/backtest/strategy/`):
+**Strategy runners** (`internal/strategy/`):
 
 | File | Strategy | Key Features |
 |------|----------|-------------|
-| `orb_runner.go` | Opening Range Breakout | Entry buffer, ATR stops, time-of-day exit, regime gate (blocks Calm+Crisis) |
-| `trend_runner.go` | Trend Following | EMA crossover, ADX confirmation, trailing stop, exit signal propagation |
-| `grid_runner.go` | Grid Trading | Multi-level grid, take-profit, regime gate (blocks Crisis), exit signal propagation |
-| `session_scalp_runner.go` | Session Scalping | 9:30-11:00 ET window, volume-confirmed breakout, 2:1 R:R, time exit, regime-gated |
-| `registry.go` | Strategy Registry | Plugin registry with DefaultRegistry() registering all runners |
+| `orb_runner.go` | Opening Range Breakout | Entry buffer, ATR stops, min volatility requirement (0.3%), 5m + 15m variants |
+| `trend_runner.go` | Trend Following | EMA crossover, ADX confirmation, CHOP filter, trailing stop |
+| `grid_runner.go` | Grid Trading | Multi-level grid, vol-adjusted spacing (ATR/VIX), disabled by default |
+| `mean_reversion.go` | Mean Reversion | Z-score with SMA or VWAP mode, dynamic entry_z via VIX filter |
+| `session_scalp_runner.go` | Session Scalping | 9:30-11:00 ET window, volume-confirmed breakout, max trades/day limit |
+| `dragon_trend_runner.go` | Dragon Capital Trend | Multi-EMA ribbon (8,21,50,200), proportional sizing by alignment count |
+| `vol_harvesting_runner.go` | Volatility Harvesting | VIX-gated mean reversion, tight ATR stops, HighVol only |
+| `pairs_runner.go` | Pairs Trading | Cointegration spread, cached hedge ratio, p-value validity check |
+| `vix_futures_carry_runner.go` | VIX Futures Carry | Contango proxy via spot VIX, fade mean-reversion, max hold exit |
+| `volume_scalp_runner.go` | Volume Scalp | Volume-confirmed breakout (V > avg × 2), session range |
+| `registry.go` | Strategy Registry | Factory table with 16 registered strategies (14 active) |
 
 ### `internal/risk/` — Risk Management
 
@@ -81,6 +87,9 @@ Plugin registry pattern with `Adapter` interface.
 | `rate_limiter.go` | Dynamic rate limiter using Redis sorted sets, regime-aware limits |
 | `trading_controls.go` | **OrderRateLimiter** (10/sec per symbol), **VolatilityHalt** (z-score >3.0), **ExposureTracker** (max leverage 5×, per-symbol 25%) |
 | `position_sizer.go` | Shared PositionSizer: Kelly (k=0.25), regime, VIX, sentiment, correlation scaling. Used by both backtest and live paths |
+| `signal_gate_impl.go` | Concrete SignalGate wrapping VolatilityHalt, PositionSizer, ExposureTracker, OrderRateLimiter. Shared by both engines via RiskPipeline |
+| `regime_activation.go` | RegimeActivationMatrix: 14 strategies × 4 regimes with per-regime Kelly multiplier overrides |
+| `hmm.go` / `hmm_enhanced.go` | 4-state HMM forward algorithm (Calm/Trending/HighVol/Crisis) plus 6-state enhanced variant. Python-trained, Go runtime |
 | `hmm_validation.go` | HMM parameter sanity checks: emission SD ordering, transition plausibility, row sums |
 | `memory_guard.go` | Security memory guard framework |
 | `credential.go` | API key rotation tracking, vault integration |
@@ -91,10 +100,11 @@ PostgreSQL + TimescaleDB access via `pgx/v5`.
 
 | File | Purpose |
 |------|---------|
-| `repository.go` | Full CRUD: strategies (7 types), symbols, providers, trades, regime logs, candles |
+| `repository.go` | Full CRUD: strategies (16 types), symbols, providers, trades, regime logs, candles |
+| `parameter_version_repo.go` | Parameter version CRUD: upsert, get active, list, activate, deactivate. Backed by `strategy_params_version` table |
 | `seeder.go` | Development seed data: strategies, symbols, regime logs |
-| `fixtures.go` | Fixtures: 7 strategies (grid, mean_reversion, breakout, trend, scalp, stat_arb, vol_arb), 17 Stooq symbols |
-| `migrations/` | SQL migration files (golang-migrate compatible). Initial schema with strategies, symbols, candles, regime_logs |
+| `fixtures.go` | Fixtures: 16 strategies across 4 regimes, 17 Stooq symbols |
+| `migrations/` | 30 SQL migration files (golang-migrate compatible). Latest: `000030_parameter_versions` |
 
 ### `internal/propfirm/` — Prop Firm Profiles
 
@@ -108,7 +118,8 @@ Vendor-agnostic profile system. Single `Profile` struct supports FTMO, TopStep, 
 
 | File | Purpose |
 |------|---------|
-| `scheduler.go` | Goroutine-based scheduler: VIX fetch (60s), sentiment fetch (3600s), WebSocket risk broadcast (5s with live regime), key rotation, daily reset |
+| `scheduler.go` | Goroutine-based scheduler: VIX fetch (60s), sentiment fetch (3600s), WebSocket risk broadcast (5s), key rotation, daily reset, parameter reoptimization |
+| `reoptimization.go` | Degradation-triggered daily re-optimization: OOS Sharpe drop >20% or >90d age → light optimizer → version save/activate |
 
 ### `internal/monitor/` — Monitoring & Telemetry
 

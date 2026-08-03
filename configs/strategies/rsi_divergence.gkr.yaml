@@ -32,12 +32,20 @@ strategy:
       params:
         atr_multiplier: 4.0
         atr_length: 14
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "supertrend_filter.signal"
+      params:
+        blocked_states: [3]
     - id: "position_sizer"
       token_ref:
         token_id: "size.kelly_fractional"
         version: ">=1.0"
       inputs:
-        signal: "supertrend_filter.signal"
+        signal: "regime_gate.signal"
       params:
         multiplier: 0.25
         per_trade_cap_pct: 0.02

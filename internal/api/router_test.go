@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lee-econ/orca-core/internal/api/middleware"
+	"github.com/lee-econ/orca-core/internal/backtest"
 	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/broker/paper"
 	"github.com/lee-econ/orca-core/internal/risk"
@@ -336,4 +338,133 @@ func TestGetRiskStatus(t *testing.T) {
 	if _, ok := resp["balance"]; !ok {
 		t.Fatal("missing balance key")
 	}
+}
+
+func TestSyntheticGenerator_DeterministicReseeding(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
+	symbols := []string{"AAPL", "EURUSD", "BTCUSD", "XAUUSD", "SPX500"}
+
+	run1 := generateSyntheticCandles(symbols, start, end, "1d")
+	run2 := generateSyntheticCandles(symbols, start, end, "1d")
+
+	for si, sym := range symbols {
+		if len(run1[si]) != len(run2[si]) {
+			t.Errorf("%s: length mismatch run1=%d run2=%d", sym, len(run1[si]), len(run2[si]))
+			continue
+		}
+		for ci := range run1[si] {
+			c1, c2 := run1[si][ci], run2[si][ci]
+			if c1.Close.Float64() != c2.Close.Float64() {
+				t.Errorf("%s[%d]: non-deterministic output %.6f != %.6f", sym, ci, c1.Close.Float64(), c2.Close.Float64())
+				break
+			}
+		}
+	}
+
+	if t.Failed() {
+		t.Fatal("synthetic generator seeding is not deterministic")
+	}
+}
+
+func TestSyntheticGenerator_AssetClassDifferentiation(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
+
+	equity := generateSyntheticCandles([]string{"AAPL"}, start, end, "1d")[0]
+	forex := generateSyntheticCandles([]string{"EURUSD"}, start, end, "1d")[0]
+	crypto := generateSyntheticCandles([]string{"BTCUSD"}, start, end, "1d")[0]
+
+	// All must have enough bars
+	if len(equity) < 200 || len(forex) < 200 || len(crypto) < 200 {
+		t.Fatalf("insufficient bars: equity=%d forex=%d crypto=%d", len(equity), len(forex), len(crypto))
+	}
+
+	// All must have non-zero price variance
+	for _, tc := range []struct {
+		name    string
+		candles []backtest.Candle
+	}{
+		{"AAPL", equity}, {"EURUSD", forex}, {"BTCUSD", crypto},
+	} {
+		var sum, sumSq float64
+		for i := 1; i < len(tc.candles); i++ {
+			r := (tc.candles[i].Close.Float64() - tc.candles[i-1].Close.Float64()) / tc.candles[i-1].Close.Float64()
+			sum += r
+			sumSq += r * r
+		}
+		n := float64(len(tc.candles) - 1)
+		variance := sumSq/n - (sum/n)*(sum/n)
+		if variance <= 0 {
+			t.Errorf("%s: zero price variance — data is flat", tc.name)
+		}
+		if math.IsNaN(variance) || math.IsInf(variance, 0) {
+			t.Errorf("%s: NaN/Inf variance — data corruption", tc.name)
+		}
+		t.Logf("%s: n=%d, ann_vol=%.2f%%", tc.name, len(tc.candles), math.Sqrt(variance*252)*100)
+	}
+
+	// Crypto must have higher volatility than equity and forex
+	cryptoRet := dailyReturns(crypto)
+	equityRet := dailyReturns(equity)
+	cryptoVol := stdDev(cryptoRet) * math.Sqrt(252)
+	equityVol := stdDev(equityRet) * math.Sqrt(252)
+	if cryptoVol <= equityVol {
+		t.Errorf("crypto vol %.2f <= equity vol %.2f — asset class differentiation missing", cryptoVol, equityVol)
+	}
+	t.Logf("equity_vol=%.2f%%, crypto_vol=%.2f%%, ratio=%.2f", equityVol*100, cryptoVol*100, cryptoVol/equityVol)
+
+	// Symbols must differ: equity AAPL vs equity MSFT should not be identical
+	msft := generateSyntheticCandles([]string{"MSFT"}, start, end, "1d")[0]
+	identical := true
+	for i := range equity {
+		if i >= len(msft) || equity[i].Close.Float64() != msft[i].Close.Float64() {
+			identical = false
+			break
+		}
+	}
+	if identical {
+		t.Error("AAPL and MSFT produce identical price paths — per-symbol seeding broken")
+	}
+}
+
+func TestSyntheticGenerator_IntradayBars(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
+	sym := "AAPL"
+
+	d1 := generateSyntheticCandles([]string{sym}, start, end, "1d")[0]
+	d5 := generateSyntheticCandles([]string{sym}, start, end, "5m")[0]
+
+	ratio := float64(len(d5)) / float64(len(d1))
+	expectedRatio := 78.0 // 78 five-minute bars per daily bar
+	if ratio < expectedRatio*0.9 || ratio > expectedRatio*1.1 {
+		t.Errorf("5m/daily bar ratio = %.1f, expected ~%.1f (intraday generation broken)", ratio, expectedRatio)
+	}
+	t.Logf("%s: 1d=%d bars, 5m=%d bars, ratio=%.1f", sym, len(d1), len(d5), ratio)
+}
+
+func dailyReturns(candles []backtest.Candle) []float64 {
+	r := make([]float64, len(candles)-1)
+	for i := 1; i < len(candles); i++ {
+		r[i-1] = (candles[i].Close.Float64() - candles[i-1].Close.Float64()) / candles[i-1].Close.Float64()
+	}
+	return r
+}
+
+func stdDev(vals []float64) float64 {
+	if len(vals) < 2 {
+		return 0
+	}
+	var sum, sumSq float64
+	for _, v := range vals {
+		sum += v
+		sumSq += v * v
+	}
+	n := float64(len(vals))
+	variance := sumSq/n - (sum/n)*(sum/n)
+	if variance < 0 {
+		variance = 0
+	}
+	return math.Sqrt(variance)
 }

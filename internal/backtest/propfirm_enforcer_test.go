@@ -4,20 +4,41 @@ import "testing"
 
 func TestPropFirmEnforcerDailyLoss(t *testing.T) {
 	f := DefaultPropFirmEnforcer(100000.0)
+	f.SoftHaltThresholdPct = 4.5
+	f.HardHaltThresholdPct = 5.0
 
 	if !f.CheckDailyLoss() {
 		t.Error("should pass with no loss")
 	}
 
+	// Soft halt at -4.7% (between 4.5% and 5.0%)
+	f.CurrentBalance = 95300
+	if !f.CheckDailyLoss() {
+		t.Error("soft halt should still return true (not a hard halt)")
+	}
+	if !f.IsSoftHalted() {
+		t.Error("should be soft-halted at -4.7%")
+	}
+	if f.IsHalted() {
+		t.Error("should NOT be hard-halted at -4.7%")
+	}
+	if got := f.SoftHaltMultiplier(); got != 0.5 {
+		t.Errorf("soft halt multiplier = %v, want 0.5", got)
+	}
+
+	// Reset and test hard halt at -6%
+	f = DefaultPropFirmEnforcer(100000.0)
+	f.SoftHaltThresholdPct = 4.5
+	f.HardHaltThresholdPct = 5.0
 	f.CurrentBalance = 94000
 	if f.CheckDailyLoss() {
-		t.Error("should fail at 6% daily loss")
+		t.Error("should fail at 6% daily loss (hard halt)")
 	}
 	if !f.IsHalted() {
 		t.Error("should be halted after daily loss breach")
 	}
-	if f.HaltReason() != "daily_loss_limit" {
-		t.Errorf("expected halt reason daily_loss_limit, got %s", f.HaltReason())
+	if f.HaltReason() != "daily_loss_limit_hard" {
+		t.Errorf("expected daily_loss_limit_hard, got %s", f.HaltReason())
 	}
 }
 

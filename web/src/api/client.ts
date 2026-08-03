@@ -15,6 +15,7 @@ import type {
   SimulateCalibrateRequest, SimulateCalibrateResponse,
   SimulateValidateResponse,
   SystemHealth,
+  ParamVersion,
 } from '../types/api'
 
 export interface Symbol {
@@ -406,6 +407,15 @@ export const universe = {
   refresh: () => post<{ total: number }>('/api/v1/universe/refresh'),
   createConfig: (data: Record<string, unknown>) => post('/api/v1/universe/configs', data),
   activateConfig: (id: string) => post(`/api/v1/universe/configs/${id}/activate`),
+}
+
+export const paramVersions = {
+  list: (strategyId: string) => get<ParamVersion[]>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params`),
+  active: (strategyId: string) => get<ParamVersion | null>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params/active`),
+  activate: (strategyId: string, versionTag: string) =>
+    post<{ status: string; active_version: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params/activate`, { version_tag: versionTag }),
+  deactivate: (strategyId: string) =>
+    post<{ status: string; message: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params/deactivate`),
 }
 
 export const system = {

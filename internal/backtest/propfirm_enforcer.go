@@ -9,6 +9,8 @@ import (
 
 type PropFirmEnforcer struct {
 	DailyLossLimitPct     float64
+	SoftHaltThresholdPct  float64
+	HardHaltThresholdPct  float64
 	MaxDrawdownPct        float64
 	MaxPositionPct        float64
 	ConsistencyThreshold  float64
@@ -20,6 +22,7 @@ type PropFirmEnforcer struct {
 	DailyPnLPct           float64
 	CumulativePnL         float64
 	halted                bool
+	softHalted            bool
 	haltReason            string
 	ConsistencyMultiplier float64
 	CurrentRegime         int8
@@ -47,6 +50,8 @@ func NewPropFirmEnforcerFromProfile(p *propfirm.Profile, startingBalance float64
 	}
 	return &PropFirmEnforcer{
 		DailyLossLimitPct:     p.MaxDailyLossPct,
+		SoftHaltThresholdPct:  p.SoftHaltThresholdPct,
+		HardHaltThresholdPct:  p.HardHaltThresholdPct,
 		MaxDrawdownPct:        p.MaxDrawdownPct,
 		MaxPositionPct:        p.MaxPositionPct,
 		ConsistencyThreshold:  p.ConsistencyThresholdPct,
@@ -73,18 +78,42 @@ func (f *PropFirmEnforcer) CheckDailyLoss() bool {
 	}
 	dailyChange := propfirm.DailyLossPct(f.StartingBalance, f.CurrentBalance)
 	f.DailyPnLPct = dailyChange
-	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, f.DailyLossLimitPct) {
+
+	hardLimit := f.HardHaltThresholdPct
+	if hardLimit <= 0 {
+		hardLimit = f.DailyLossLimitPct
+	}
+	softLimit := f.SoftHaltThresholdPct
+	if softLimit <= 0 {
+		softLimit = hardLimit * 0.9
+	}
+
+	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, hardLimit) {
 		f.halted = true
-		f.haltReason = "daily_loss_limit"
+		f.softHalted = true
+		f.haltReason = "daily_loss_limit_hard"
 		f.DailyBreaches = append(f.DailyBreaches, RuleBreach{
 			Date:   time.Now(),
-			Code:   "DAILY_DD",
+			Code:   "DAILY_DD_HARD",
 			Value:  dailyChange,
-			Limit:  -f.DailyLossLimitPct,
+			Limit:  -hardLimit,
 			Action: "halted",
 		})
 		return false
 	}
+
+	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, softLimit) {
+		f.softHalted = true
+		f.DailyBreaches = append(f.DailyBreaches, RuleBreach{
+			Date:   time.Now(),
+			Code:   "DAILY_DD_SOFT",
+			Value:  dailyChange,
+			Limit:  -softLimit,
+			Action: "size_reduced",
+		})
+		return true // not a hard halt — positions reduced by SoftHaltMultiplier
+	}
+
 	return true
 }
 
@@ -269,6 +298,13 @@ func (f *PropFirmEnforcer) MarkViolated(reason string) {
 }
 
 func (f *PropFirmEnforcer) IsHalted() bool       { return f.halted }
+func (f *PropFirmEnforcer) IsSoftHalted() bool    { return f.softHalted && !f.halted }
+func (f *PropFirmEnforcer) SoftHaltMultiplier() float64 {
+	if f.IsSoftHalted() {
+		return 0.5
+	}
+	return 1.0
+}
 func (f *PropFirmEnforcer) HaltReason() string    { return f.haltReason }
 func (f *PropFirmEnforcer) CurrentPhase() int     { return f.currentPhase }
 func (f *PropFirmEnforcer) ProfitTargetMet() bool { return f.profitTargetMet }

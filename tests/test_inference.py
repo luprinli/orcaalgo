@@ -99,3 +99,44 @@ class TestPredictJSONModel:
             assert 0.0 <= p_pos <= 1.0
             assert 0.0 <= p_neg <= 1.0
             assert p_pos > p_neg
+
+    def test_platt_scaling_applied(self):
+        model_data = {
+            "feature_importances": [0.5, 0.3] + [0.0] * 19,
+            "platt_a": 2.0,
+            "platt_b": -1.0,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.json"
+            path.write_text(json.dumps(model_data))
+
+            from orca.ml.inference import _predict_json_model
+            X = np.array([[1.0, 1.0] + [0.0] * 19], dtype=np.float64)
+            p = _predict_json_model(str(path), X)
+            assert 0.0 <= p <= 1.0
+
+    def test_platt_identity(self):
+        model_data = {
+            "feature_importances": [0.5] + [0.0] * 20,
+            "platt_a": 1.0,
+            "platt_b": 0.0,
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.json"
+            path.write_text(json.dumps(model_data))
+
+            from orca.ml.inference import _predict_json_model
+            X = np.array([[1.0] + [0.0] * 20], dtype=np.float64)
+            p = _predict_json_model(str(path), X)
+            assert 0.5 < p < 0.7
+
+    def test_platt_without_params(self):
+        model_data = {"feature_importances": [0.5] + [0.0] * 20}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "model.json"
+            path.write_text(json.dumps(model_data))
+
+            from orca.ml.inference import _predict_json_model
+            X = np.array([[1.0] + [0.0] * 20], dtype=np.float64)
+            p = _predict_json_model(str(path), X)
+            assert 0.0 <= p <= 1.0

@@ -120,7 +120,9 @@ func GlobalRegistry() *Registry {
 		// runner instance so concurrent backtests never share mutable state.
 		factories := map[string]func() Strategy{
 			"opening_range_breakout": func() Strategy { return NewOrbRunner() },
+			"orb":                    func() Strategy { return NewOrbRunner() },
 			"breakout":               func() Strategy { return NewOrbRunner() },
+			"orb_15m":                func() Strategy { r := NewOrbRunner(); r.RangeMinutes = 15; return r },
 			"grid":                   func() Strategy { return NewGridRunner() },
 			"grid_trading":           func() Strategy { return NewGridRunner() },
 			"trend_following":        func() Strategy { return NewTrendRunner() },
@@ -139,10 +141,18 @@ func GlobalRegistry() *Registry {
 			"keltner":                func() Strategy { return NewKeltnerMACDRunner() },
 			"ichimoku_cloud":         func() Strategy { return NewIchimokuRunner() },
 			"ichimoku":               func() Strategy { return NewIchimokuRunner() },
-			"pairs_trading":          func() Strategy { return NewMeanReversionRunner(30, 2.0, 0.3, 40) },
-			"stat_arb":               func() Strategy { return NewMeanReversionRunner(30, 2.0, 0.3, 40) },
-			"volatility_harvesting":  func() Strategy { return NewMeanReversionRunner(20, 1.8, 0.2, 30) },
-			"vol_arb":                func() Strategy { return NewMeanReversionRunner(20, 1.8, 0.2, 30) },
+			"pairs_trading":          func() Strategy { return NewPairsRunner("", "") },
+			"stat_arb":               func() Strategy { return NewPairsRunner("", "") },
+			"volatility_harvesting":  func() Strategy { return NewVolHarvestingRunner() },
+			"vol_arb":                func() Strategy { return NewVolHarvestingRunner() },
+			"dragon_trend":           func() Strategy { return NewDragonTrendRunner() },
+			"vwap_mr":                func() Strategy { return &MeanReversionRunner{
+				Lookback: 20, EntryZ: 1.5, ExitZ: 0.5, MaxHold: 40, TrendPeriod: 100, Mode: "vwap",
+				closeHistory: make([]float64, 220), volumeHistory: make([]float64, 220),
+			}},
+			"volume_scalp":           func() Strategy { return NewVolumeScalpRunner() },
+			"vix_futures_carry":      func() Strategy { return NewVIXFuturesCarryRunner() },
+			"vol_grid":                func() Strategy { r := NewGridRunner(); r.Disabled = false; r.AdjustByVolatility = true; return r },
 		}
 		for name, fn := range factories {
 			globalReg.factories[name] = fn

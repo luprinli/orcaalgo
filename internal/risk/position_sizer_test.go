@@ -166,3 +166,45 @@ func TestPositionSizer_LotRounding(t *testing.T) {
 		t.Errorf("lot-rounded size should be multiple of 100, got %.4f", size)
 	}
 }
+
+func TestPositionSizer_KellyViolationGuard(t *testing.T) {
+	ps := NewPositionSizer(propfirm.DefaultFTMOProfile())
+
+	// Default kelly should be 0.25
+	ps.mu.RLock()
+	defaultKelly := ps.kellyMult
+	ps.mu.RUnlock()
+	if defaultKelly != DefaultKellyMultiplier {
+		t.Errorf("default kelly = %v, want %v", defaultKelly, DefaultKellyMultiplier)
+	}
+
+	// Kelly multiplier can be set, but sizing should respect it.
+	ps.SetKellyMultiplier(0.55)
+	size := ps.ComputeSizeUncapped(1.0, 100, 0)
+	if size > 100 {
+		t.Errorf("size with kelly=0.55 should be <= 100 (base), got %.4f", size)
+	}
+
+	// Reset to safe value.
+	ps.SetKellyMultiplier(0.25)
+	size2 := ps.ComputeSizeUncapped(1.0, 100, 0)
+	if size2 > 100 {
+		t.Errorf("size with kelly=0.25 should be <= 100, got %.4f", size2)
+	}
+}
+
+func TestPositionSizer_ZeroBaseSize(t *testing.T) {
+	ps := NewPositionSizer(propfirm.DefaultFTMOProfile())
+	size := ps.ComputeSizeUncapped(1.0, 0, 0)
+	if size != 0 {
+		t.Errorf("zero base size should return 0, got %.4f", size)
+	}
+}
+
+func TestPositionSizer_NegativeBaseSize(t *testing.T) {
+	ps := NewPositionSizer(propfirm.DefaultFTMOProfile())
+	size := ps.ComputeSizeUncapped(1.0, -50, 0)
+	if size != 0 {
+		t.Errorf("negative base size should return 0, got %.4f", size)
+	}
+}

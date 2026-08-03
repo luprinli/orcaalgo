@@ -134,12 +134,32 @@ func (ps *ProgressStore) UpdateCombo(batchID string, index int, status string, e
 		mp.Failed++
 	}
 	if status == "completed" || status == "failed" {
+		if prevStatus == "completed" || prevStatus == "failed" {
+			if result != nil {
+				for ri := range mp.Results {
+					if mp.Results[ri].Symbol == result.Symbol &&
+						mp.Results[ri].StrategyID == result.StrategyID &&
+						mp.Results[ri].Timeframe == result.Timeframe {
+						mp.Results[ri] = *result
+						break
+					}
+				}
+			}
+			mp.UpdatedAt = time.Now()
+			if ps.hub != nil {
+				ps.hub.Broadcast("backtest_progress", mp)
+			}
+			ps.persistAsync(batchID)
+			return
+		}
 		if prevStatus == "running" {
 			mp.Running--
 		}
 		mp.Completed++
 		if result != nil {
-			result.RunID = fmt.Sprintf("%s-%d", batchID, mp.NextSeq)
+			if result.RunID == "" {
+				result.RunID = fmt.Sprintf("%s-%d", batchID, mp.NextSeq)
+			}
 			mp.Results = append(mp.Results, *result)
 			mp.NextSeq++
 			if result.GatePassed != nil && *result.GatePassed {
@@ -151,6 +171,9 @@ func (ps *ProgressStore) UpdateCombo(batchID string, index int, status string, e
 				mp.bestStrategy = result.StrategyID
 				mp.bestSymbol = result.Symbol
 			}
+		}
+		if mp.Running == 0 && mp.Completed+mp.Failed >= mp.Total {
+			mp.Status = "completed"
 		}
 	} else if status == "running" && prevStatus == "pending" {
 		mp.Running++

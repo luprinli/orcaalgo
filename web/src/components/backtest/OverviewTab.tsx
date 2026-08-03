@@ -5,7 +5,7 @@ interface Props {
 }
 
 export default function OverviewTab({ regimeStats }: Props) {
-  if (regimeStats.length === 0) return null
+  if (!regimeStats || regimeStats.length === 0) return null
 
   return (
     <div>

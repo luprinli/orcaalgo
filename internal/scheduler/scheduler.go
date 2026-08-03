@@ -172,3 +172,15 @@ func (s *Scheduler) runJob(job Job) {
 func (s *Scheduler) Stop() {
 	s.cancel()
 }
+
+// RegisterReoptimizationJob registers a daily parameter re-optimization check.
+func (s *Scheduler) RegisterReoptimizationJob(cfg *ReoptimizationConfig) {
+	s.jobs = append(s.jobs, Job{
+		Name:     "parameter_reoptimization",
+		Schedule: "0 16 * * 1-5",
+		Run: func(ctx context.Context) error {
+			cfg.CheckAndOptimize(ctx)
+			return nil
+		},
+	})
+}

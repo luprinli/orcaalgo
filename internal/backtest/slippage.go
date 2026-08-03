@@ -14,6 +14,36 @@ type SlippageModel struct {
 	MaxSlippage        float64
 	LatencyMs          float64
 	VolumeImpactFactor float64
+	AdverseSelectBps   float64
+}
+
+func (m SlippageModel) LimitFillProbability(distanceFromMidBps float64) float64 {
+	if distanceFromMidBps <= 0 {
+		return 0.98
+	}
+	decay := math.Exp(-distanceFromMidBps / (m.SpreadBps + 0.01))
+	return math.Max(0.05, decay)
+}
+
+func CalibrateSlippageModel(model SlippageModel, observedSlippageBps float64, sampleCount int) SlippageModel {
+	if sampleCount < 10 || observedSlippageBps < 0 {
+		return model
+	}
+	alpha := 0.2
+	lowerBound := 0.7
+	upperBound := 1.5
+	adjustment := observedSlippageBps / (model.SpreadBps + model.AdverseSelectBps + model.MaxSlippage*0.4 + 0.001)
+	adjustment = math.Max(lowerBound, math.Min(upperBound, adjustment))
+	model.SpreadBps *= 1.0 + alpha*(adjustment-1.0)
+	model.MaxSlippage *= 1.0 + alpha*(adjustment-1.0)
+	model.AdverseSelectBps *= 1.0 + alpha*(adjustment-1.0)
+	if model.SpreadBps < 0 {
+		model.SpreadBps = 0
+	}
+	if model.MaxSlippage < 0 {
+		model.MaxSlippage = 0
+	}
+	return model
 }
 
 type FillSimulator struct {
@@ -54,13 +84,13 @@ func (s *FillSimulator) SimulateFill(orderID uint32, symbol string, limitPrice f
 func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limitPrice float64, quantity float64, side string, tickPrice float64, tickTime time.Time, midPrice float64, lastPrice float64, barVolume float64) *SimulatedFill {
 	delay := time.Duration(s.model.LatencyMs) * time.Millisecond
 
-	slippageBps := s.model.SpreadBps
+	slippageBps := s.model.SpreadBps + s.model.AdverseSelectBps
 	if s.model.MaxSlippage > 0 {
-		randomFactor := (s.rng.Float64()*2 - 1) * s.model.MaxSlippage
+		randomFactor := math.Abs(s.rng.NormFloat64()) * s.model.MaxSlippage * 0.5
 		slippageBps += randomFactor
 	}
 	if barVolume > 0 && s.model.VolumeImpactFactor > 0 && quantity > 0 {
-		slippageBps += s.model.VolumeImpactFactor * (quantity / barVolume)
+		slippageBps += s.model.VolumeImpactFactor * math.Sqrt(quantity / barVolume)
 	}
 	if slippageBps < 0 {
 		slippageBps = 0
@@ -114,6 +144,7 @@ func DefaultEquitySlippage() SlippageModel {
 		MaxSlippage:        2.0,
 		LatencyMs:          5.0,
 		VolumeImpactFactor: 0.5,
+		AdverseSelectBps:   0.5,
 	}
 }
 

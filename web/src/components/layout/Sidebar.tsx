@@ -27,6 +27,7 @@ const navIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   '/simulate':       Play,
   '/calibrate':      Target,
   '/attribution':    Grid3x3,
+  '/params':         Blocks,
   '/settings':       Settings,
   '/integrations':   Globe,
   '/accounts':       Users,
@@ -50,6 +51,7 @@ const DEFAULT_GROUPS: NavGroup[] = [
     { path: '/calibrate',     label: 'Calibration',    icon: '/calibrate' },
     { path: '/attribution',   label: 'Attribution',    icon: '/attribution' },
     { path: '/simulate',      label: 'Simulation',     icon: '/simulate' },
+    { path: '/params',        label: 'Params',         icon: '/params' },
   ]},
   { id: 'settings', label: 'Settings', items: [
     { path: '/settings',       label: 'System',         icon: '/settings' },

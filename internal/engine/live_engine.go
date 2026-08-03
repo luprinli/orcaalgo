@@ -38,6 +38,11 @@ type LiveEngine struct {
 	regimeDailyLossPct float64          // H4: cached daily loss limit
 	openPositions  map[string]*backtest.ActiveStop  // H5: symbol → active stop
 
+	lastVIX         float64 // live VIX reading for regime classifier
+	lastSentiment   float64 // live sentiment score (0-100)
+	lastCVD         float64 // live cumulative volume delta trend
+	lastVolStructure float64 // ratio of short-term to long-term realized volatility
+
 	StrategyHash  string  // content-addressable instance hash of the deployed strategy
 	KellyFraction float64 // fractional Kelly multiplier (0.25 default)
 
@@ -213,7 +218,6 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 			symbolID,
 			timestampNS,
 		)
-
 		if advResult.TriggerKill {
 			e.Halted = true
 			e.RiskState.Halted = true
@@ -226,15 +230,23 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 
 		if hasML {
 			features := e.computeFeatures(symbolID)
-			result := e.metaLabeler.(*ml.SubprocessPredictor).EvaluateSignal(features)
+			var result ml.MetaLabelingResult
+			if sp, ok := e.metaLabeler.(*ml.SubprocessPredictor); ok {
+				result = sp.EvaluateSignal(features)
+			} else {
+				pWin, err := e.metaLabeler.Predict(features)
+				if err != nil || pWin <= 0 {
+					continue
+				}
+				result = ml.MetaLabelingResult{
+					PWin:     pWin,
+					Accepted: pWin >= 0.55,
+				}
+			}
 			if !result.Accepted {
-				continue // H1: gate — reject low-confidence signals
+				continue
 			}
-			sig.PWin = result.PWin // H2: priority field
-			// H3: PWin-weighted sizing — scale Kelly by confidence
-			if result.PWin > 0 {
-				sig.Quantity *= result.PWin / 0.5
-			}
+			sig.PWin = result.PWin
 		}
 
 		approvedSignals = append(approvedSignals, sig)
@@ -246,23 +258,20 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 		})
 	}
 
-	kelly := e.KellyFraction
-	if kelly <= 0 {
-		kelly = 0.25
-	}
-	for _, sig := range approvedSignals {
-		sig.Quantity *= kelly
-	}
-
-	if e.pipeline != nil {
-		filtered := approvedSignals[:0]
-		for _, sig := range approvedSignals {
+		if e.pipeline != nil {
+			filtered := approvedSignals[:0]
+			e.pipeline.CurrentRegime = regimeInt8
+			for _, sig := range approvedSignals {
+			pWin := sig.PWin
+			if pWin <= 0 {
+				pWin = 0.5
+			}
 			result := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
 				StrategyID:       "live",
 				Symbol:           sig.Symbol,
 				Side:             sig.Side,
 				Price:            goCandle.Close.Float64(),
-				Confidence:       sig.PWin,
+				Confidence:       pWin,
 				BaseSize:         sig.Quantity,
 				ExistingPosition: 0,
 				RunningCapital:   e.regimeDailyLossPct * 10000,
@@ -273,6 +282,14 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 			}
 		}
 		approvedSignals = filtered
+	} else {
+		kelly := e.KellyFraction
+		if kelly <= 0 {
+			kelly = 0.25
+		}
+		for _, sig := range approvedSignals {
+			sig.Quantity *= kelly
+		}
 	}
 
 	e.CheckOpenStops(symbolID, s, goCandle, &approvedSignals)
@@ -411,7 +428,12 @@ func (e *LiveEngine) UpdateRegimeRiskLimit() {
 		e.RiskState.HMMTracker.Alpha[2],
 		e.RiskState.HMMTracker.Alpha[3],
 	}
-	score, _ := e.regimeEnhancer.Evaluate(hmmAlpha, 20.0, 50, 0.0, 0.5, 12.0)
+	vix := e.lastVIX
+	sentiment := int(e.lastSentiment)
+	cvd := e.lastCVD
+	volStructure := e.lastVolStructure
+	hour := float64(time.Now().Hour())
+	score, _ := e.regimeEnhancer.Evaluate(hmmAlpha, vix, sentiment, cvd, volStructure, hour)
 	switch {
 	case score > 0.8:
 		e.regimeDailyLossPct = 3.0
@@ -422,6 +444,15 @@ func (e *LiveEngine) UpdateRegimeRiskLimit() {
 	default:
 		e.regimeDailyLossPct = 0.5
 	}
+}
+
+func (e *LiveEngine) UpdateRegimeInputs(vix, sentiment, cvd, volStructure float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.lastVIX = vix
+	e.lastSentiment = sentiment
+	e.lastCVD = cvd
+	e.lastVolStructure = volStructure
 }
 
 func (e *LiveEngine) SignalOutcome(symbol string, side string, pnl float64) int {

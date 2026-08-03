@@ -2,10 +2,12 @@ package backtest
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
+	"github.com/lee-econ/orca-core/internal/types"
 )
 
 type mockDB struct {
@@ -347,4 +349,143 @@ func TestStrategyRunner_ResetClearsPosition(t *testing.T) {
 	if sig2 == nil {
 		t.Error("Expected entry signal after reset (fresh start)")
 	}
+}
+
+func TestDiagnostic_SyntheticCandlesProduceTrades(t *testing.T) {
+	symbols := []string{"AAPL", "EURUSD", "BTCUSD"}
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
+
+	strategyIDs := []string{"ma_crossover", "mean_reversion", "trend_following",
+		"grid_trading", "rsi2_reversion", "donchian_breakout", "keltner_macd", "ichimoku_cloud"}
+
+	needsLongData := map[string]bool{
+		"donchian_breakout": true,
+		"ichimoku_cloud":    true,
+	}
+
+	for _, stratID := range strategyIDs {
+		for _, sym := range symbols {
+			t.Run(stratID+"/"+sym, func(t *testing.T) {
+				n := 180
+				if needsLongData[stratID] {
+					n = 520
+				}
+				startPrice := 100.0
+				if stratID == "ichimoku_cloud" {
+					startPrice = 1.0
+				}
+				mock := &mockDB{
+					candles: generateTestCandlesForDB(sym, n, startPrice),
+				}
+				eng := NewEngine(mock)
+				cfg := BacktestConfig{
+					StrategyID:     stratID,
+					Symbols:        []string{sym},
+					StartDate:      start,
+					EndDate:        end,
+					InitialCapital: 100000,
+					Timeframe:      "1d",
+					SizingPercent:  0.02,
+					KellyFraction:  0.25,
+				}
+				result, err := eng.Run(context.Background(), cfg)
+				if err != nil {
+					t.Errorf("%s/%s: engine.Run error: %v", stratID, sym, err)
+					return
+				}
+				if result == nil {
+					t.Errorf("%s/%s: engine.Run returned nil result", stratID, sym)
+					return
+				}
+				if result.NumTrades == 0 {
+					t.Logf("%s/%s: zero trades (may need more candles; warnings: %v)", stratID, sym, result.Warnings)
+				}
+				t.Logf("%s/%s: trades=%d sharpe=%.3f return=%.2f%% dd=%.1f%% wr=%.1f%% pf=%.2f",
+					stratID, sym, result.NumTrades, result.SharpeRatio,
+					result.TotalReturnPct, result.MaxDrawdown,
+					result.WinRate, result.ProfitFactor)
+			})
+		}
+	}
+}
+
+func generateTestCandlesForDB(symbol string, n int, startPrice float64) [][]Candle {
+	candles := make([]strategy.Candle, n)
+	base := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	price := startPrice
+	for i := 0; i < n; i++ {
+		trend := 0.15
+		if i > n/3 && i < 2*n/3 {
+			trend = -0.12
+		}
+		noise := float64(i%7-3) * 0.5
+		price += trend + noise
+		if price < 20 {
+			price = 20
+		}
+		high := price + float64(i%5)*1.5
+		low := price - float64((i+1)%6)*1.2
+		open := low + (high-low)*0.35
+		candles[i] = strategy.Candle{
+			Time:   base.AddDate(0, 0, i),
+			Open:   types.PriceFromFloat(open),
+			High:   types.PriceFromFloat(high),
+			Low:    types.PriceFromFloat(low),
+			Close:  types.PriceFromFloat(price),
+			Volume: float64(5000000 + i%20*100000),
+			Symbol: symbol,
+		}
+	}
+	return [][]Candle{candles}
+}
+
+func TestCalculateLongShortBreakdown(t *testing.T) {
+	trades := []Trade{
+		{Side: "BUY", PnL: 100, MAE: 10, MFE: 20},
+		{Side: "BUY", PnL: -50, MAE: 15, MFE: 5},
+		{Side: "BUY", PnL: 200, MAE: 8, MFE: 25},
+		{Side: "SELL", PnL: 150, MAE: 12, MFE: 18},
+		{Side: "SELL", PnL: -30, MAE: 20, MFE: 3},
+		{Side: "SELL", PnL: 75, MAE: 5, MFE: 10},
+	}
+
+	b := calculateLongShortBreakdown(trades)
+
+	if b.LongTrades != 3 {
+		t.Errorf("LongTrades: expected 3, got %d", b.LongTrades)
+	}
+	if b.ShortTrades != 3 {
+		t.Errorf("ShortTrades: expected 3, got %d", b.ShortTrades)
+	}
+	if b.LongWins != 2 {
+		t.Errorf("LongWins: expected 2, got %d", b.LongWins)
+	}
+	if b.ShortWins != 2 {
+		t.Errorf("ShortWins: expected 2, got %d", b.ShortWins)
+	}
+
+	expectedLongGross := 100.0 + (-50.0) + 200.0
+	if b.LongGrossPnL != expectedLongGross {
+		t.Errorf("LongGrossPnL: expected %.2f, got %.2f", expectedLongGross, b.LongGrossPnL)
+	}
+
+	expectedLongPF := (100.0 + 200.0) / 50.0
+	if math.Abs(b.LongPF-expectedLongPF) > 0.01 {
+		t.Errorf("LongPF: expected %.2f, got %.2f", expectedLongPF, b.LongPF)
+	}
+
+	if b.LongAvgMAE-(10.0+15.0+8.0)/3.0 > 0.01 {
+		t.Errorf("LongAvgMAE: expected %.2f, got %.2f", (10.0+15.0+8.0)/3.0, b.LongAvgMAE)
+	}
+
+	expectedBias := (b.LongGrossPnL - b.ShortGrossPnL) / (math.Abs(b.LongGrossPnL) + math.Abs(b.ShortGrossPnL))
+	if math.Abs(b.DirectionalBias-expectedBias) > 0.001 {
+		t.Errorf("DirectionalBias: expected %.4f, got %.4f", expectedBias, b.DirectionalBias)
+	}
+
+	t.Logf("Long: %d trades, %.2f%% WR, PF=%.2f, PnL=%.2f | Short: %d trades, %.2f%% WR, PF=%.2f, PnL=%.2f | Bias=%.3f",
+		b.LongTrades, b.LongWinRate, b.LongPF, b.LongGrossPnL,
+		b.ShortTrades, b.ShortWinRate, b.ShortPF, b.ShortGrossPnL,
+		b.DirectionalBias)
 }

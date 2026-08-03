@@ -27,12 +27,20 @@ strategy:
       params:
         entry_threshold: 2.0
         exit_threshold: 0.5
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "signal_gen.signal"
+      params:
+        blocked_states: [1, 2, 3]
     - id: "position_sizer"
       token_ref:
         token_id: "size.kelly_fractional"
         version: ">=1.0"
       inputs:
-        signal: "signal_gen.signal"
+        signal: "regime_gate.signal"
       params:
         multiplier: 0.25
         per_trade_cap_pct: 0.02

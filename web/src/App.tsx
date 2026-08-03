@@ -25,6 +25,7 @@ const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
 import PropFirmPage from './pages/admin/PropFirmPage'
 import IntegrationsPage from './pages/IntegrationsPage'
 const UniversePage = lazy(() => import('./pages/admin/UniversePage'))
+const ParamVersionPage = lazy(() => import('./pages/ParamVersionPage'))
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
@@ -95,6 +96,7 @@ function AuthenticatedApp() {
             <Route path="/calibrate" element={<Lazy Comp={CalibratePage} skeleton />} />
             <Route path="/attribution" element={<Lazy Comp={AttributionPage} skeleton />} />
             <Route path="/simulate" element={<Lazy Comp={SimulatePage} skeleton />} />
+            <Route path="/params" element={<Lazy Comp={ParamVersionPage} skeleton />} />
 
             {/* Admin */}
             <Route path="/admin" element={<Lazy Comp={AdminPage} skeleton />} />

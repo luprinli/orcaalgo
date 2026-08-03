@@ -63,7 +63,7 @@ func TestSearchSpace_EmptySearchSpace(t *testing.T) {
 }
 
 func TestComputeObjective_Sharpe(t *testing.T) {
-	r := &BacktestResult{SharpeRatio: 1.5}
+	r := &BacktestResult{SharpeRatio: 1.5, NumTrades: 30}
 	s := ComputeObjective(r, ObjectiveSharpe, nil)
 	if s != 1.5 {
 		t.Errorf("Expected 1.5, got %f", s)
@@ -71,7 +71,7 @@ func TestComputeObjective_Sharpe(t *testing.T) {
 }
 
 func TestComputeObjective_MinDD(t *testing.T) {
-	r := &BacktestResult{MaxDrawdown: 8.5}
+	r := &BacktestResult{MaxDrawdown: 8.5, NumTrades: 30}
 	s := ComputeObjective(r, ObjectiveMinDD, nil)
 	if s != -8.5 {
 		t.Errorf("Expected -8.5, got %f", s)
@@ -79,7 +79,7 @@ func TestComputeObjective_MinDD(t *testing.T) {
 }
 
 func TestComputeObjective_DDRatio(t *testing.T) {
-	r := &BacktestResult{SharpeRatio: 1.8, MaxDrawdown: 6.0}
+	r := &BacktestResult{SharpeRatio: 1.8, MaxDrawdown: 6.0, NumTrades: 30}
 	s := ComputeObjective(r, ObjectiveDDRatio, nil)
 	expected := 1.8 / 6.0 * 100
 	if s != expected {
@@ -88,7 +88,7 @@ func TestComputeObjective_DDRatio(t *testing.T) {
 }
 
 func TestComputeObjective_Composite(t *testing.T) {
-	r := &BacktestResult{SharpeRatio: 2.0, MaxDrawdown: 5.0, ProfitFactor: 1.8, WinRate: 60}
+	r := &BacktestResult{SharpeRatio: 2.0, MaxDrawdown: 5.0, ProfitFactor: 1.8, WinRate: 60, NumTrades: 30}
 	weights := map[ObjectiveType]float64{
 		ObjectiveSharpe:      0.4,
 		ObjectiveProfitFactor: 0.3,
@@ -97,6 +97,14 @@ func TestComputeObjective_Composite(t *testing.T) {
 	s := ComputeObjective(r, ObjectiveComposite, weights)
 	if s <= 0 {
 		t.Errorf("Expected positive composite score, got %f", s)
+	}
+}
+
+func TestComputeObjective_LowTradesPenalty(t *testing.T) {
+	r := &BacktestResult{SharpeRatio: 2.0, NumTrades: 10}
+	s := ComputeObjective(r, ObjectiveSharpe, nil)
+	if s >= 0 {
+		t.Errorf("Expected negative penalty for <30 trades, got %f", s)
 	}
 }
 

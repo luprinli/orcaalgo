@@ -41,10 +41,11 @@ DEFAULT_AVG_DURATION: dict[int, int] = {
 }
 
 # Transition matrix: rows = from_regime, cols = to_regime
+# CANONICAL — must match internal/risk/hmm.go DefaultHMM() and orca/train/hmm.py _generate_synthetic_returns()
 DEFAULT_TRANSITION_MATRIX: np.ndarray = np.array([
-    [0.80, 0.15, 0.04, 0.01],   # Calm
-    [0.10, 0.75, 0.12, 0.03],   # Trending
-    [0.05, 0.10, 0.75, 0.10],   # HighVol
+    [0.85, 0.10, 0.04, 0.01],   # Calm
+    [0.08, 0.80, 0.10, 0.02],   # Trending
+    [0.03, 0.10, 0.80, 0.07],   # HighVol
     [0.01, 0.02, 0.10, 0.87],   # Crisis
 ], dtype=np.float64)
 

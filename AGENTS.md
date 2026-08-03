@@ -100,7 +100,7 @@ These are **NEVER** permitted. Violations block PR merge.
 4. **Anti-pattern scan:** `python scripts/anti_pattern_scan.py` — zero violations
 5. **LWC chart scan:** `node scripts/scan-chart-patterns.mjs` — zero errors (warnings allowed)
 6. **Guardian tests:** `pytest tests/guardian/ -v` — all critical paths pass
-7. **Frontend tests:** `cd web && npx tsc --noEmit && npx vitest run && npx playwright test` — 217 unit + 49 e2e
+7. **Frontend tests:** `cd web && npx tsc --noEmit && npx vitest run && npx playwright test` — `npm test` / `npm run test:watch` / `npm run test:coverage` / `npm run test:e2e` — 233 unit + 49 e2e
 
 ### CI/CD Pipeline
 
@@ -108,7 +108,7 @@ These are **NEVER** permitted. Violations block PR merge.
 |-----|----------|-------|
 | `python` | Python | ruff, mypy, pytest (coverage ≥ 80%) |
 | `backend` | Go | golangci-lint, go vet, test (race + coverage ≥ 60%), E2E |
-| `frontend` | React/TS | ESLint, tsc, vite build, vitest (217 tests), playwright (49 e2e tests) |
+| `frontend` | React/TS | ESLint, tsc, vite build, vitest (228 tests), playwright (49 e2e tests) |
 | `gkr-validate` | GKR IR | Strategy validation for all `.gkr.yaml` files |
 | `anti-pattern-scan` | All | 18 hard prohibition enforcement |
 | `security` | All | Gitleaks + Go vulnerability scan |
@@ -137,3 +137,73 @@ These are **NEVER** permitted. Violations block PR merge.
 | `/anti-pattern` | Scan for hard prohibition violations |
 | `/fix-anti-pattern` | Auto-fix common violations |
 | `/deploy-gate` | Full pre-deployment verification |
+
+## Current Implementation State (2026-08-03)
+
+### Strategy Portfolio (16 strategies, 14 registered)
+
+| # | Strategy | File | Regimes | Kelly |
+|---|----------|------|---------|-------|
+| 1 | Grid Trading | `grid_runner.go` | Calm only (disabled by default) | 0.25 |
+| 2 | Trend Following | `trend_runner.go` | Trending only | 0.25 |
+| 3 | Session Scalp | `session_scalp_runner.go` | Calm, Trending, HighVol | 0.25/0.25/0.15 |
+| 4 | Mean Reversion | `mean_reversion.go` | Calm only | 0.25 |
+| 5 | ORB | `orb_runner.go` | Trending, HighVol | 0.25/0.15 |
+| 6 | Pairs Trading | `pairs_runner.go` | Calm, HighVol | 0.25/0.15 |
+| 7 | Volatility Harvesting | `vol_harvesting_runner.go` | HighVol only | 0.15 |
+| 8 | Dragon Trend | `dragon_trend_runner.go` | Trending, HighVol | 0.25/0.15 |
+| 9 | VWAP MR | `mean_reversion.go` (Mode="vwap") | Calm only | 0.25 |
+| 10 | 15-Min ORB | `orb_runner.go` (range_minutes=15) | Trending, HighVol | 0.25/0.15 |
+| 11 | Volume Scalp | `volume_scalp_runner.go` | Calm, Trending | 0.25 |
+| 12 | VIX Futures Carry | `vix_futures_carry_runner.go` | HighVol only (spot VIX proxy) | 0.15 |
+| 13 | Vol-Adjusted Grid | `grid_runner.go` (AdjustByVolatility=true) | Calm only | 0.15 |
+| 14 | Ichimoku Cloud | `ichimoku.go` | All (permissive) | 0.25 |
+| 15 | Donchian Breakout | `donchian.go` | All (permissive) | 0.25 |
+| 16 | Keltner MACD | `keltner.go` | All (permissive) | 0.25 |
+
+### Architecture Highlights
+
+- **RiskPipeline** (`internal/risk/pipeline.go`): Canonical signal-audit path shared by backtest and live engines. ProcessSignal order: volatility halt → sizing → prop-firm halt → regime gate → sizing (Kelly + multipliers) → soft halt → exposure check → cross-strategy correlation brake → capital authorization.
+
+- **SignalGateImpl** (`internal/risk/signal_gate_impl.go`): Concrete implementation wrapping VolatilityHalt, PositionSizer, ExposureTracker, and OrderRateLimiter. Used by both engines.
+
+- **RegimeActivationMatrix** (`internal/risk/regime_activation.go`): 14 strategies × 4 regimes with per-regime Kelly multiplier overrides. Default mappings from the Senior Quantitative Review §3.1 and §5.2.
+
+- **PropFirmEnforcer** (`internal/backtest/propfirm_enforcer.go`): Soft halt (positions reduced 50%) at configurable daily loss threshold, hard halt (trading stopped) at configurable limit. Per-profile configurable via `propfirm.Profile`.
+
+- **Walk-Forward Automation** (`internal/scheduler/reoptimization.go`): Degradation-triggered daily re-optimization. Checks OOS Sharpe degradation (>20%) or parameter age (>90 days). Light optimizer integration with automatic version save/activate.
+
+- **Parameter Versioning** (`internal/db/parameter_version_repo.go`): `strategy_params_version` table with JSONB params, IS/OOS metrics, active flag, and activate/deactivate API endpoints.
+
+- **Phase 8 Completed**: All 7 alternative/complementary strategies implemented. Multi-Asset StatArb replaced by simpler PairsRunner (cointegration spread). VIX Futures Carry uses spot VIX as contango proxy. Vol-Adjusted Grid uses ATR/VIX dynamic spacing.
+
+### Key Files Added (2026-08-03)
+
+| File | Phase | Purpose |
+|------|-------|---------|
+| `internal/risk/signal_gate_impl.go` | -1 | Shared SignalGate for both engines |
+| `internal/risk/regime_activation.go` | 1 | Strategy × regime matrix |
+| `internal/risk/regime_activation_test.go` | 1 | Matrix + pipeline tests |
+| `internal/strategy/vol_harvesting_runner.go` | 4 | Volatility harvesting |
+| `internal/strategy/pairs_runner.go` | 4 | Cointegration spread trading |
+| `internal/strategy/dragon_trend_runner.go` | 8 | Multi-EMA trend (8,21,50,200) |
+| `internal/strategy/volume_scalp_runner.go` | 8 | Volume-confirmed scalp |
+| `internal/strategy/vix_futures_carry_runner.go` | 8 | VIX contango proxy |
+| `internal/db/migrations/000030_parameter_versions.up.sql` | 5 | Parameter version table |
+| `internal/db/parameter_version_repo.go` | 5 | Version CRUD |
+| `internal/scheduler/reoptimization.go` | 5 | Degradation-triggered re-optimization |
+| `internal/api/param_version_handler.go` | 5 | API for param versions |
+| `web/src/components/backtest/RegimeActivationMatrix.tsx` | 6 | Strategy × regime UI grid |
+| `web/src/components/backtest/SoftHaltGauge.tsx` | 6 | Daily loss gauge |
+| `web/src/pages/ParamVersionPage.tsx` | 6 | Parameter version management |
+| `web/src/__tests__/regimeMatrix.test.tsx` | 7 | Frontend tests |
+| `docs/Senior Quantitative Audit Report 2026-08-02.md` | — | Full audit report |
+| `docs/Senior Quantitative Review.md` | — | Original review |
+
+### Known Issues
+
+1. **Live engine bypasses BatchInferrer** — `ProcessTickForAccount` calls `metaLabeler.(*SubprocessPredictor).EvaluateSignal()` directly, skipping BatchInferrer's caching and threshold skip. Backtest uses BatchInferrer with different accept/reject thresholds. Fixed unsafe type assertion in this revision; full BatchInferrer parity is a future improvement.
+
+2. **`internal/ml/feature_store_persist.go`** — Zero callers. FeatureStore.Persist() and LoadFeatureStore() are implemented but never invoked. Intended for engine shutdown/restart state preservation. Wire into live engine lifecycle when ready.
+
+3. **VIX Futures Carry uses spot VIX proxy** — No VIX futures data feed is ingested. Strategy uses `SetVIX()` with spot VIX as contango signal until futures data is available.

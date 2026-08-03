@@ -20,6 +20,12 @@ function makeTrade(id: string, pnl = 100.0): TradeSummary {
     strategy_id: 'grid_trading',
     exit_reason: 'take_profit',
     commission: 1.0,
+    hmm_regime: 1,
+    stop_price: 1.04,
+    take_price: 1.06,
+    slippage_mid_bps: 0.5,
+    slippage_last_bps: 0.8,
+    adverse_selection: false,
   }
 }
 

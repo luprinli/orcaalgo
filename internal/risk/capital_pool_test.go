@@ -173,4 +173,165 @@ func TestCapitalPool_TotalBalance(t *testing.T) {
 	}
 }
 
+func TestCapitalPool_SoftHaltReducesPositions(t *testing.T) {
+	profile := propfirm.DefaultFTMOProfile()
+	profile.MaxDailyLossPct = 20.0 // prevent daily loss check from firing first
+	state := &propfirm.State{
+		StartingBalance: 100000.0,
+		PeakBalance:     100000.0,
+		ConsistencyMult: 1.0,
+		CurrentPhase:    1,
+	}
+	pool := NewCapitalPoolManager(profile, state)
+
+	// Balance drop to 96,000 = -4.0% — still within soft halt
+	state.StartingBalance = 100000
+	pool.poolState.TotalBalance = 96000
+	result := pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 1.0, Symbol: "SPY", Side: "BUY", BaseSize: 1000,
+	})
+	if !(result.ApprovedSize > 0) {
+		t.Error("should allow trades at -4.0% daily loss (below soft halt)")
+	}
+
+	// Balance drop to 95,200 = -4.8% — between soft and hard halt
+	pool.poolState.TotalBalance = 95200
+	result = pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s2", Confidence: 1.0, Symbol: "QQQ", Side: "BUY", BaseSize: 1000,
+	})
+	// The CapitalPoolManager itself doesn't implement soft halt — the pipeline does.
+	// The pool should still approve but the pipeline applies the 0.5x multiplier.
+	if !(result.ApprovedSize > 0) {
+		t.Error("capital pool should approve; soft halt sizing is handled by pipeline")
+	}
+}
+
+func TestCapitalPool_HardHaltRejectsAll(t *testing.T) {
+	profile := propfirm.DefaultFTMOProfile()
+	state := &propfirm.State{
+		StartingBalance: 100000.0,
+		PeakBalance:     100000.0,
+		ConsistencyMult: 1.0,
+		CurrentPhase:    1,
+	}
+	pool := NewCapitalPoolManager(profile, state)
+
+	// Balance drop to 94,000 = -6.0% → exceeds 5% daily loss limit → hard halt.
+	pool.poolState.TotalBalance = 94000
+	result := pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 1.0, Symbol: "SPY", Side: "BUY", BaseSize: 1000,
+	})
+	if result.ApprovedSize > 0 {
+		t.Error("should reject all trades after hard halt")
+	}
+}
+
+func TestCapitalPool_StrategySuspensionOnDD(t *testing.T) {
+	profile := propfirm.DefaultFTMOProfile()
+	profile.MaxDailyLossPct = 20.0 // prevent daily loss check from firing first
+	state := &propfirm.State{
+		StartingBalance: 100000.0,
+		PeakBalance:     100000.0,
+		ConsistencyMult: 1.0,
+		CurrentPhase:    1,
+	}
+	pool := NewCapitalPoolManager(profile, state)
+
+	// Create the strategy allocation entry first by requesting capital.
+	pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 10000,
+	})
+
+	// Clear the open position so correlation check doesn't interfere.
+	strat := pool.strategies["s1"]
+	strat.OpenLong = make(map[string]float64)
+	strat.OpenShort = make(map[string]float64)
+
+	// Manual DD breach by setting pool balance low and strategy peak balance high.
+	strat.PeakBalance = 100000
+	pool.poolState.TotalBalance = 85000 // -15% → DD > 5% (half of 10% profile limit)
+
+	result := pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 1.0, Symbol: "QQQ", Side: "BUY", BaseSize: 1000,
+	})
+	if result.ApprovedSize > 0 {
+		t.Error("suspended strategy should have zero approved size")
+	}
+	if !strat.Suspended {
+		t.Error("strategy should be suspended after DD breach")
+	}
+}
+
+func TestCapitalPool_StrategyResume(t *testing.T) {
+	profile := propfirm.DefaultFTMOProfile()
+	profile.MaxDailyLossPct = 20.0 // prevent daily loss check
+	state := &propfirm.State{
+		StartingBalance: 100000.0,
+		PeakBalance:     100000.0,
+		ConsistencyMult: 1.0,
+		CurrentPhase:    1,
+	}
+	pool := NewCapitalPoolManager(profile, state)
+
+	// Force suspend without open positions.
+	pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 10000,
+	})
+	strat := pool.strategies["s1"]
+	strat.OpenLong = make(map[string]float64)
+	strat.OpenShort = make(map[string]float64)
+	strat.Allocated = 0
+	strat.Suspended = true
+	strat.PeakBalance = 100000
+
+	// Verify blocked.
+	result := pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 1.0, Symbol: "QQQ", Side: "SELL", BaseSize: 1000,
+	})
+	if result.ApprovedSize > 0 {
+		t.Error("should be blocked while suspended")
+	}
+
+	// Resume.
+	pool.ResumeStrategy("s1")
+	if strat.Suspended {
+		t.Error("should not be suspended after resume")
+	}
+
+	// Verify allowed after resume.
+	result = pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 1.0, Symbol: "QQQ", Side: "SELL", BaseSize: 1000,
+	})
+	if result.ApprovedSize <= 0 {
+		t.Errorf("should be allowed after resume, got %s", result.Reason)
+	}
+}
+
+func TestCapitalPool_CrossStrategyCorrelationBrake(t *testing.T) {
+	profile := propfirm.DefaultFTMOProfile()
+	state := &propfirm.State{
+		StartingBalance: 100000.0,
+		PeakBalance:     100000.0,
+		ConsistencyMult: 1.0,
+		CurrentPhase:    1,
+	}
+	pool := NewCapitalPoolManager(profile, state)
+
+	// s1 goes long SPY.
+	pool.RequestCapital(context.Background(), CapitalRequest{
+		StrategyID: "s1", Confidence: 0.5, Symbol: "SPY", Side: "BUY", BaseSize: 10000,
+	})
+
+	// Verify HasOpenPosition detects existing position.
+	if !pool.HasOpenPosition("SPY", "BUY") {
+		t.Error("HasOpenPosition should return true for SPY BUY after s1 opened")
+	}
+	if pool.HasOpenPosition("SPY", "SELL") {
+		t.Error("HasOpenPosition should return false for SPY SELL")
+	}
+	if pool.HasOpenPosition("QQQ", "BUY") {
+		t.Error("HasOpenPosition should return false for QQQ BUY")
+	}
+}
+
 

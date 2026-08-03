@@ -28,7 +28,7 @@ strategy:
       inputs:
         signal: "grid_signal.signal"
       params:
-        blocked_states: [3]
+        blocked_states: [1, 2, 3]
     - id: "position_sizer"
       token_ref:
         token_id: "size.kelly_fractional"

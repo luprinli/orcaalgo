@@ -11,6 +11,7 @@ type TrendRunner struct {
 	AtrMultiplier float64
 	AdxPeriod     float64
 	AdxThreshold  float64
+	ChopThreshold float64
 	fastEMA       float64
 	slowEMA       float64
 	prevFastEMA   float64
@@ -29,6 +30,7 @@ func NewTrendRunner() *TrendRunner {
 		AtrMultiplier: 2.0,
 		AdxPeriod:     14,
 		AdxThreshold:  25.0,
+		ChopThreshold: 61.8,
 	}
 }
 
@@ -76,6 +78,9 @@ func (r *TrendRunner) SetParams(params map[string]float64) {
 	if v, ok := params["adx_threshold"]; ok {
 		r.AdxThreshold = v
 	}
+	if v, ok := params["chop_threshold"]; ok {
+		r.ChopThreshold = v
+	}
 }
 
 func (r *TrendRunner) ParamDefs() []ParamDef {
@@ -115,6 +120,7 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 	r.PushPrice(price, candle.High, candle.Low, 0)
 
 	adx := ADX(r.PriceHistory, r.HighHistory, r.LowHistory, r.HistCount, int(r.AdxPeriod))
+	chop := ChoppinessIndex(r.PriceHistory, r.HighHistory, r.LowHistory, r.HistCount, int(r.AtrPeriod))
 
 	tc := TakeProfitChecker{}
 
@@ -156,6 +162,10 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 		if r.signalPending {
 			if adx < r.AdxThreshold {
+				r.signalPending = false
+				return nil
+			}
+			if r.ChopThreshold > 0 && chop > r.ChopThreshold {
 				r.signalPending = false
 				return nil
 			}

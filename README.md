@@ -1,6 +1,6 @@
 ﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
-**Version**: 1.1.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard
+**Version**: 1.2.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 16 registered (14 active)
 
 A high-performance algorithmic trading platform purpose-built for **prop firm challenge compliance** (FTMO, TopStep, E8, TFT). Uses a multi-language architecture: **Go** for orchestration and execution, **Python** for strategy IR and canonical mathematics, and **React + TypeScript** for real-time dashboards.
 
@@ -9,8 +9,8 @@ A high-performance algorithmic trading platform purpose-built for **prop firm ch
 | Component | Language | Role |
 |-----------|----------|------|
 | Strategy IR, Math, Calibration | **Python 3.11+** | Pydantic v2 domain models, GKR strategy IR, Kelly/Brier/Platt/Wilson/EWMA, calibration audit, PnL attribution, pre-flight, HMM training, data quality validation |
-| API, Broker, Ingest, Scheduler | **Go 1.25** | HTTP API (Gin), broker adapters (Alpaca/Paper/IBKR), WebSocket market data ingestion (Polygon.io → ring buffer), WebSocket hub, backtest engine (event-driven + walk-forward), risk management (RiskPipeline + CapitalGate + PropFirmGate + KillSwitch), Monte Carlo bootstrapping, DB repository, LLM integration, per-account strategy isolation, capability-based broker routing |
-| Web Dashboard | **React 18 + TypeScript 5 + Tailwind CSS 4 + shadcn/ui** | SPA with lightweight-charts, WebSocket live feed, MonitorPage (Dashboard + Risk + Signals), BacktestHub (Runner + History + Detail + Optimize), StrategyHub (Catalog + Instances + Editor), ChartingHub (Candles + Indicators), IntegrationsPage (Brokers + Credentials + Symbols), backtest matrix runner with gate status, walk-forward analysis, trade analytics, parameter sensitivity, Monte Carlo charts, broker/account/symbol/strategy management, emergency mobile page |
+| API, Broker, Ingest, Scheduler | **Go 1.25** | HTTP API (Gin), broker adapters (Alpaca/Paper/IBKR), WebSocket market data ingestion (Polygon.io → ring buffer), WebSocket hub, backtest engine (event-driven + walk-forward + matrix), risk management (RiskPipeline + CapitalGate + PropFirmGate + KillSwitch), Monte Carlo bootstrapping, DB repository, per-account strategy isolation, capability-based broker routing |
+| Web Dashboard | **React 18 + TypeScript 5 + Tailwind CSS 4 + shadcn/ui** | SPA with lightweight-charts, WebSocket live feed, MonitorPage (Dashboard + Risk + Signals), BacktestHub (Runner + History + Detail), StrategyHub (Catalog + Instances + Editor), ChartingHub (Candles + Indicators), IntegrationsPage, per-backtest quant finance detail reports, Monte Carlo charts, broker/account/symbol/strategy management, emergency mobile page |
 | Time-Series Storage | **PostgreSQL + TimescaleDB** | Hypertables, BIGINT fixed-point price storage, append-only audit logging |
 
 Trading-optimized dark theme (deep navy #090d14) with high-density layouts, tabular numerics, and shadcn/ui components (Button, Card, Dialog, Tabs, Table, Badge, Input, Select, Label, Skeleton, Tooltip, Textarea, AlertDialog, Accordion, Sheet, Popover, Radio Group, Scroll Area, Separator, Switch, Toggle Group)
@@ -53,7 +53,7 @@ orca attribute --since 90d
 ## Key Features
 
 ### Frontend Dashboard — 3 Groups, 13 Navigation Items
-- **Trading Desk**: Dashboard (Monitor), Execution, Backtesting (Runner + History + Detail + Optimize), Strategies (Catalog + Instances + Editor)
+- **Trading Desk**: Dashboard (Monitor), Execution, Backtesting (Runner + History + Detail), Strategies (Catalog + Instances + Editor)
 - **Analysis**: Charts (Candles + Indicators), Calibration, Attribution, Simulation
 - **Settings**: System, Integrations, Accounts, Admin, Emergency
 
@@ -82,14 +82,22 @@ orca attribute --since 90d
 - Kelly fractional sizing (k=0.25) with per-trade cap (2%) and total exposure cap (30%)
 - Daily reset scheduler with notification alerts
 
+### Synthetic Data Generator
+- **Asset-class-aware** stochastic model with per-symbol calibration (45 symbols across 6 asset classes)
+- **Multi-regime** price paths: GARCH(1,1) volatility clustering, OU mean reversion (forex), momentum (equities), fat tails (crypto)
+- **Intraday bar generation** via Brownian bridge from daily OHLC — 1m / 5m / 15m / 30m / 1h resolution
+- **Deterministic seeding**: Same symbol + date range → identical candles (reproducible backtests)
+- Falls back to synthetic when database is unavailable or `data_source: "synthetic"` is selected
+- Data quality pre-flight: lag-1 autocorrelation, variance ratio, price path validity checks
+
 ### Per-Strategy Light Optimization in Matrix Backtests
 - Bounded parameter sweep per unique strategy on representative symbol subset
 - Train/test split (67%/33%) with OOS validation fallback
 - Composite scoring (Sharpe 0.5 + MinDD 0.3 + ProfitFactor 0.2)
 - In-memory SHA-256-keyed optimization cache with TTL expiry
 - Early stopping (5-combo plateau patience)
-- Prop-firm rule propagation (0.1× score multiplier on breaches)
-- Optimized params applied to all combos of each strategy in the matrix
+- User-controllable via "Auto-Optimize" toggle in Matrix mode
+- Search spaces defined for all registered strategies via default fallback in `defaultStrategySearchSpace()`
 
 ### Real-Time Regime Detection
 - 4-state Hidden Markov Model (Calm / Trending / High Vol / Crisis)
@@ -100,20 +108,20 @@ orca attribute --since 90d
 
 ### Strategy Framework
 - GKR Strategy IR — Declarative YAML with versioning, hashing, temporal validation
-- **Intraday Mean Reversion** — Z-score based with ATR-normalized exit
-- **Grid Trading** — Regime-gated with Fear & Greed sentiment overlay
-- **Trend Following** — EMA crossover with ATR trailing stop and ADX confirmation
-- **Opening Range Breakout** — Range detection with volatility scaling and time-of-day exit
-- **Session Scalping** — 9:30-11:00 ET window, volume-confirmed breakout
-- **Pairs Trading** — Cointegrated pairs with Kalman filter hedge ratio
-- **Volatility Harvesting** — VIX threshold-based vol premium harvesting
-- 11 total strategies registered in factory table
+- **16 strategies registered** (14 active, 2 permissive legacy):
+  - **Primary**: Intraday Mean Reversion, Grid Trading, Trend Following, Opening Range Breakout (5m + 15m), Session Scalping, Pairs Trading, Volatility Harvesting
+  - **Alternative/Complementary**: Dragon Capital Trend (multi-EMA), VWAP Mean Reversion, Volume-Weighted Scalp, VIX Futures Carry (spot proxy), Volatility-Adjusted Grid
+  - **Legacy (permissive)**: Ichimoku Cloud, Donchian Breakout, Keltner MACD
+- **RegimeActivationMatrix** — 14 strategies × 4 regimes (Calm/Trending/HighVol/Crisis) with per-regime Kelly multipliers (0.25/0.25/0.15/0.0)
+- **Parameter Versioning** — `strategy_params_version` table with JSONB params, IS/OOS metrics, activate/deactivate API
+- **Walk-Forward Automation** — Degradation-triggered daily re-optimization via `ReoptimizationConfig` scheduler
 
 ### Risk Management — Unified RiskPipeline
 - **`RiskPipeline`** — Canonical signal audit pipeline shared by backtest `Engine` and live `LiveEngine`
 - **`CapitalGate` interface** — Both `CapitalPoolSim` (backtest) and `CapitalPoolManager` (live) implement identical capital authorization contract
 - **`PropFirmGate` interface** — Both `PropfirmEnforcer` (backtest) and `propfirm.Manager` (live) implement identical prop-firm check contract
-- **`SignalGate` interface** — Shared sizing, exposure, and signal validation
+- **`SignalGateImpl`** — Concrete SignalGate wrapping VolatilityHalt, PositionSizer, ExposureTracker, OrderRateLimiter. Shared by both engines.
+- **`RegimeActivationMatrix`** — Strategy × regime mapping with per-regime Kelly overrides, wired into RiskPipeline as primary regime gate.
 - **`BaseCapitalPool` (`propfirm.PoolState`)** — Shared balance tracking, drawdown computation, position counting — extracted from both pool implementations
 - Kill-switch with `isLocked` + `killSwitchReady` re-entrancy guard + multi-account iteration + prop-firm violation propagation (`MarkAllViolated`)
 - Adversarial detection (reject spikes >3/5min, unusual size/symbol, after-hours lockout)
@@ -135,9 +143,10 @@ orca attribute --since 90d
 - Warm-up period with indicator state building (prevents garbage signals)
 - Volume-dependent slippage modeling
 - Kelly fraction applied in both backtest and live paths (k=0.25)
-- Sharpe ratio annualized from daily returns (consistent across intraday/daily bars)
-- Promote-to-Live 3-step wizard (Quality Gates → Pre-Flight → Deploy)
+- Sharpe ratio annualized from daily returns with effective bars-per-day correction
+- Promote-to-Live wizard (Quality Gates → Pre-Flight → Deploy)
 - FTMO/PropFirm rule enforcement (daily loss, drawdown, consistency)
+- **Backtest Detail Page** — Quant finance report with Performance Metrics, Risk Profile, Equity Curve, Returns Distribution, Monte Carlo simulation, Monthly Returns calendar heatmap, Trade Analysis tabs (Regime / Trades / Optimization), and cost metadata
 
 ### Observability & Audit
 - Structured Audit Logging — Immutable audit trail for all critical actions
@@ -164,21 +173,21 @@ orca attribute --since 90d
 | `GET` | `/api/v1/positions` | Get positions |
 | `GET` | `/api/v1/risk/status` | Live risk snapshot |
 | `POST` | `/api/v1/emergency/stop` | Trigger kill-switch (2FA) |
-| `GET` | `/api/v1/strategies` | List strategies (CRUD: POST, PUT, DELETE) |
-| `POST` | `/api/v1/strategies/validate` | Validate strategy params |
-| `POST` | `/api/v1/backtests` | Submit single backtest |
-| `POST` | `/api/v1/backtests/matrix` | Submit matrix backtest (streaming) |
-| `POST` | `/api/v1/optimizations` | Submit per-strategy light optimization |
-| `GET` | `/api/v1/optimizations/:id` | Optimization status (polling) |
-| `GET` | `/api/v1/optimizations/:id/results` | Optimization results |
-| `GET` | `/api/v1/backtests/:id/metrics` | Backtest metrics |
+| `GET` | `/api/v1/strategies` | List strategies |
+| `POST` | `/api/v1/backtests` | Submit single or matrix backtest |
+| `GET` | `/api/v1/backtests` | List backtest history |
+| `GET` | `/api/v1/backtests/:id` | Get backtest run (summary + full metrics) |
 | `GET` | `/api/v1/backtests/:id/equity` | Backtest equity curve |
-| `GET` | `/api/v1/backtests/:id/trades` | Backtest trades |
+| `GET` | `/api/v1/backtests/:id/trades` | Backtest trades (paginated) |
 | `GET` | `/api/v1/backtests/:id/monthly-returns` | Monthly returns |
 | `GET` | `/api/v1/backtests/:id/regime-stats` | Regime-stratified stats |
 | `GET` | `/api/v1/backtests/:id/optimization` | Optimization footprint |
-| `GET` | `/api/v1/backtests/:id/walk-forward` | Walk-forward results |
 | `GET` | `/api/v1/backtests/:id/live-comparison` | Live vs backtest comparison |
+| `GET` | `/api/v1/backtests/matrix/:id/results` | Matrix streaming results |
+| `GET` | `/api/v1/strategies/:id/params` | List parameter versions for a strategy |
+| `GET` | `/api/v1/strategies/:id/params/active` | Get active parameter version |
+| `POST` | `/api/v1/strategies/:id/params/activate` | Activate a parameter version |
+| `POST` | `/api/v1/strategies/:id/params/deactivate` | Revert to registry defaults |
 | `GET` | `/api/v1/candles` | Market data candles |
 | `GET` | `/api/v1/propfirm/profiles` | Prop firm profiles |
 | `GET` | `/api/v1/propfirm/status` | Live prop firm compliance |
@@ -187,7 +196,6 @@ orca attribute --since 90d
 | `GET` | `/api/v1/universe/current` | Current symbol universe |
 | `GET` | `/api/v1/settings` | User settings management |
 | `GET` | `/api/v1/admin/users` | User management (admin) |
-| `POST` | `/api/v1/admin/seed` | Seed database (admin) |
 | `GET` | `/ws` | WebSocket connection |
 
 ### WebSocket Events
@@ -211,6 +219,9 @@ orca attribute --since 90d
 | **PropFirmGate** | `internal/risk/interfaces.go` | Prop-firm enforcement across backtest (`PropfirmEnforcer`) and live (`propfirm.Manager`) |
 | **BaseCapitalPool** | `internal/propfirm/pool_base.go` | Shared balance/DD/DailyPnL/Halted fields + shared helpers |
 | **Per-Account Isolation** | `internal/engine/live_engine.go` | Factory-created instances, independent per-account registries |
+| **Per-Strategy DD Suspension** | `internal/risk/capital_pool.go` | Strategy suspended when drawdown > 50% of profile limit, requires manual resume |
+| **Cross-Strategy Correlation Brake** | `internal/risk/pipeline.go` | Halves size when multiple strategies open same symbol+side |
+| **Soft/Hard Halt** | `internal/propfirm/profile.go` + `internal/backtest/propfirm_enforcer.go` | Soft halt (4.5%, positions halved) → Hard halt (5.0%, trading stopped) |
 | **PropFirm Rules** | `internal/propfirm/rules.go` + `internal/backtest/propfirm_enforcer.go` | 5% daily loss, 10% max DD (HWM), consistency, regime multipliers |
 | **HMM Regime** | `internal/risk/hmm.go` | 4-state forward algorithm, VIX-modulated, Python-trained |
 | **VIX Scaling** | `internal/risk/position_sizer.go` | VIX>35→0.50×, VIX>28→0.75×, VIX>20→0.90× |
@@ -254,21 +265,20 @@ orca hmm-train --since 3650d      # Train HMM on historical data
 |-----|-------|-------|
 | `python` | `orca/`, `tests/` | ruff, mypy, pytest (coverage ≥ 80%) |
 | `backend` | `internal/`, `cmd/` | golangci-lint, go vet, test (race + coverage ≥ 60%), E2E |
-| `frontend` | `web/` | ESLint, tsc, vite build, vitest (217 tests), playwright (49 e2e tests) |
+| `frontend` | `web/` | ESLint, tsc, vite build, vitest (233 tests), playwright (49 e2e tests) |
 | `gkr-validate` | `configs/strategies/` | All `.gkr.yaml` validation |
-| `anti-pattern-scan` | All | 10 hard prohibition enforcement |
+| `anti-pattern-scan` | All | Hard prohibition enforcement |
 | `security` | All | Gitleaks + govulncheck |
 | `guardian` | Python + Go | 20 critical path regression smoke tests |
 | `mutation-test` | `orca/sizing/`, `orca/math/` | Mutation testing (main only) |
 
 ## Documentation
 
-- [Frontend Audit Report](docs/frontend-backtest-audit-2026-07-24.md) — Full frontend architecture audit: page catalog, backend mapping, duplication analysis, navigation restructuring
-- [Backtest Hub UI Audit](docs/backtest-hub-ui-audit-2026-07-25.md) — BacktestHub component-by-component audit, UX workflow analysis, prioritized remediation plan (P0–P3)
-- [Capital Pool Live Wiring Plan](docs/capital-pool-live-wiring-plan-2026-07-25.md) — 6-wave architecture plan: RiskPipeline interfaces, BaseCapitalPool extraction, Engine/LiveEngine/API server wiring, per-account strategy isolation
-- [Per-Strategy Optimization Implementation](docs/per-strategy-optimization-implementation-2026-07-25.md) — Light optimizer wiring, API handler fix, IVS bug fix, scoring unification, regression protection
-- [Tech Stack Constitution](AGENTS.md) — Language boundaries, 16 hard prohibitions, cross-language integration rules
+- [Senior Quantitative Audit Report 2026-08-02](docs/Senior%20Quantitative%20Audit%20Report%202026-08-02.md) — Full implementation audit: 8 phases, 16 strategies, backtest-live parity, regime activation matrix, risk hardening, walk-forward automation
+- [Tech Stack Constitution](AGENTS.md) — Language boundaries, 18 hard prohibitions, cross-language integration rules
+- [Grafana Setup](docs/grafana/README.md) — Monitoring dashboard setup and CI validation
 - [Strategy Configs](configs/strategies/) — GKR IR strategy definitions
+- [Tutorials](docs/tutorials/) — Getting started guides
 
 ## License
 
@@ -276,4 +286,4 @@ Proprietary. All rights reserved.
 
 ---
 
-*OrcaAlgo v1.1.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with unified RiskPipeline*
+*OrcaAlgo v1.2.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware synthetic data, ML-enhanced signal gating, and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*

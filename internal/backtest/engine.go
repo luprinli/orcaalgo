@@ -27,6 +27,11 @@ type UniverseSnapshot struct {
 	Symbols []string
 }
 
+const (
+	minTradesForMetrics  = 5   // minimum trades to compute Sharpe/Sortino
+	minTradesForReliable = 20  // minimum trades for statistically meaningful metrics
+)
+
 type BacktestConfig struct {
 	StrategyID            string
 	Symbols               []string
@@ -59,40 +64,57 @@ type BacktestConfig struct {
 }
 
 type MatrixBacktestConfig struct {
-	StrategyIDs      []string `json:"strategy_ids"`
-	Symbols          []string `json:"symbols"`
-	Timeframes       []string `json:"timeframes"`
-	StartDate        time.Time `json:"start_date"`
-	EndDate          time.Time `json:"end_date"`
-	InitialCapital   float64   `json:"initial_capital"`
-	DataSource       string    `json:"data_source"`
-	GateProfile      string    `json:"gate_profile"`
-	PropFirmEnabled  bool      `json:"propfirm_enabled"`
-	SizingPercent    float64   `json:"sizing_percent"`
-	KellyFraction    float64   `json:"kelly_fraction"`
+	StrategyIDs       []string  `json:"strategy_ids"`
+	Symbols           []string  `json:"symbols"`
+	Timeframes        []string  `json:"timeframes"`
+	StartDate         time.Time `json:"start_date"`
+	EndDate           time.Time `json:"end_date"`
+	InitialCapital    float64   `json:"initial_capital"`
+	DataSource        string    `json:"data_source"`
+	GateProfile       string    `json:"gate_profile"`
+	PropFirmEnabled   bool      `json:"propfirm_enabled"`
+	SizingPercent     float64   `json:"sizing_percent"`
+	KellyFraction     float64   `json:"kelly_fraction"`
+	SkipLightOptimize bool      `json:"skip_light_optimize"`
 }
 
 type ComboResult struct {
-	RunID            string             `json:"run_id"`
-	Symbol           string             `json:"symbol"`
-	StrategyID       string             `json:"strategy_id"`
-	Timeframe        string             `json:"timeframe"`
-	SharpeRatio      float64            `json:"sharpe_ratio"`
-	SortinoRatio     float64            `json:"sortino_ratio"`
-	MaxDrawdown      float64            `json:"max_drawdown"`
-	TotalReturn      float64            `json:"total_return"`
-	WinRate          float64            `json:"win_rate"`
-	ProfitFactor     float64            `json:"profit_factor"`
-	AvgTrade         float64            `json:"avg_trade"`
-	AvgWin           float64            `json:"avg_win"`
-	AvgLoss          float64            `json:"avg_loss"`
-	NumTrades        int                `json:"num_trades"`
-	Error            string             `json:"error,omitempty"`
-	Warnings         []string           `json:"warnings,omitempty"`
-	GatePassed       *bool              `json:"gate_passed,omitempty"`
-	AdverseSelectRate float64           `json:"adverse_selection_rate,omitempty"`
-	BestParams       map[string]float64 `json:"best_params,omitempty"`
-	Optimized        bool               `json:"optimized"`
+	RunID              string              `json:"run_id"`
+	Symbol             string              `json:"symbol"`
+	StrategyID         string              `json:"strategy_id"`
+	Timeframe          string              `json:"timeframe"`
+	SharpeRatio        float64             `json:"sharpe_ratio"`
+	SortinoRatio       float64             `json:"sortino_ratio"`
+	MaxDrawdown        float64             `json:"max_drawdown"`
+	MaxDrawdownDur     int                 `json:"max_drawdown_duration"`
+	TotalReturn        float64             `json:"total_return"`
+	WinRate            float64             `json:"win_rate"`
+	ProfitFactor       float64             `json:"profit_factor"`
+	AvgTrade           float64             `json:"avg_trade"`
+	AvgWin             float64             `json:"avg_win"`
+	AvgLoss            float64             `json:"avg_loss"`
+	NumTrades          int                 `json:"num_trades"`
+	NumWins            int                 `json:"num_wins"`
+	NumLosses          int                 `json:"num_losses"`
+	AvgMAE             float64             `json:"avg_mae"`
+	AvgMFE             float64             `json:"avg_mfe"`
+	Error              string              `json:"error,omitempty"`
+	Warnings           []string            `json:"warnings,omitempty"`
+	GatePassed         *bool               `json:"gate_passed,omitempty"`
+	AdverseSelectRate  float64             `json:"adverse_selection_rate,omitempty"`
+	BestParams         map[string]float64  `json:"best_params,omitempty"`
+	Optimized          bool                `json:"optimized"`
+	StrategyParams     map[string]float64  `json:"strategy_params,omitempty"`
+	EquityCurve        []EquityPoint       `json:"equity_curve,omitempty"`
+	Trades             []Trade             `json:"trades,omitempty"`
+	LongTrades         int                 `json:"long_trades"`
+	ShortTrades        int                 `json:"short_trades"`
+	LongWinRate        float64             `json:"long_win_rate"`
+	ShortWinRate       float64             `json:"short_win_rate"`
+	LongGrossPnL       float64             `json:"long_gross_pnl"`
+	ShortGrossPnL      float64             `json:"short_gross_pnl"`
+	LongPF             float64             `json:"long_profit_factor"`
+	ShortPF            float64             `json:"short_profit_factor"`
 }
 
 type MatrixResult struct {
@@ -117,6 +139,7 @@ type Trade struct {
 	StopPrice        types.Price
 	TakePrice        types.Price
 	ExitReason       string
+	EndOfData        bool
 	BrokerFee        float64
 	SlippageMidBps   float64
 	SlippageLastBps  float64
@@ -125,6 +148,26 @@ type Trade struct {
 	MFE              float64
 	lowestSinceEntry float64
 	highestSinceEntry float64
+}
+
+type LongShortBreakdown struct {
+	LongTrades    int     `json:"long_trades"`
+	ShortTrades   int     `json:"short_trades"`
+	LongWins      int     `json:"long_wins"`
+	ShortWins     int     `json:"short_wins"`
+	LongWinRate   float64 `json:"long_win_rate"`
+	ShortWinRate  float64 `json:"short_win_rate"`
+	LongGrossPnL  float64 `json:"long_gross_pnl"`
+	ShortGrossPnL float64 `json:"short_gross_pnl"`
+	LongAvgPnL    float64 `json:"long_avg_pnl"`
+	ShortAvgPnL   float64 `json:"short_avg_pnl"`
+	LongPF        float64 `json:"long_profit_factor"`
+	ShortPF       float64 `json:"short_profit_factor"`
+	LongAvgMAE    float64 `json:"long_avg_mae"`
+	ShortAvgMAE   float64 `json:"short_avg_mae"`
+	LongAvgMFE    float64 `json:"long_avg_mfe"`
+	ShortAvgMFE   float64 `json:"short_avg_mfe"`
+	DirectionalBias float64 `json:"directional_bias"`
 }
 
 type BacktestResult struct {
@@ -161,6 +204,7 @@ type BacktestResult struct {
 	EngineVersion  string          `json:"engine_version,omitempty"`
 	StrategyHash   string          `json:"strategy_hash,omitempty"`
 	SchemaVersion  int             `json:"schema_version,omitempty"`
+	LongShort      LongShortBreakdown `json:"long_short,omitempty"`
 }
 
 type TemporalBreakdown struct {
@@ -317,10 +361,27 @@ func (e *Engine) SetExitOrchestrator(orch *ml.ExitOrchestrator) {
 }
 
 // SetRiskPipeline injects a shared signal-and-fill audit pipeline. When set,
-// ProcessSignal is called after the engine's inline sizing/exposure checks,
-// and ReconcileFillWithoutPropFirm is called on every trade close.
+// ProcessSignal becomes the primary path in generateSignal (inline checks become
+// the fallback), and ReconcileFillWithoutPropFirm is called on every trade close.
 func (e *Engine) SetRiskPipeline(p *risk.RiskPipeline) {
 	e.pipeline = p
+}
+
+// WirePipeline creates a SignalGateImpl from the engine's existing volHalt,
+// positionSizer, and exposure components, then sets up the canonical
+// RiskPipeline. The pipeline becomes the primary path in generateSignal.
+// Call this after any SetMetaLabeler / SetRegimeEnhancer calls.
+func (e *Engine) WirePipeline() {
+	signalGate := risk.NewSignalGateImpl(e.volHalt, e.positionSizer, e.exposure, nil)
+	signalGate.SetBacktestMode(true)
+
+	e.pipeline = &risk.RiskPipeline{
+		SignalGate:   signalGate,
+		Capital:      nil,
+		PropFirm:     e.ftmo,
+		KellyMult:    e.kellyMult,
+		RegimeMatrix: risk.NewRegimeActivationMatrix(),
+	}
 }
 
 // GetDB returns the underlying database handle, enabling callers that need the raw Database
@@ -387,8 +448,15 @@ func NewEngineWithSlippageAndStrategy(db Database, model SlippageModel, sr strat
 	return e
 }
 
-func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResult, error) {
+func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *BacktestResult, err error) {
 	e.resetStrategies()
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("engine panic recovered: %v", r)
+			result = nil
+		}
+	}()
 
 	var (
 		regimeLogs       []RegimeLog
@@ -445,7 +513,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		return nil, candleErr
 	}
 
-	result := &BacktestResult{Config: config, SchemaVersion: 1}
+	result = &BacktestResult{Config: config, SchemaVersion: 1}
 
 	if config.EngineVersion == "" {
 		config.EngineVersion = "dev"
@@ -498,8 +566,12 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 	}
 
 	// Allow the optimizer to tune the fractional Kelly multiplier per run.
+	// Hard cap at 0.25 per HP #6: fractional Kelly is mandatory in both backtest and live paths.
 	if config.KellyFraction > 0 {
 		e.kellyMult = config.KellyFraction
+	}
+	if e.kellyMult > 0.25 {
+		e.kellyMult = 0.25
 	}
 
 	openTrades := make(map[string]*Trade)
@@ -513,7 +585,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		atrPeriod = config.StopLoss.ATRPeriod
 	}
 
-	barsPerDay := barsPerDayFromTimeframe(config.Timeframe)
+	declaredBarsPerDay := barsPerDayFromTimeframe(config.Timeframe)
+	barsPerDay := declaredBarsPerDay
 
 	for i := range allCandles {
 		candle := allCandles[i]
@@ -674,6 +747,10 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				} else {
 					ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
 				}
+				if math.IsNaN(ot.PnL) || math.IsInf(ot.PnL, 0) || math.Abs(ot.PnL) > config.InitialCapital*2 {
+					ot.PnL = 0
+					exitReason = "pnl_clamped"
+				}
 				ot.PnLPct = ot.PnL / config.InitialCapital * 100
 				ot.ExitPrice = types.PriceFromFloat(exitPrice)
 				ot.ExitTime = candle.Time
@@ -692,6 +769,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 				}
 
 				capital += ot.PnL
+			maxCapital := config.InitialCapital * 100
+			if capital > maxCapital {
+				capital = maxCapital
+				result.Warnings = append(result.Warnings, fmt.Sprintf("capital clamped at %.0fx initial (overflow guard)", maxCapital/config.InitialCapital))
+			}
 			if capital <= 0 {
 				capital = 0
 			}
@@ -853,6 +935,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		ot.ExitPrice = types.PriceFromFloat(exitPrice)
 		ot.ExitTime = lastCandle.Time
 		ot.ExitReason = exitReason
+		ot.EndOfData = true
 		ot.BrokerFee = brokerFee
 
 		entry := ot.EntryPrice.Float64()
@@ -865,6 +948,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		}
 
 		capital += ot.PnL
+		if capital > config.InitialCapital*100 {
+			capital = config.InitialCapital * 100
+		}
 		if capital <= 0 {
 			capital = 0
 		}
@@ -889,6 +975,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 	}
 
 	result.TotalReturnPct = (capital - config.InitialCapital) / config.InitialCapital * 100
+	if math.IsNaN(capital) || math.IsInf(capital, 0) {
+		result.TotalReturn = 0
+		result.TotalReturnPct = 0
+		result.Warnings = append(result.Warnings, "metrics: NaN/Inf capital — clamped to zero")
+	}
 	result.TotalReturn = capital - config.InitialCapital
 	result.CompletedAt = time.Now()
 
@@ -904,23 +995,42 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 		result.Warnings = append(result.Warnings, "VIX exceeded 25 during backtest period: regime detection accuracy may be reduced vs live (VIX modulation not applied to pre-computed regime logs)")
 	}
 
+	barsPerDay = effectiveBarsPerDay(allCandles, declaredBarsPerDay)
+	if declaredBarsPerDay > 0 && math.Abs(barsPerDay-declaredBarsPerDay) > declaredBarsPerDay*0.01 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("barsPerDay corrected: declared=%.1f, effective=%.1f (timeframe label may not match data resolution)",
+				declaredBarsPerDay, barsPerDay))
+	}
+
+	diag := preflightDataQuality(allCandles)
+	if diag != "" {
+		result.Warnings = append(result.Warnings, diag)
+	}
+
+	if config.DataSource == "synthetic" && (config.StrategyID == "breakout" || config.StrategyID == "opening_range_breakout" || config.StrategyID == "session_scalp" || config.StrategyID == "scalp") {
+		result.Warnings = append(result.Warnings, "strategy requires intraday microstructure patterns absent from synthetic data — use real market data for reliable evaluation")
+	}
+
 	if result.NumTrades > 0 {
 		result.WinRate = calculateWinRate(trades)
-		if result.NumTrades >= 5 {
+		if result.NumTrades >= minTradesForMetrics {
 			result.SharpeRatio = calculateSharpe(equity, barsPerDay)
-			result.SortinoRatio = calculateSortino(equity, barsPerDay)
 			monitor.SetStrategySharpe(config.StrategyID, "backtest", result.SharpeRatio)
 		}
-		result.MaxDrawdown = calculateMaxDrawdown(equity)
-		result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
+		if result.NumTrades >= minTradesForReliable {
+			result.SortinoRatio = calculateSortino(equity, barsPerDay)
+			result.MaxDrawdown = calculateMaxDrawdown(equity)
+			result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
+			result.AvgTrade = result.TotalReturn / float64(result.NumTrades)
+			result.AvgWin, result.AvgLoss = calculateAvgWinLoss(trades)
+			result.NumWins, result.NumLosses = countWinsLosses(trades)
+		}
 		result.ProfitFactor = calculateProfitFactor(trades)
-		result.AvgTrade = result.TotalReturn / float64(result.NumTrades)
-		result.AvgWin, result.AvgLoss = calculateAvgWinLoss(trades)
-		result.NumWins, result.NumLosses = countWinsLosses(trades)
 		result.AdverseSelectionRate = calculateAdverseSelectionRate(trades)
 		result.DailyReturns = calculateDailyReturns(equity)
 		result.RegimeStats = calculateRegimeStats(trades)
 		result.TemporalBreakdown = calculateTemporalBreakdown(trades)
+		result.LongShort = calculateLongShortBreakdown(trades)
 	}
 
 	// Gate evaluation MUST run after the metrics above are computed — otherwise it
@@ -969,63 +1079,17 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (*BacktestResul
 }
 
 func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfig, runningCapital float64) *Signal {
-	if runningCapital <= 0 {
-		e.signalDiag.CapitalZero++
-		return nil
-	}
-
-	if e.volHalt != nil && e.volHalt.IsHalted() {
-		e.signalDiag.VolHalted++
-		return nil
-	}
-
-	// NOTE: the wall-clock OrderRateLimiter is intentionally NOT applied in
-	// backtests. It is a live-execution safety control (throttling real broker
-	// API calls at N orders/sec of wall-clock time). A backtest compresses years
-	// of simulated time into milliseconds of real time, so a wall-clock limiter
-	// would reject ~99% of otherwise-valid signals and starve every run of
-	// trades. Rate/throughput realism in backtests is modeled by the fill
-	// simulator and capital pool, not by wall-clock throttling.
-
-	e.volHalt.UpdateReturn(0)
-	e.exposure.SetEquity(runningCapital)
-
-
-
-
-	c := runningCapital
-	sp := config.SizingPercent
-	if sp <= 0 {
-		sp = 0.02
-	}
-	baseSize := c * sp
-	if e.ftmo != nil {
-		baseSize = c * e.ftmo.GetRegimeMultiplier() * sp
-	} else {
-		switch regime {
-		case 0:
-			baseSize = c * sp * 1.5 // calm: 150% of base
-		case 1:
-			baseSize = c * sp       // normal: 100% of base
-		case 2:
-			baseSize = c * sp * 0.5 // volatile: 50% of base
-		case 3:
-			baseSize = 0            // crash: no trading
-		}
-	}
-	if baseSize <= 0 {
-		e.signalDiag.BaseSizeZero++
-		return nil
-	}
-
-	if config.UseSeasonalityOverlay {
-		szn := NewSeasonalityOverlay()
-		baseSize *= szn.Multiplier(candle.Time)
-	}
-	baseSize *= e.kellyMult
-
 	sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
-	raw := sr.Evaluate(candle, regime)
+	var raw *strategy.Signal
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				raw = nil
+				e.signalDiag.StrategyNil++
+			}
+		}()
+		raw = sr.Evaluate(candle, regime)
+	}()
 	if raw == nil {
 		e.signalDiag.StrategyNil++
 		return nil
@@ -1040,15 +1104,105 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		}
 	}
 
-	// Meta-labeling ML gate: predict p_win and suppress low-confidence signals
+	confidence := 1.0
 	if e.batchInferrer != nil && e.metaLabeler != nil && e.metaLabeler.IsHealthy() {
 		metaResult := e.batchInferrer.Evaluate(nil, raw.PWin)
 		if !metaResult.Accepted {
 			e.signalDiag.MLRejected++
 			return nil
 		}
-		baseSize *= math.Min(metaResult.PWin*1.5, 1.0)
+		confidence = metaResult.PWin
 	}
+
+	seasonalityMult := 1.0
+	if config.UseSeasonalityOverlay {
+		szn := NewSeasonalityOverlay()
+		seasonalityMult = szn.Multiplier(candle.Time)
+	}
+
+	if e.regimeEnhancer != nil && e.regimeEnhancer.IsHealthy() {
+		score, _ := e.regimeEnhancer.Evaluate(
+			[4]float64{}, 0, 0, 0, 0.5, float64(candle.Time.Hour()),
+		)
+		e.positionSizer.SetRegimeScore(score)
+	}
+
+	sp := config.SizingPercent
+	if sp <= 0 {
+		sp = 0.02
+	}
+	baseSizeCapital := runningCapital * sp * seasonalityMult
+	baseSize := baseSizeCapital / candle.Close.Float64()
+
+	if e.pipeline != nil {
+		e.pipeline.CurrentRegime = regime
+		pipeResult := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
+			StrategyID:       config.StrategyID,
+			Symbol:           candle.Symbol,
+			Side:             raw.Side,
+			Price:            candle.Close.Float64(),
+			Confidence:       confidence,
+			BaseSize:         baseSize,
+			ExistingPosition: 0,
+			RunningCapital:   runningCapital,
+		})
+		if !pipeResult.Approved {
+			e.signalDiag.PipelineRejected++
+			return nil
+		}
+		e.signalDiag.SignalsPassed++
+		return &Signal{
+			Symbol:   candle.Symbol,
+			Side:     raw.Side,
+			Quantity: pipeResult.Size,
+		}
+	}
+
+	return e.generateSignalInlineFallback(candle, regime, config, runningCapital, raw, confidence, seasonalityMult)
+}
+
+func (e *Engine) generateSignalInlineFallback(
+	candle Candle, regime int8, config BacktestConfig,
+	runningCapital float64, raw *strategy.Signal,
+	confidence, seasonalityMult float64,
+) *Signal {
+	if runningCapital <= 0 {
+		e.signalDiag.CapitalZero++
+		return nil
+	}
+
+	if e.volHalt != nil && e.volHalt.IsHalted() {
+		e.signalDiag.VolHalted++
+		return nil
+	}
+
+	e.volHalt.UpdateReturn(0)
+	e.exposure.SetEquity(runningCapital)
+
+	c := runningCapital
+	baseSize := c * 0.02 * seasonalityMult
+	if config.SizingPercent > 0 {
+		baseSize = c * config.SizingPercent * seasonalityMult
+	}
+	if e.ftmo != nil {
+		baseSize *= e.ftmo.GetRegimeMultiplier()
+	} else {
+		switch regime {
+		case 0:
+			baseSize *= 1.5
+		case 2:
+			baseSize *= 0.5
+		case 3:
+			baseSize = 0
+		}
+	}
+	if baseSize <= 0 {
+		e.signalDiag.BaseSizeZero++
+		return nil
+	}
+
+	baseSize *= e.kellyMult
+	baseSize *= math.Min(confidence*1.5, 1.0)
 
 	positionPct := baseSize / c
 	if positionPct > 0.03 {
@@ -1057,15 +1211,6 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 	quantity := (c * positionPct) / candle.Close.Float64()
 	if e.ftmo != nil && config.PropFirmEnabled {
 		quantity = e.ftmo.GetPositionSize(quantity)
-	}
-
-	// ML regime enhancement: replace step-function regime multiplier with
-	// continuous regime score if the enhancer is available.
-	if e.regimeEnhancer != nil && e.regimeEnhancer.IsHealthy() {
-		score, _ := e.regimeEnhancer.Evaluate(
-			[4]float64{}, 0, 0, 0, 0.5, float64(candle.Time.Hour()),
-		)
-		e.positionSizer.SetRegimeScore(score)
 	}
 
 	quantity = e.positionSizer.ComputeSizeUncapped(1.0, quantity, 0)
@@ -1080,27 +1225,6 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		return nil
 	}
 
-	// Pipeline audit: if a RiskPipeline is configured, run the signal through
-	// the canonical pipeline. This is belt-and-suspenders with the inline checks
-	// above — the pipeline enforces the same rules via the shared infrastructure.
-	if e.pipeline != nil {
-		pipeResult := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
-			StrategyID:       config.StrategyID,
-			Symbol:           candle.Symbol,
-			Side:             raw.Side,
-			Price:            candle.Close.Float64(),
-			Confidence:       1.0,
-			BaseSize:         quantity,
-			ExistingPosition: 0,
-			RunningCapital:   runningCapital,
-		})
-		if !pipeResult.Approved {
-			e.signalDiag.PipelineRejected++
-			return nil
-		}
-		quantity = pipeResult.Size
-	}
-
 	e.signalDiag.SignalsPassed++
 	return &Signal{
 		Symbol:   candle.Symbol,
@@ -1111,7 +1235,11 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 
 func (e *Engine) generateSignalForExit(candle Candle, regime int8, config BacktestConfig, runningCapital float64) *Signal {
 	sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
-	raw := sr.Evaluate(candle, regime)
+	var raw *strategy.Signal
+	func() {
+		defer func() { recover() }()
+		raw = sr.Evaluate(candle, regime)
+	}()
 	if raw == nil {
 		return nil
 	}
@@ -1141,6 +1269,44 @@ func barsPerDayFromTimeframe(timeframe string) float64 {
 	default:
 		return 1.0
 	}
+}
+
+// effectiveBarsPerDay computes the actual bars-per-trading-day from the candle
+// data, guarding against timeframe label mismatches (e.g. when synthetic daily
+// data is labeled as "5m"). Falls back to declared barsPerDay if data is empty.
+func effectiveBarsPerDay(candles []Candle, declaredBarsPerDay float64) float64 {
+	if len(candles) == 0 {
+		return declaredBarsPerDay
+	}
+	n := 0
+	for _, c := range candles {
+		if c.Time.Weekday() != time.Saturday && c.Time.Weekday() != time.Sunday {
+			n++
+		}
+	}
+	if n == 0 {
+		return declaredBarsPerDay
+	}
+	tradingDays := 0
+	seen := make(map[string]bool)
+	for _, c := range candles {
+		key := c.Time.Format("2006-01-02")
+		if !seen[key] {
+			seen[key] = true
+			if c.Time.Weekday() != time.Saturday && c.Time.Weekday() != time.Sunday {
+				tradingDays++
+			}
+		}
+	}
+	if tradingDays == 0 {
+		return declaredBarsPerDay
+	}
+	effective := float64(n) / float64(tradingDays)
+	tolerance := declaredBarsPerDay * 0.3
+	if declaredBarsPerDay > 0 && math.Abs(effective-declaredBarsPerDay) > tolerance {
+		return effective
+	}
+	return declaredBarsPerDay
 }
 
 func (e *Engine) getRunnerForStrategy(strategyID string, config BacktestConfig) strategy.Strategy {
@@ -1291,34 +1457,63 @@ func calculateSortino(equity []EquityPoint, barsPerDay float64) float64 {
 	if len(equity) < 2 {
 		return 0
 	}
-	returns := make([]float64, len(equity)-1)
-	for i := 1; i < len(equity); i++ {
-		if equity[i-1].Value > 0 {
-			returns[i-1] = (equity[i].Value - equity[i-1].Value) / equity[i-1].Value
+
+	dayMap := make(map[string]float64)
+	dayOrder := make([]string, 0)
+	for _, e := range equity {
+		dayKey := e.Time.Format("2006-01-02")
+		if _, exists := dayMap[dayKey]; !exists {
+			dayOrder = append(dayOrder, dayKey)
+		}
+		dayMap[dayKey] = e.Value
+	}
+
+	if len(dayOrder) < 2 {
+		return 0
+	}
+
+	returns := make([]float64, 0, len(dayOrder)-1)
+	for i := 1; i < len(dayOrder); i++ {
+		prev := dayMap[dayOrder[i-1]]
+		curr := dayMap[dayOrder[i]]
+		if prev > 0 {
+			returns = append(returns, (curr-prev)/prev)
 		}
 	}
+
+	if len(returns) < 2 {
+		return 0
+	}
+
 	mean := 0.0
 	for _, r := range returns {
 		mean += r
 	}
 	mean /= float64(len(returns))
 
-	downVariance := 0.0
+	var sumSq float64
+	var count int
 	for _, r := range returns {
 		if r < 0 {
-			downVariance += r * r
+			sumSq += r * r
+			count++
 		}
 	}
-	downVariance /= float64(len(returns))
-	if downVariance == 0 {
+	if count == 0 || sumSq == 0 {
 		return 0
 	}
-	downStdDev := math.Sqrt(downVariance)
-	if barsPerDay <= 0 {
-		barsPerDay = 1.0
+	if math.IsNaN(mean) || math.IsNaN(sumSq) || math.IsInf(mean, 0) || math.IsInf(sumSq, 0) {
+		return 0
 	}
-	annualFactor := math.Sqrt(252.0 * barsPerDay)
-	return mean / downStdDev * annualFactor
+	downStdDev := math.Sqrt(sumSq / float64(count))
+	if downStdDev < 1e-9 {
+		return 0
+	}
+	result := mean / downStdDev * math.Sqrt(252.0)
+	if math.IsNaN(result) || math.IsInf(result, 0) {
+		return 0
+	}
+	return result
 }
 
 func calculateMaxDrawdown(equity []EquityPoint) float64 {
@@ -1363,6 +1558,9 @@ func calculateMaxDrawdownDuration(equity []EquityPoint) int {
 }
 
 func calculateProfitFactor(trades []Trade) float64 {
+	if len(trades) == 0 {
+		return 0
+	}
 	grossWin := 0.0
 	grossLoss := 0.0
 	for _, t := range trades {
@@ -1373,9 +1571,9 @@ func calculateProfitFactor(trades []Trade) float64 {
 		}
 	}
 	if grossLoss == 0 {
-		if grossWin > 0 {
-			return 999.0
-		}
+		return 0
+	}
+	if math.IsNaN(grossWin) || math.IsNaN(grossLoss) || math.IsInf(grossWin, 0) || math.IsInf(grossLoss, 0) {
 		return 0
 	}
 	return grossWin / grossLoss
@@ -1414,6 +1612,76 @@ func countWinsLosses(trades []Trade) (int, int) {
 		}
 	}
 	return wins, losses
+}
+
+func calculateLongShortBreakdown(trades []Trade) LongShortBreakdown {
+	var b LongShortBreakdown
+	var longWins, shortWins int
+	var longLoss float64
+	var shortLoss float64
+	var longMAE, shortMAE float64
+	var longMFE, shortMFE float64
+
+	for _, t := range trades {
+		if math.IsNaN(t.PnL) || math.IsInf(t.PnL, 0) || math.IsNaN(t.MAE) || math.IsInf(t.MAE, 0) || math.IsNaN(t.MFE) || math.IsInf(t.MFE, 0) {
+			continue
+		}
+		if t.Side == "BUY" {
+			b.LongTrades++
+			b.LongGrossPnL += t.PnL
+			longMAE += t.MAE
+			longMFE += t.MFE
+			if t.PnL > 0 {
+				longWins++
+			} else {
+				longLoss += -t.PnL
+			}
+		} else {
+			b.ShortTrades++
+			b.ShortGrossPnL += t.PnL
+			shortMAE += t.MAE
+			shortMFE += t.MFE
+			if t.PnL > 0 {
+				shortWins++
+			} else {
+				shortLoss += -t.PnL
+			}
+		}
+	}
+
+	b.LongWins = longWins
+	b.ShortWins = shortWins
+
+	if b.LongTrades > 0 {
+		b.LongWinRate = float64(longWins) / float64(b.LongTrades) * 100.0
+		b.LongAvgPnL = b.LongGrossPnL / float64(b.LongTrades)
+		b.LongAvgMAE = longMAE / float64(b.LongTrades)
+		b.LongAvgMFE = longMFE / float64(b.LongTrades)
+	}
+	if b.ShortTrades > 0 {
+		b.ShortWinRate = float64(shortWins) / float64(b.ShortTrades) * 100.0
+		b.ShortAvgPnL = b.ShortGrossPnL / float64(b.ShortTrades)
+		b.ShortAvgMAE = shortMAE / float64(b.ShortTrades)
+		b.ShortAvgMFE = shortMFE / float64(b.ShortTrades)
+	}
+
+	if longLoss > 0 {
+		b.LongPF = (b.LongGrossPnL + longLoss) / longLoss
+	} else if b.LongGrossPnL > 0 {
+		b.LongPF = b.LongGrossPnL
+	}
+	if shortLoss > 0 {
+		b.ShortPF = (b.ShortGrossPnL + shortLoss) / shortLoss
+	} else if b.ShortGrossPnL > 0 {
+		b.ShortPF = b.ShortGrossPnL
+	}
+
+	totalAbsPnL := math.Abs(b.LongGrossPnL) + math.Abs(b.ShortGrossPnL)
+	if totalAbsPnL > 0 {
+		b.DirectionalBias = (b.LongGrossPnL - b.ShortGrossPnL) / totalAbsPnL
+	}
+
+	return b
 }
 
 func calculateDailyReturns(equity []EquityPoint) []DailyReturn {
@@ -1680,6 +1948,10 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 	result.EquityCurve = equity
 	result.NumTrades = len(trades)
 	result.TotalReturnPct = (capital - config.InitialCapital) / config.InitialCapital * 100
+	if math.IsNaN(capital) || math.IsInf(capital, 0) {
+		result.TotalReturn = 0
+		result.TotalReturnPct = 0
+	}
 	result.TotalReturn = capital - config.InitialCapital
 
 	if result.NumTrades > 0 {
@@ -1892,4 +2164,108 @@ func sortedPeriods(m map[string]*PeriodStat) []PeriodStat {
 		return result[i].Period < result[j].Period
 	})
 	return result
+}
+
+// preflightDataQuality performs a fast diagnostic on candle data and returns a
+// warning string if the data fails basic quality gates. Checks:
+//  1. Sufficient data points (> 20)
+//  2. Non-zero volatility
+//  3. Lag-1 autocorrelation sign (positive → trending, negative → mean-reverting, zero → random walk)
+//  4. Variance ratio at lag 5 (vs random walk expectation)
+func preflightDataQuality(candles []Candle) string {
+	if len(candles) < 20 {
+		return fmt.Sprintf("data_quality: only %d candles (minimum 20 required for meaningful backtest)", len(candles))
+	}
+	var closes []float64
+	for _, c := range candles {
+		closes = append(closes, c.Close.Float64())
+	}
+	n := len(closes)
+	returns := make([]float64, n-1)
+	for i := 1; i < n; i++ {
+		if closes[i-1] > 0 {
+			returns[i-1] = (closes[i] - closes[i-1]) / closes[i-1]
+		}
+	}
+	var sum, sumSq float64
+	for _, r := range returns {
+		sum += r
+		sumSq += r * r
+	}
+	meanRet := sum / float64(len(returns))
+	variance := sumSq/float64(len(returns)) - meanRet*meanRet
+	if variance <= 0 {
+		return "data_quality: zero price variance (all candles identical — data may be stale or missing)"
+	}
+	if variance < 1e-12 {
+		return "data_quality: near-zero price variance (insufficient volatility for strategy evaluation)"
+	}
+	// Lag-1 autocorrelation
+	if len(returns) >= 10 {
+		var cov, denom float64
+		for i := 1; i < len(returns); i++ {
+			cov += (returns[i] - meanRet) * (returns[i-1] - meanRet)
+			denom += (returns[i] - meanRet) * (returns[i] - meanRet)
+		}
+		if denom > 0 {
+			ac1 := cov / denom
+			if math.Abs(ac1) < 0.01 {
+				return "data_quality: returns show no serial correlation (lag-1 autocorrelation ≈ 0) — trend and mean-reversion strategies may not trigger as expected; verify data is not a driftless random walk"
+			}
+		}
+	}
+	// Variance ratio at lag 5: VR = Var(k-step return) / (k * Var(1-step return))
+	// Under random walk null, VR ≈ 1. VR > 1 → trending, VR < 1 → mean-reverting.
+	if len(returns) >= 25 {
+		var var1, var5 float64
+		mean1 := meanRet
+		for _, r := range returns {
+			var1 += (r - mean1) * (r - mean1)
+		}
+		var1 /= float64(len(returns))
+		if var1 > 0 {
+			for i := 0; i+5 < len(returns); i++ {
+				r5 := (closes[i+5] - closes[i]) / closes[i]
+				var5 += (r5) * (r5)
+			}
+			m := float64(len(returns) - 5)
+			if m > 0 {
+				var5 /= m
+				vr := var5 / (5.0 * var1)
+				if vr < 0.4 {
+					return fmt.Sprintf("data_quality: variance ratio VR(5)=%.2f indicates strong mean reversion — grid/mean-reversion strategies may overfit if not OOS-validated", vr)
+				}
+				if vr > 2.5 {
+					return fmt.Sprintf("data_quality: variance ratio VR(5)=%.2f indicates strong momentum — trend strategies may overfit if not walk-forward validated", vr)
+				}
+			}
+		}
+	}
+	if len(closes) > 0 && closes[0] > 0 {
+		totalRet := (closes[len(closes)-1] - closes[0]) / closes[0]
+		if math.IsInf(totalRet, 0) || math.IsNaN(totalRet) {
+			return "data_quality: price path contains NaN or Inf values — data corruption detected"
+		}
+	}
+	// Regime diversity check: warn if returns cluster in a single volatility bucket
+	if len(returns) >= 60 {
+		absReturns := make([]float64, len(returns))
+		copy(absReturns, returns)
+		for i := range absReturns {
+			if absReturns[i] < 0 {
+				absReturns[i] = -absReturns[i]
+			}
+		}
+		sort.Float64s(absReturns)
+		p25 := absReturns[len(absReturns)*25/100]
+		p75 := absReturns[len(absReturns)*75/100]
+		p95 := absReturns[len(absReturns)*95/100]
+		// Check if 90%+ of returns are in the "calm" bucket (below the 75th percentile equivalent of a volatile asset)
+		// Heuristic: if p95 / (p75 + 1e-8) < 2.0, there's no meaningful tail — single-regime data
+		if p95 > 0 && p75 > 0 && p95/p75 < 2.0 {
+			return "data_quality: returns show no tail dispersion (p95/p75 ratio < 2) — data may span only a single market regime; regime-specific strategy evaluation may be unreliable"
+		}
+		_ = p25
+	}
+	return ""
 }

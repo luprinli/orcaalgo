@@ -17,22 +17,29 @@ All operational configuration files for the OrcaAlgo platform. Strategies use GK
 
 ## Strategies (`configs/strategies/`)
 
-Five GKR strategy definitions using the `qst-ir/0.4` intermediate representation:
+12 GKR strategy definitions using the `qst-ir/0.4` intermediate representation, all with regime gates:
 
-| File | Strategy ID | Type | Key Params |
-|------|------------|------|------------|
-| `intraday_mr.gkr.yaml` | `orca-intraday-mr-v1` | Mean Reversion | lookback=14, entry_z=2.0, exit_z=0.5, kelly_multiplier=0.25 |
-| `trend_following.gkr.yaml` | `orca-trend-following-v1` | Trend Following | fast_period=20, slow_period=50, atr_period=14, kelly_multiplier=0.25 |
-| `opening_range_breakout.gkr.yaml` | `orca-opening-range-breakout-v1` | Breakout | range_minutes=5, entry_buffer_pct=0.1, kelly_multiplier=0.25 |
-| `grid.gkr.yaml` | `orca-grid-v1` | Grid Trading | grid_levels=5, grid_spacing_pct=0.5, kelly_multiplier=0.25 |
-| `session_scalp.gkr.yaml` | `orca-session-scalp-v1` | Session Scalping | scalp_period=5, scalp_target=0.3, kelly_multiplier=0.25 |
-
-Additional strategies (Pairs Trading, Volatility Harvesting) are seeded via the database seeder and registered in the Go engine — GKR YAML files are pending.
+| File | Strategy ID | Type | Regimes | Key Params |
+|------|------------|------|---------|------------|
+| `intraday_mr.gkr.yaml` | `orca-intraday-mr-v1` | Mean Reversion | Calm only | lookback=14, entry_z=2.0, exit_z=0.5, kelly=0.25 |
+| `trend_following.gkr.yaml` | `orca-trend-following-v1` | Trend Following | Trending only | fast_period=20, slow_period=50, atr_period=14, kelly=0.25 |
+| `opening_range_breakout.gkr.yaml` | `orca-opening-range-breakout-v1` | Breakout (5m) | Trending + HighVol | range_minutes=5, entry_buffer_pct=0.1, kelly=0.25 |
+| `grid.gkr.yaml` | `orca-grid-trading-v1` | Grid Trading | Calm only (disabled) | grid_levels=5, grid_spacing_pct=0.5, kelly=0.25 |
+| `session_scalp.gkr.yaml` | `orca-session-scalp-v1` | Session Scalping | Calm + Trending + HighVol | scalp_period=5, kelly=0.25/0.25/0.15 |
+| `rsi_divergence.gkr.yaml` | `orca-rsi-divergence-v1` | RSI Divergence | All except Crisis | rsi_period=9, kelly=0.25 |
+| `volatility_harvesting.gkr.yaml` | `orca-volatility-harvesting-v1` | Vol Harvesting | HighVol only | vix_threshold=25, kelly=0.15 |
+| `pairs_trading.gkr.yaml` | `orca-pairs-trading-v1` | Pairs Trading | Calm + HighVol | entry_z=2.0, exit_z=0.5, kelly=0.25/0.15 |
+| `dragon_trend.gkr.yaml` | `orca-dragon-trend-v1` | Dragon Trend | Trending + HighVol | ema_periods=[8,21,50,200], min_aligned=3, kelly=0.25/0.15 |
+| `vwap_mr.gkr.yaml` | `orca-vwap-mr-v1` | VWAP MR | Calm only | lookback=20, entry_z=1.5, kelly=0.25 |
+| `orb_15m.gkr.yaml` | `orca-orb-15m-v1` | Breakout (15m) | Trending + HighVol | range_minutes=15, kelly=0.25/0.15 |
+| `volume_scalp.gkr.yaml` | `orca-volume-scalp-v1` | Volume Scalp | Calm + Trending | volume_multiplier=2.0, kelly=0.25 |
+| `vix_futures_carry.gkr.yaml` | `orca-vix-futures-carry-v1` | VIX Carry | HighVol only (spot proxy) | contango_threshold=22, kelly=0.15 |
 
 All strategies enforce:
-- Fractional Kelly (k=0.25) with per-trade cap (2%) and total exposure cap (30%)
+- Fractional Kelly (primary: k=0.25, highvol: k=0.15) with per-trade cap (2%) and total exposure cap (30%)
+- Regime-aware activation via `regime_gate` nodes aligned with `RegimeActivationMatrix`
 - PropFirm compliance gate (max daily DD 5%, max absolute DD $1000, max positions 5)
-- `capabilities: [core]`
+- `capabilities: [core, regime_aware]`
 
 ### Validation
 

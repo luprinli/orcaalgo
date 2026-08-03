@@ -28,12 +28,20 @@ strategy:
         atr: "atr_filter.atr"
       params:
         atr_multiplier: 2.0
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "trend_signal.signal"
+      params:
+        blocked_states: [0, 2, 3]
     - id: "position_sizer"
       token_ref:
         token_id: "size.kelly_fractional"
         version: ">=1.0"
       inputs:
-        signal: "trend_signal.signal"
+        signal: "regime_gate.signal"
       params:
         multiplier: 0.25
         per_trade_cap_pct: 0.02

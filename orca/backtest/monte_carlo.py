@@ -34,15 +34,23 @@ def generate_random_trades(
     return pnls
 
 
-def resample_actual_trades(actual_pnls: list[float], num_trades: int) -> list[float]:
+def resample_actual_trades(actual_pnls: list[float], num_trades: int, block_len: int = 7) -> list[float]:
     if len(actual_pnls) == 0:
         return []
     if num_trades <= 0:
         num_trades = len(actual_pnls)
+    if block_len <= 1 or block_len > len(actual_pnls) // 4:
+        block_len = 1
+    n = len(actual_pnls)
     sampled = []
-    for _ in range(num_trades):
-        idx = random.randint(0, len(actual_pnls) - 1)
-        sampled.append(actual_pnls[idx])
+    idx = 0
+    while idx < num_trades:
+        start = random.randint(0, n - 1)
+        for j in range(block_len):
+            if idx >= num_trades:
+                break
+            sampled.append(actual_pnls[(start + j) % n])
+            idx += 1
     return sampled
 
 

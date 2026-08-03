@@ -36,22 +36,28 @@ type MetricEquityPoint struct {
 }
 
 type TradeSummary struct {
-	ID           string    `json:"id"`
-	Symbol       string    `json:"symbol"`
-	Side         string    `json:"side"`
-	Quantity     float64   `json:"quantity"`
-	EntryPrice   types.Price `json:"entry_price"`
-	ExitPrice    types.Price `json:"exit_price"`
-	PnL          float64   `json:"pnl"`
-	PnLPct       float64   `json:"pnl_pct"`
-	EntryTime    time.Time `json:"entry_time"`
-	ExitTime     time.Time `json:"exit_time"`
-	HoldDuration float64   `json:"hold_duration"`
-	MAE          float64   `json:"mae"`
-	MFE          float64   `json:"mfe"`
-	StrategyID   string    `json:"strategy_id"`
-	ExitReason   string    `json:"exit_reason"`
-	Commission   float64   `json:"commission"`
+	ID               string      `json:"id"`
+	Symbol           string      `json:"symbol"`
+	Side             string      `json:"side"`
+	Quantity         float64     `json:"quantity"`
+	EntryPrice       types.Price `json:"entry_price"`
+	ExitPrice        types.Price `json:"exit_price"`
+	PnL              float64     `json:"pnl"`
+	PnLPct           float64     `json:"pnl_pct"`
+	EntryTime        time.Time   `json:"entry_time"`
+	ExitTime         time.Time   `json:"exit_time"`
+	HoldDuration     float64     `json:"hold_duration"`
+	MAE              float64     `json:"mae"`
+	MFE              float64     `json:"mfe"`
+	StrategyID       string      `json:"strategy_id"`
+	ExitReason       string      `json:"exit_reason"`
+	Commission       float64     `json:"commission"`
+	HMMRegime        int8        `json:"hmm_regime"`
+	StopPrice        float64     `json:"stop_price"`
+	TakePrice        float64     `json:"take_price"`
+	SlippageMidBps   float64     `json:"slippage_mid_bps"`
+	SlippageLastBps  float64     `json:"slippage_last_bps"`
+	AdverseSelection bool        `json:"adverse_selection"`
 }
 
 type DailyReturn struct {

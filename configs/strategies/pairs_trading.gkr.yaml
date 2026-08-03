@@ -1,0 +1,63 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-pairs-trading-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "pairs_signal.signal"
+      params:
+        blocked_states: [1, 3]
+    - id: "pair_check"
+      token_ref:
+        token_id: "data.cointegration_check"
+        version: ">=1.0"
+      params:
+        p_value_threshold: 0.05
+        lookback_days: 252
+    - id: "pairs_signal"
+      token_ref:
+        token_id: "signal.spread_reversion"
+        version: ">=1.0"
+      inputs:
+        cointegrated: "pair_check.cointegrated"
+        hedge_ratio: "pair_check.hedge_ratio"
+      params:
+        lookback: 60
+        entry_z: 2.0
+        exit_z: 0.5
+        max_hold: 60
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "pairs_signal.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.20
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "pairs_signal.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 2
+  outputs:
+    signal: "pairs_signal.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware
+  - cointegration_dependent
+  - market_neutral

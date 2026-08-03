@@ -21,6 +21,9 @@ type SessionScalpRunner struct {
 	StopLossAtrMult   float64
 	TimeExitMinutes   float64
 	TimezoneOffset    int
+	MaxTradesPerDay   int
+	dailyTradeCount   int
+	currentDay        string
 
 	openingHigh  float64
 	openingLow   float64
@@ -44,6 +47,7 @@ func NewSessionScalpRunner() *SessionScalpRunner {
 		StopLossAtrMult:   0.75,
 		TimeExitMinutes:   90,
 		TimezoneOffset:    0,
+		MaxTradesPerDay:   10,
 		openingLow:        math.MaxFloat64,
 		volumeBuffer:      make([]float64, 128),
 	}
@@ -119,6 +123,18 @@ func (r *SessionScalpRunner) ParamDefs() []ParamDef {
 
 func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if regime == 3 {
+		return nil
+	}
+
+	// Reset daily trade count on new trading day.
+	day := candle.Time.Format("2006-01-02")
+	if day != r.currentDay {
+		r.currentDay = day
+		r.dailyTradeCount = 0
+	}
+
+	// Enforce max trades per day limit.
+	if r.MaxTradesPerDay > 0 && r.dailyTradeCount >= r.MaxTradesPerDay {
 		return nil
 	}
 
@@ -212,11 +228,13 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if candle.Close.Float64() >= breakoutHigh {
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()+atr*r.TakeProfitAtrMult), candle.Time)
+		r.dailyTradeCount++
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: qty}
 	}
 
 	if candle.Close.Float64() <= breakoutLow {
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()-atr*r.TakeProfitAtrMult), candle.Time)
+		r.dailyTradeCount++
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: qty}
 	}
 

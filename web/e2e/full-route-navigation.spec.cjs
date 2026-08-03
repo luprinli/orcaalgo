@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-const BASE = 'http://localhost:5174';
+const BASE = 'http://localhost:5173';
 const API_BASE = 'http://localhost:8080';
 const ADMIN_USER = process.env.ORCA_ADMIN_USER || 'admin';
 const ADMIN_PASS = process.env.ORCA_ADMIN_PASSWORD || 'test-admin-2026';

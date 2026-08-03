@@ -23,25 +23,25 @@ class TestStrategyLoading:
     def test_load_intraday_mr(self):
         ir = load_ir(STRATEGIES_DIR / "intraday_mr.gkr.yaml")
         assert ir.strategy.id == "orca-intraday-mr-v1"
-        assert len(ir.strategy.nodes) == 5
+        assert len(ir.strategy.nodes) == 6
         assert ir.ir_version == "qst-ir/0.4"
         assert ir.canonical_version == "qst-canonical/0.4"
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"bar_agg", "zscore_calc", "signal_gen", "position_sizer", "risk_gate"}
+        assert node_ids == {"bar_agg", "zscore_calc", "signal_gen", "regime_gate", "position_sizer", "risk_gate"}
 
     def test_load_opening_range_breakout(self):
         ir = load_ir(STRATEGIES_DIR / "opening_range_breakout.gkr.yaml")
         assert ir.strategy.id == "orca-opening-range-breakout-v1"
-        assert len(ir.strategy.nodes) == 4
+        assert len(ir.strategy.nodes) == 5
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"range_detect", "breakout_signal", "position_sizer", "risk_gate"}
+        assert node_ids == {"range_detect", "breakout_signal", "regime_gate", "position_sizer", "risk_gate"}
 
     def test_load_trend_following(self):
         ir = load_ir(STRATEGIES_DIR / "trend_following.gkr.yaml")
         assert ir.strategy.id == "orca-trend-following-v1"
-        assert len(ir.strategy.nodes) == 5
+        assert len(ir.strategy.nodes) == 6
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"ma_crossover", "atr_filter", "trend_signal", "position_sizer", "risk_gate"}
+        assert node_ids == {"ma_crossover", "atr_filter", "trend_signal", "regime_gate", "position_sizer", "risk_gate"}
 
     def test_all_strategies_have_core_capability(self):
         for f in STRATEGIES_DIR.glob("*.gkr.yaml"):
@@ -288,3 +288,74 @@ def _make_unsafe_future_strategy() -> StrategyIRV04:
         ),
         capabilities=[Capability(name="core")],
     )
+
+
+class TestGKRRegimeGates:
+    """Verify all 8 GKR configs have correct blocked_states aligned with RegimeActivationMatrix."""
+
+    KNOWN_STRATEGIES = {
+        "grid.gkr.yaml": "orca-grid-trading-v1",
+        "intraday_mr.gkr.yaml": "orca-intraday-mr-v1",
+        "opening_range_breakout.gkr.yaml": "orca-opening-range-breakout-v1",
+        "session_scalp.gkr.yaml": "orca-session-scalp-v1",
+        "trend_following.gkr.yaml": "orca-trend-following-v1",
+        "rsi_divergence.gkr.yaml": "orca-rsi-divergence-v1",
+        "volatility_harvesting.gkr.yaml": "orca-volatility-harvesting-v1",
+        "pairs_trading.gkr.yaml": "orca-pairs-trading-v1",
+        "dragon_trend.gkr.yaml": "orca-dragon-trend-v1",
+        "vwap_mr.gkr.yaml": "orca-vwap-mr-v1",
+        "orb_15m.gkr.yaml": "orca-orb-15m-v1",
+        "volume_scalp.gkr.yaml": "orca-volume-scalp-v1",
+    }
+
+    EXPECTED_BLOCKED = {
+        "grid.gkr.yaml": [1, 2, 3],
+        "intraday_mr.gkr.yaml": [1, 2, 3],
+        "opening_range_breakout.gkr.yaml": [0, 3],
+        "session_scalp.gkr.yaml": [3],
+        "trend_following.gkr.yaml": [0, 2, 3],
+        "rsi_divergence.gkr.yaml": [3],
+        "volatility_harvesting.gkr.yaml": [0, 1, 3],
+        "pairs_trading.gkr.yaml": [1, 3],
+        "dragon_trend.gkr.yaml": [0, 3],
+        "vwap_mr.gkr.yaml": [1, 2, 3],
+        "orb_15m.gkr.yaml": [0, 3],
+        "volume_scalp.gkr.yaml": [2, 3],
+    }
+
+    @staticmethod
+    def _find_regime_gate(nodes):
+        for node in nodes:
+            if node.token_ref and node.token_ref.token_id == "risk.regime_filter":
+                return node
+        return None
+
+    def test_all_configs_load_and_have_regime_gate(self):
+        for filename, strategy_id in self.KNOWN_STRATEGIES.items():
+            path = STRATEGIES_DIR / filename
+            ir = load_ir(path)
+            assert ir.strategy.id == strategy_id, f"{filename}: wrong strategy ID"
+            gate = self._find_regime_gate(ir.strategy.nodes)
+            assert gate is not None, f"{filename}: missing regime_gate node"
+
+    def test_blocked_states_align_with_matrix(self):
+        for filename, expected in self.EXPECTED_BLOCKED.items():
+            path = STRATEGIES_DIR / filename
+            ir = load_ir(path)
+            gate = self._find_regime_gate(ir.strategy.nodes)
+            assert gate is not None, f"{filename}: no regime gate found"
+            blocked = gate.params.get("blocked_states", [])
+            assert blocked == expected, (
+                f"{filename}: blocked_states={blocked}, expected={expected}"
+            )
+
+    def test_crisis_is_always_blocked(self):
+        """Crisis (regime 3) should be blocked for ALL strategies."""
+        for filename in self.KNOWN_STRATEGIES:
+            path = STRATEGIES_DIR / filename
+            ir = load_ir(path)
+            gate = self._find_regime_gate(ir.strategy.nodes)
+            if gate is None:
+                continue
+            blocked = gate.params.get("blocked_states", [])
+            assert 3 in blocked, f"{filename}: Crisis (regime 3) must be blocked, got {blocked}"

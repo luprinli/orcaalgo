@@ -448,3 +448,68 @@ func CMF(highs, lows, closes, volumes []float64, count int) float64 {
 	}
 	return cmf[len(cmf)-1]
 }
+
+// ChoppinessIndex computes the Choppiness Index (CHOP) over the given window.
+// Formula: CHOP = 100 * log10(SUM(ATR, period) / (MaxHigh(N) - MinLow(N))) / log10(period)
+// Values above 61.8 indicate a choppy/ranging market where trend strategies should not trade.
+func ChoppinessIndex(prices, highs, lows []float64, count int, period int) float64 {
+	if count < period || period < 2 || len(prices) < period {
+		return 0
+	}
+
+	// Use the last `period` entries from the history.
+	start := count - period
+	if start < 0 {
+		start = 0
+	}
+	hSlice := highs[start:count]
+	lSlice := lows[start:count]
+	pSlice := prices[start:count]
+
+	// Compute ATR sum over the period
+	var atrSum float64
+	var prevClose float64
+	for i := range hSlice {
+		if i == 0 && start > 0 && len(prices) > start {
+			prevClose = pSlice[i]
+		}
+		if i > 0 {
+			prevClose = pSlice[i-1]
+		}
+		if i == 0 && prevClose == 0 {
+			prevClose = pSlice[i]
+		}
+		tr := hSlice[i] - lSlice[i]
+		if i == 0 && start > 0 {
+			highLow := hSlice[i] - lSlice[i]
+			highClose := math.Abs(hSlice[i] - prevClose)
+			lowClose := math.Abs(lSlice[i] - prevClose)
+			tr = math.Max(highLow, math.Max(highClose, lowClose))
+		}
+		atrSum += tr
+	}
+
+	// Find max high and min low over the period
+	maxHigh := hSlice[0]
+	minLow := lSlice[0]
+	for i := 1; i < len(hSlice); i++ {
+		if hSlice[i] > maxHigh {
+			maxHigh = hSlice[i]
+		}
+		if lSlice[i] < minLow {
+			minLow = lSlice[i]
+		}
+	}
+
+	rangeHL := maxHigh - minLow
+	if rangeHL <= 0 || atrSum <= 0 {
+		return 0
+	}
+
+	log10N := math.Log10(float64(period))
+	if log10N == 0 {
+		return 0
+	}
+
+	return 100.0 * math.Log10(atrSum/rangeHL) / log10N
+}

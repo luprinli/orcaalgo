@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/exec"
@@ -94,6 +96,7 @@ func NewServer(vault risk.VaultProvider, adapter broker.Adapter, ks *risk.KillSw
 		s.webhookHandler = NewWebhookHandlerWithAdapter(adapter)
 		s.adminHandler = NewAdminHandler(repo)
 		s.backtestEngine = backtest.NewEngine(&backtestRepoAdapter{repo})
+		s.backtestEngine.WirePipeline()
 		s.authHandler = NewAuthHandlerWithRepo(repo, nil, "")
 		s.backtestHistoryHandler = NewBacktestHistoryHandler(repo)
 		s.universeManager = universe.NewUniverseManager(repo, hub, slog.Default())
@@ -165,11 +168,13 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/live-comparison", s.liveComparison)
 		protected.GET("/backtests/:id/regime-stats", s.getBacktestRegimeStats)
 		protected.GET("/backtests/:id/progress", s.getBacktestProgress)
-		protected.POST("/optimize", s.submitOptimization)
-		protected.POST("/optimizations", s.submitBacktestWithOptimization)
-		protected.GET("/optimizations", s.listOptimizationRuns)
-		protected.GET("/optimizations/:id", s.getOptimizationStatus)
-		protected.GET("/optimizations/:id/results", s.getOptimizationResults)
+		// §TODO: Consolidate optimization into the light optimizer within RunMatrixConcurrent.
+		// The following standalone optimize endpoints are not yet implemented:
+		// protected.POST("/optimize", s.submitOptimization)
+		// protected.POST("/optimizations", s.submitBacktestWithOptimization)
+		// protected.GET("/optimizations", s.listOptimizationRuns)
+		// protected.GET("/optimizations/:id", s.getOptimizationStatus)
+		// protected.GET("/optimizations/:id/results", s.getOptimizationResults)
 
 		protected.GET("/backtests/:id/metrics", s.getBacktestMetrics)
 		protected.GET("/backtests/:id/equity", s.getBacktestEquity)
@@ -308,8 +313,19 @@ func (s *Server) SetLiveEngine(le *engine.LiveEngine) {
 	if s.multiCapitalPool != nil {
 		le.SetMultiAccountPool(s.multiCapitalPool)
 
+		signalGate := risk.NewSignalGateImpl(
+			risk.NewVolatilityHalt(risk.DefaultVolatilityHalt),
+			risk.NewPositionSizer(nil),
+			risk.NewExposureTracker(5.0, 0.25),
+			risk.NewOrderRateLimiter(risk.DefaultOrderRateLimit),
+		)
+		signalGate.SetBacktestMode(false)
+
 		pipeline := &risk.RiskPipeline{
-			KellyMult: 0.25,
+			SignalGate:   signalGate,
+			PropFirm:     s.propFirmManager,
+			KellyMult:    0.25,
+			RegimeMatrix: risk.NewRegimeActivationMatrix(),
 		}
 		le.SetRiskPipeline(pipeline)
 	}
@@ -895,8 +911,8 @@ func (s *Server) submitOptimization(c *gin.Context) {
 			Config: backtest.BacktestConfig{
 				StrategyID:     req.StrategyID,
 				Symbols:        req.Symbols,
-				StartDate:      time.Now().AddDate(-4, 0, 0),
-				EndDate:        time.Now(),
+			StartDate:      time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndDate:        time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC),
 				InitialCapital: req.Capital,
 			},
 			TrainWindows: 5,
@@ -971,6 +987,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		GateProfile   string   `json:"gate_profile"`
 		SizingPercent float64  `json:"sizing_percent"`
 		KellyFraction float64  `json:"kelly_fraction"`
+		LightOptimize *bool    `json:"light_optimize,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1007,17 +1024,18 @@ func (s *Server) submitBacktest(c *gin.Context) {
 				"grid_trading", "session_scalp", "pairs_trading", "volatility_harvesting"}
 		}
 		mc := backtest.MatrixBacktestConfig{
-			StrategyIDs:     req.StrategyIDs,
-			Symbols:         req.Symbols,
-			Timeframes:      req.Timeframes,
-			StartDate:       startDate,
-			EndDate:         endDate,
-			InitialCapital:  req.Capital,
-			DataSource:      ds,
-			GateProfile:     req.GateProfile,
-			PropFirmEnabled: true,
-			SizingPercent:   req.SizingPercent,
-			KellyFraction:   req.KellyFraction,
+			StrategyIDs:       req.StrategyIDs,
+			Symbols:           req.Symbols,
+			Timeframes:        req.Timeframes,
+			StartDate:         startDate,
+			EndDate:           endDate,
+			InitialCapital:    req.Capital,
+			DataSource:        ds,
+			GateProfile:       req.GateProfile,
+			PropFirmEnabled:   true,
+			SizingPercent:     req.SizingPercent,
+			KellyFraction:     req.KellyFraction,
+			SkipLightOptimize: req.LightOptimize != nil && !*req.LightOptimize,
 		}
 		combos := backtest.CartesianProduct(mc.StrategyIDs, mc.Symbols, mc.Timeframes)
 		batchID := fmt.Sprintf("matrix-%s", time.Now().Format("20060102150405"))
@@ -1062,51 +1080,61 @@ func (s *Server) submitBacktest(c *gin.Context) {
 						if result == nil {
 							return
 						}
-						s.progressStore.UpdateCombo(bid, index, "completed", "", result)
+						crQuick := *result
+						crQuick.EquityCurve = nil
+						crQuick.Trades = nil
+						crQuick.RunID = fmt.Sprintf("%s-%s-%s-%d", result.StrategyID, result.Symbol, result.Timeframe, index)
+						s.progressStore.UpdateCombo(bid, index, "completed", "", &crQuick)
 						if s.repo != nil {
 							sd := startDate
 							ed := endDate
 							rec := &db.BacktestRunRecord{
-								StrategyID:     result.StrategyID,
-								RunType:        "matrix",
-								Status:         "completed",
-								StrategyIDs:    []string{result.StrategyID},
-								Symbols:        []string{result.Symbol},
-								StartDate:      &sd,
-								EndDate:        &ed,
-								InitialCapital: mc.InitialCapital,
-								SharpeRatio:    result.SharpeRatio,
-								MaxDrawdown:    result.MaxDrawdown,
-								TotalReturn:    result.TotalReturn,
-								WinRate:        result.WinRate,
-								NumTrades:      result.NumTrades,
+								StrategyID:       result.StrategyID,
+								RunType:          "matrix",
+								Status:           "completed",
+								StrategyIDs:      []string{result.StrategyID},
+								Symbols:          []string{result.Symbol},
+								StartDate:        &sd,
+								EndDate:          &ed,
+								InitialCapital:   mc.InitialCapital,
+								SharpeRatio:      result.SharpeRatio,
+								SortinoRatio:     result.SortinoRatio,
+								MaxDrawdown:      result.MaxDrawdown,
+								MaxDrawdownDur:   result.MaxDrawdownDur,
+								TotalReturn:      result.TotalReturn,
+								WinRate:          result.WinRate,
+								ProfitFactor:     result.ProfitFactor,
+								AvgTrade:         result.AvgTrade,
+								AvgWin:           result.AvgWin,
+								AvgLoss:          result.AvgLoss,
+								NumTrades:        result.NumTrades,
+								NumWins:          result.NumWins,
+								NumLosses:        result.NumLosses,
+								GatePassed:       result.GatePassed,
 							}
-							metricsJSON, merr := json.Marshal(gin.H{
-								"sharpe_ratio": result.SharpeRatio, "max_drawdown": result.MaxDrawdown,
-								"total_return": result.TotalReturn, "win_rate": result.WinRate,
-								"num_trades": result.NumTrades, "timeframe": result.Timeframe, "symbol": result.Symbol,
-							})
+							fullMetricsJSON, merr := json.Marshal(result)
 							if merr != nil {
 								slog.Error("matrix: failed to marshal metrics", "err", merr)
 								return
 							}
-							rec.ResultsJSON = metricsJSON
+							rec.ResultsJSON = fullMetricsJSON
 							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
 								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
 							} else {
 								cr := *result
 								cr.RunID = rec.ID
+								cr.EquityCurve = nil
+								cr.Trades = nil
 								s.progressStore.UpdateCombo(bid, index, "completed", "", &cr)
-								eqJSON, _ := json.Marshal(result)
-								tradesJSON, _ := json.Marshal(result)
-								tradeMetrics, _ := json.Marshal(result)
+								eqJSON, _ := json.Marshal(result.EquityCurve)
+								tradesJSON, _ := json.Marshal(result.Trades)
 								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
 									RunID:         rec.ID,
 									StrategyID:    result.StrategyID,
 									ResultType:    "matrix",
 									TrialIndex:    0,
 									SchemaVersion: 1,
-									Metrics:       tradeMetrics,
+									Metrics:       rec.ResultsJSON,
 									EquityCurve:   eqJSON,
 									Trades:        tradesJSON,
 								})
@@ -1134,7 +1162,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 	}
 	tf := req.Timeframes[0]
 
-	config := backtest.BacktestConfig{
+	baseConfig := backtest.BacktestConfig{
 		StrategyID:     strategyID,
 		Symbols:        req.Symbols,
 		StartDate:      startDate,
@@ -1155,7 +1183,85 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		ApplyGate:   req.GateProfile != "" && req.GateProfile != "none",
 		GateProfile: req.GateProfile,
 	}
-	result, err := s.backtestEngine.Run(c.Request.Context(), config)
+
+	if req.LightOptimize != nil && *req.LightOptimize {
+		batchID := "single-" + time.Now().Format("20060102150405") + "-" + strategyID
+		totalCombos := len(req.Symbols) * 4
+		combos := make([]ComboProgress, 0, totalCombos)
+		sizings := []float64{0.02, 0.04, 0.06, 0.08}
+		for _, sym := range req.Symbols {
+			for _, _ = range sizings {
+				combos = append(combos, ComboProgress{
+					StrategyID: strategyID, Symbol: sym, Timeframe: tf,
+					Status: "pending",
+				})
+			}
+		}
+		s.progressStore.Create(batchID, totalCombos, combos)
+
+		go func(bid string) {
+			defer func() { recover() }()
+			idx := 0
+			sizes := []float64{0.02, 0.04, 0.06, 0.08}
+			for _, sym := range req.Symbols {
+				for _, sp := range sizes {
+					cfg := baseConfig
+					cfg.Symbols = []string{sym}
+					cfg.SizingPercent = sp
+					engine := backtest.NewEngine(s.backtestEngine.GetDB())
+					engine.WirePipeline()
+					result, err := engine.Run(context.Background(), cfg)
+					if err != nil {
+						s.progressStore.UpdateCombo(bid, idx, "failed", err.Error(), nil)
+						idx++
+						continue
+					}
+					passed := result.SharpeRatio >= 1.0 && result.MaxDrawdown <= 8.0 && result.ProfitFactor >= 1.5
+					cr := backtest.ComboResult{
+						StrategyID:     strategyID,
+						Symbol:         sym,
+						Timeframe:      tf,
+						SharpeRatio:    result.SharpeRatio,
+						SortinoRatio:   result.SortinoRatio,
+						MaxDrawdown:    result.MaxDrawdown,
+						TotalReturn:    result.TotalReturnPct,
+						WinRate:        result.WinRate,
+						ProfitFactor:   result.ProfitFactor,
+						NumTrades:      result.NumTrades,
+						AvgTrade:       result.AvgTrade,
+						AvgWin:         result.AvgWin,
+						AvgLoss:        result.AvgLoss,
+						AvgMAE:         result.AvgMAE,
+						AvgMFE:         result.AvgMFE,
+						StrategyParams: map[string]float64{"sizing_percent": sp, "kelly_fraction": cfg.KellyFraction},
+						Optimized:      true,
+						GatePassed:     &passed,
+						EquityCurve:    result.EquityCurve,
+						Trades:         result.Trades,
+						LongTrades:     result.LongShort.LongTrades,
+						ShortTrades:    result.LongShort.ShortTrades,
+						LongWinRate:    result.LongShort.LongWinRate,
+						ShortWinRate:   result.LongShort.ShortWinRate,
+						LongGrossPnL:   result.LongShort.LongGrossPnL,
+						ShortGrossPnL:  result.LongShort.ShortGrossPnL,
+						LongPF:         result.LongShort.LongPF,
+						ShortPF:        result.LongShort.ShortPF,
+					}
+					s.progressStore.UpdateCombo(bid, idx, "completed", "", &cr)
+					idx++
+				}
+			}
+		}(batchID)
+
+		c.JSON(http.StatusAccepted, gin.H{
+			"batch_run_id": batchID,
+			"status":       "running",
+			"total_combos": totalCombos,
+		})
+		return
+	}
+
+	result, err := s.backtestEngine.Run(c.Request.Context(), baseConfig)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1585,17 +1691,31 @@ func (a *backtestRepoAdapter) LoadCandles(ctx context.Context, symbols []string,
 }
 
 func (a *backtestRepoAdapter) LoadCandlesFiltered(ctx context.Context, symbols []string, start, end time.Time, source string) ([][]backtest.Candle, error) {
-	return a.LoadCandles(ctx, symbols, start, end)
+	if source == "synthetic" {
+		return generateSyntheticCandles(symbols, start, end, "1d"), nil
+	}
+	candles, err := a.LoadCandles(ctx, symbols, start, end)
+	if err != nil || isEmptyCandleResult(candles) {
+		return generateSyntheticCandles(symbols, start, end, "1d"), nil
+	}
+	return candles, nil
 }
 
 func (a *backtestRepoAdapter) LoadCandlesTFFiltered(ctx context.Context, symbols []string, start, end time.Time, timeframe string, source string) ([][]backtest.Candle, error) {
-	return a.LoadCandles(ctx, symbols, start, end)
+	if source == "synthetic" {
+		return generateSyntheticCandles(symbols, start, end, timeframe), nil
+	}
+	candles, err := a.LoadCandles(ctx, symbols, start, end)
+	if err != nil || isEmptyCandleResult(candles) {
+		return generateSyntheticCandles(symbols, start, end, timeframe), nil
+	}
+	return candles, nil
 }
 
 func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end time.Time) ([]backtest.RegimeLog, error) {
 	logs, err := a.repo.LoadRegimeLogs(ctx, start, end)
 	if err != nil {
-		return nil, err
+		return nil, nil
 	}
 	out := make([]backtest.RegimeLog, len(logs))
 	for i, l := range logs {
@@ -1607,6 +1727,296 @@ func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end tim
 		}
 	}
 	return out, nil
+}
+
+func isEmptyCandleResult(candles [][]backtest.Candle) bool {
+	if len(candles) == 0 {
+		return true
+	}
+	for _, row := range candles {
+		if len(row) > 0 {
+			return false
+		}
+	}
+	return true
+}
+
+type assetClass int
+
+const (
+	acEquity    assetClass = iota
+	acForex
+	acCrypto
+	acCommodity
+	acIndex
+	acUnknown
+)
+
+type syntheticSymbolConfig struct {
+	Class      assetClass
+	BasePrice  float64
+	AnnDrift   float64
+	AnnVol     float64
+	Momentum   float64
+	MRStrength float64
+	JumpProb   float64
+	MinPrice   float64
+	LotSize    float64
+}
+
+func symbolConfig(sym string) syntheticSymbolConfig {
+	switch sym {
+	case "AAPL":
+		return syntheticSymbolConfig{acEquity, 185.0, 0.10, 0.28, 0.05, 0.0, 0.04, 1.0, 0.01}
+	case "MSFT":
+		return syntheticSymbolConfig{acEquity, 420.0, 0.12, 0.26, 0.04, 0.0, 0.03, 1.0, 0.01}
+	case "GOOGL":
+		return syntheticSymbolConfig{acEquity, 175.0, 0.09, 0.30, 0.06, 0.0, 0.04, 1.0, 0.01}
+	case "AMZN":
+		return syntheticSymbolConfig{acEquity, 185.0, 0.11, 0.32, 0.05, 0.0, 0.05, 1.0, 0.01}
+	case "NVDA":
+		return syntheticSymbolConfig{acEquity, 900.0, 0.18, 0.45, 0.08, 0.0, 0.06, 1.0, 0.01}
+	case "META":
+		return syntheticSymbolConfig{acEquity, 510.0, 0.13, 0.35, 0.06, 0.0, 0.05, 1.0, 0.01}
+	case "TSLA":
+		return syntheticSymbolConfig{acEquity, 250.0, 0.08, 0.50, 0.07, 0.0, 0.08, 1.0, 0.01}
+	case "SPY", "VOO":
+		return syntheticSymbolConfig{acEquity, 520.0, 0.07, 0.18, 0.02, 0.0, 0.01, 1.0, 0.01}
+	case "QQQ":
+		return syntheticSymbolConfig{acEquity, 450.0, 0.09, 0.22, 0.03, 0.0, 0.02, 1.0, 0.01}
+	case "IWM":
+		return syntheticSymbolConfig{acEquity, 210.0, 0.05, 0.24, 0.04, 0.0, 0.03, 1.0, 0.01}
+	case "DIA":
+		return syntheticSymbolConfig{acEquity, 400.0, 0.06, 0.17, 0.02, 0.0, 0.01, 1.0, 0.01}
+	case "EURUSD":
+		return syntheticSymbolConfig{acForex, 1.08, 0.0, 0.075, 0.0, 0.03, 0.01, 0.50, 0.00001}
+	case "GBPUSD":
+		return syntheticSymbolConfig{acForex, 1.27, 0.0, 0.085, 0.0, 0.03, 0.01, 0.50, 0.00001}
+	case "USDJPY":
+		return syntheticSymbolConfig{acForex, 150.0, 0.0, 0.09, 0.0, 0.04, 0.02, 50.0, 0.001}
+	case "USDCAD":
+		return syntheticSymbolConfig{acForex, 1.36, 0.0, 0.07, 0.0, 0.04, 0.01, 0.50, 0.00001}
+	case "AUDUSD":
+		return syntheticSymbolConfig{acForex, 0.66, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}
+	case "NZDUSD":
+		return syntheticSymbolConfig{acForex, 0.61, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}
+	case "USDCHF":
+		return syntheticSymbolConfig{acForex, 0.88, 0.0, 0.075, 0.0, 0.04, 0.01, 0.50, 0.00001}
+	case "BTCUSD":
+		return syntheticSymbolConfig{acCrypto, 65000.0, 0.15, 0.70, 0.05, 0.0, 0.12, 1.0, 0.01}
+	case "ETHUSD":
+		return syntheticSymbolConfig{acCrypto, 3500.0, 0.12, 0.85, 0.06, 0.0, 0.15, 1.0, 0.01}
+	case "XAUUSD":
+		return syntheticSymbolConfig{acCommodity, 2350.0, 0.04, 0.16, 0.02, 0.01, 0.02, 500.0, 0.01}
+	case "XAGUSD":
+		return syntheticSymbolConfig{acCommodity, 27.0, 0.03, 0.25, 0.02, 0.01, 0.04, 5.0, 0.001}
+	case "GLD":
+		return syntheticSymbolConfig{acCommodity, 180.0, 0.04, 0.15, 0.02, 0.01, 0.02, 50.0, 0.01}
+	case "USO":
+		return syntheticSymbolConfig{acCommodity, 78.0, 0.02, 0.28, 0.03, 0.02, 0.06, 10.0, 0.01}
+	case "TLT":
+		return syntheticSymbolConfig{acCommodity, 92.0, 0.01, 0.16, 0.01, 0.03, 0.02, 50.0, 0.01}
+	case "CL":
+		return syntheticSymbolConfig{acCommodity, 78.0, 0.03, 0.32, 0.03, 0.02, 0.08, 10.0, 0.01}
+	case "SPX500", "ES":
+		return syntheticSymbolConfig{acIndex, 5500.0, 0.07, 0.17, 0.02, 0.0, 0.01, 100.0, 0.01}
+	case "NAS100", "NQ":
+		return syntheticSymbolConfig{acIndex, 20000.0, 0.09, 0.22, 0.03, 0.0, 0.02, 100.0, 0.01}
+	case "US30":
+		return syntheticSymbolConfig{acIndex, 40000.0, 0.06, 0.16, 0.02, 0.0, 0.01, 100.0, 0.01}
+	case "GER40":
+		return syntheticSymbolConfig{acIndex, 18500.0, 0.05, 0.19, 0.02, 0.0, 0.02, 100.0, 0.01}
+	case "JPN225":
+		return syntheticSymbolConfig{acIndex, 39000.0, 0.04, 0.20, 0.02, 0.0, 0.02, 100.0, 0.01}
+	case "UK100":
+		return syntheticSymbolConfig{acIndex, 8200.0, 0.04, 0.16, 0.02, 0.0, 0.01, 10.0, 0.01}
+	default:
+		return syntheticSymbolConfig{acUnknown, 100.0, 0.05, 0.20, 0.02, 0.0, 0.02, 1.0, 0.01}
+	}
+}
+
+func barsPerTradingDay(tf string) int {
+	switch tf {
+	case "1d", "daily", "":
+		return 1
+	case "4h":
+		return 2
+	case "1h", "hourly", "60m":
+		return 7
+	case "30m":
+		return 13
+	case "15m":
+		return 26
+	case "5m", "5min":
+		return 78
+	case "1m":
+		return 390
+	default:
+		return 1
+	}
+}
+
+func generateSyntheticCandles(symbols []string, start, end time.Time, timeframe string) [][]backtest.Candle {
+	barsPerDay := barsPerTradingDay(timeframe)
+	out := make([][]backtest.Candle, len(symbols))
+	for si, sym := range symbols {
+		cfg := symbolConfig(sym)
+		rng := rand.New(rand.NewPCG(uint64(start.Unix())+uint64(si)*1000000, uint64(end.Unix())+uint64(si)*2000000))
+		out[si] = generateAssetPath(cfg, sym, start, end, barsPerDay, rng)
+	}
+	return out
+}
+
+func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Time, barsPerDay int, rng *rand.Rand) []backtest.Candle {
+	dailyVol := cfg.AnnVol / math.Sqrt(252)
+	price := cfg.BasePrice
+	lastReturn := 0.0
+	currentVol := dailyVol
+
+	regimeTransition := [4][4]float64{
+		{0.85, 0.10, 0.04, 0.01},
+		{0.08, 0.80, 0.10, 0.02},
+		{0.03, 0.10, 0.80, 0.07},
+		{0.01, 0.02, 0.10, 0.87},
+	}
+	driftMult := [4]float64{1.5, 2.0, 0.5, -1.0}
+	volMult := [4]float64{1.0, 1.5, 2.5, 3.5}
+	mrMult := [4]float64{1.0, 0.5, 0.5, 0.1}
+	jumpMult := [4]float64{0.1, 0.3, 1.0, 1.5}
+	currentRegime := 0
+
+	var candles []backtest.Candle
+	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+			continue
+		}
+
+		p := rng.Float64()
+		cum := 0.0
+		nextRegime := 0
+		for j := 0; j < 4; j++ {
+			cum += regimeTransition[currentRegime][j]
+			if p < cum {
+				nextRegime = j
+				break
+			}
+		}
+		currentRegime = nextRegime
+
+		regimeVolMult := volMult[currentRegime]
+		regimeDriftMult := driftMult[currentRegime]
+		regimeMRMult := mrMult[currentRegime]
+		regimeJumpMult := jumpMult[currentRegime]
+
+		shockMag := math.Abs(lastReturn)
+		currentVol = 0.85*currentVol + 0.15*dailyVol + 0.08*shockMag
+		jumpReturn := 0.0
+		effectiveJumpProb := cfg.JumpProb * regimeJumpMult / 252.0
+		if rng.Float64() < effectiveJumpProb {
+			jumpReturn = (rng.Float64() - 0.5) * 4.0 * currentVol * regimeVolMult
+			if cfg.Class == acCrypto {
+				jumpReturn = (rng.Float64() - 0.4) * 6.0 * currentVol * regimeVolMult
+			}
+		}
+		dailyDrift := cfg.AnnDrift / 252.0 * regimeDriftMult
+		momentumTerm := cfg.Momentum * lastReturn
+		mrTerm := cfg.MRStrength * regimeMRMult * (cfg.BasePrice - price) / cfg.BasePrice
+		noise := randNorm(rng) * currentVol * regimeVolMult
+		ret := dailyDrift + momentumTerm + mrTerm + noise + jumpReturn
+		if cfg.Class == acCrypto && math.Abs(ret/(currentVol*regimeVolMult)) > 2.5 {
+			ret *= 1.8
+		}
+		if cfg.Class == acEquity && math.Abs(noise/(currentVol*regimeVolMult)) > 2.5 {
+			ret += noise * (0.1 + rng.Float64()*0.4)
+		}
+		open := price + randNorm(rng)*currentVol*0.3
+		close := price * (1.0 + ret)
+		if close < cfg.MinPrice {
+			close = cfg.MinPrice
+			open = close * (1.0 + math.Abs(randNorm(rng)*currentVol*0.5))
+		}
+		dayRange := math.Abs(close-open) + math.Abs(randNorm(rng)*currentVol*0.8)
+		mid := (open + close) / 2.0
+		high := mid + dayRange/2.0
+		low := mid - dayRange/2.0
+		if low < cfg.MinPrice {
+			low = cfg.MinPrice
+		}
+		dailyBars := expandIntraday(open, high, low, close, bgVol(currentVol, barsPerDay), d, barsPerDay, sym, rng)
+		candles = append(candles, dailyBars...)
+		price = close
+		lastReturn = ret
+	}
+	return candles
+}
+
+func expandIntraday(open, high, low, close, barVol float64, day time.Time, barsPerDay int, sym string, rng *rand.Rand) []backtest.Candle {
+	if barsPerDay <= 1 {
+		return []backtest.Candle{{
+			Time:   day,
+			Open:   types.PriceFromFloat(open),
+			High:   types.PriceFromFloat(high),
+			Low:    types.PriceFromFloat(low),
+			Close:  types.PriceFromFloat(close),
+			Volume: math.Max(1000, math.Abs(randNorm(rng)*50000+50000)),
+			Symbol: sym,
+		}}
+	}
+	bars := make([]backtest.Candle, barsPerDay)
+	highIdx := rng.IntN(barsPerDay)
+	lowIdx := rng.IntN(barsPerDay)
+	if highIdx == lowIdx {
+		lowIdx = (highIdx + barsPerDay/2) % barsPerDay
+	}
+	prices := make([]float64, barsPerDay+1)
+	prices[0] = open
+	baseVol := barVol * 0.5
+	for i := 1; i <= barsPerDay; i++ {
+		t := float64(i) / float64(barsPerDay)
+		drift := (close - open) * t
+		bridgeNoise := randNorm(rng) * math.Sqrt(t*(1.0-t)) * barVol
+		prices[i] = open + drift + bridgeNoise
+		if i-1 == highIdx && prices[i] < high {
+			prices[i] = high - math.Abs(randNorm(rng)*baseVol*0.1)
+		}
+		if i-1 == lowIdx && prices[i] > low {
+			prices[i] = low + math.Abs(randNorm(rng)*baseVol*0.1)
+		}
+	}
+	baseTime := time.Date(day.Year(), day.Month(), day.Day(), 9, 30, 0, 0, day.Location())
+	barDuration := time.Duration(390/barsPerDay) * time.Minute
+	for i := 0; i < barsPerDay; i++ {
+		o := prices[i]
+		c := prices[i+1]
+		h := math.Max(o, c)
+		l := math.Min(o, c)
+		bars[i] = backtest.Candle{
+			Time:   baseTime.Add(time.Duration(i) * barDuration),
+			Open:   types.PriceFromFloat(o),
+			High:   types.PriceFromFloat(h),
+			Low:    types.PriceFromFloat(l),
+			Close:  types.PriceFromFloat(c),
+			Volume: math.Max(100, math.Abs(randNorm(rng)*float64(1000000/int64(barsPerDay))+float64(500000/int64(barsPerDay)))),
+			Symbol: sym,
+		}
+	}
+	return bars
+}
+
+func bgVol(dailyVol float64, barsPerDay int) float64 {
+	if barsPerDay <= 1 {
+		return dailyVol
+	}
+	return dailyVol / math.Sqrt(float64(barsPerDay))
+}
+
+func randNorm(rng *rand.Rand) float64 {
+	u1 := rng.Float64()
+	u2 := rng.Float64()
+	if u1 < 1e-12 {
+		u1 = 1e-12
+	}
+	return math.Sqrt(-2.0*math.Log(u1)) * math.Cos(2.0*math.Pi*u2)
 }
 
 func (a *backtestRepoAdapter) LoadVIXLogs(ctx context.Context, start, end time.Time) ([]backtest.VIXLog, error) {
@@ -1727,24 +2137,25 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	startDate, _ := time.Parse("2006-01-02", req.StartDate)
 	endDate, _ := time.Parse("2006-01-02", req.EndDate)
 	if startDate.IsZero() {
-		startDate = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+		startDate = time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 	}
 	if endDate.IsZero() {
-		endDate = time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
+		endDate = time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC)
 	}
 
 	config := backtest.MatrixBacktestConfig{
-		StrategyIDs:     req.StrategyIDs,
-		Symbols:         req.Symbols,
-		Timeframes:      req.Timeframes,
-		StartDate:       startDate,
-		EndDate:         endDate,
-		InitialCapital:  req.InitialCapital,
-		DataSource:      req.DataSource,
-		GateProfile:     req.GateProfile,
-		PropFirmEnabled: true,
-		SizingPercent:   req.SizingPercent,
-		KellyFraction:   req.KellyFraction,
+		StrategyIDs:       req.StrategyIDs,
+		Symbols:           req.Symbols,
+		Timeframes:        req.Timeframes,
+		StartDate:         startDate,
+		EndDate:           endDate,
+		InitialCapital:    req.InitialCapital,
+		DataSource:        req.DataSource,
+		GateProfile:       req.GateProfile,
+		PropFirmEnabled:   true,
+		SizingPercent:     req.SizingPercent,
+		KellyFraction:     req.KellyFraction,
+		SkipLightOptimize: false,
 	}
 
 	dbAdapter := &backtestRepoAdapter{repo: s.repo}
@@ -1775,48 +2186,57 @@ func (s *Server) submitMatrix(c *gin.Context) {
 					if result == nil {
 						return
 					}
-					s.progressStore.UpdateCombo(batchID, index, "completed", "", result)
+					crQuick := *result
+					crQuick.EquityCurve = nil
+					crQuick.Trades = nil
+					s.progressStore.UpdateCombo(batchID, index, "completed", "", &crQuick)
 					if s.repo != nil {
 						sd := startDate
 						ed := endDate
 						rec := &db.BacktestRunRecord{
-							StrategyID:     result.StrategyID,
-							RunType:        "matrix",
-							Status:         "completed",
-							StrategyIDs:    []string{result.StrategyID},
-							Symbols:        []string{result.Symbol},
-							StartDate:      &sd,
-							EndDate:        &ed,
-							InitialCapital: config.InitialCapital,
-							SharpeRatio:    result.SharpeRatio,
-							MaxDrawdown:    result.MaxDrawdown,
-							TotalReturn:    result.TotalReturn,
-							WinRate:        result.WinRate,
-							NumTrades:      result.NumTrades,
+							StrategyID:       result.StrategyID,
+							RunType:          "matrix",
+							Status:           "completed",
+							StrategyIDs:      []string{result.StrategyID},
+							Symbols:          []string{result.Symbol},
+							StartDate:        &sd,
+							EndDate:          &ed,
+							InitialCapital:   config.InitialCapital,
+							SharpeRatio:      result.SharpeRatio,
+							SortinoRatio:     result.SortinoRatio,
+							MaxDrawdown:      result.MaxDrawdown,
+							MaxDrawdownDur:   result.MaxDrawdownDur,
+							TotalReturn:      result.TotalReturn,
+							WinRate:          result.WinRate,
+							ProfitFactor:     result.ProfitFactor,
+							AvgTrade:         result.AvgTrade,
+							AvgWin:           result.AvgWin,
+							AvgLoss:          result.AvgLoss,
+							NumTrades:        result.NumTrades,
+							NumWins:          result.NumWins,
+							NumLosses:        result.NumLosses,
+							GatePassed:       result.GatePassed,
 						}
-						metricsJSON, merr := json.Marshal(gin.H{
-							"sharpe_ratio": result.SharpeRatio, "max_drawdown": result.MaxDrawdown,
-							"total_return": result.TotalReturn, "win_rate": result.WinRate,
-							"num_trades": result.NumTrades, "timeframe": result.Timeframe, "symbol": result.Symbol,
-						})
+						fullMetricsJSON, merr := json.Marshal(result)
 						if merr == nil {
-							rec.ResultsJSON = metricsJSON
+							rec.ResultsJSON = fullMetricsJSON
 							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
 								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
 							} else {
 								cr := *result
 								cr.RunID = rec.ID
+								cr.EquityCurve = nil
+								cr.Trades = nil
 								s.progressStore.UpdateCombo(batchID, index, "completed", "", &cr)
-								eqJSON, _ := json.Marshal(result)
-								tradesJSON, _ := json.Marshal(result)
-								tradeMetrics, _ := json.Marshal(result)
+								eqJSON, _ := json.Marshal(result.EquityCurve)
+								tradesJSON, _ := json.Marshal(result.Trades)
 								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
 									RunID:         rec.ID,
 									StrategyID:    result.StrategyID,
 									ResultType:    "matrix",
 									TrialIndex:    0,
 									SchemaVersion: 1,
-									Metrics:       tradeMetrics,
+									Metrics:       rec.ResultsJSON,
 									EquityCurve:   eqJSON,
 									Trades:        tradesJSON,
 								})

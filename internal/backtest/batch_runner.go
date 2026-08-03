@@ -3,7 +3,9 @@ package backtest
 import (
 	"context"
 	"fmt"
+	"math"
 	"runtime"
+	"sort"
 	"sync"
 	"time"
 
@@ -133,21 +135,29 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 						return nil
 					}
 					chunkResults[i] = ComboResult{
-						Symbol:       sym,
-						StrategyID:   config.StrategyID,
-						Timeframe:    config.Timeframe,
-						SharpeRatio:  result.SharpeRatio,
-						SortinoRatio: result.SortinoRatio,
-						MaxDrawdown:  result.MaxDrawdown,
-						TotalReturn:  result.TotalReturnPct,
-						WinRate:      result.WinRate,
-						ProfitFactor: result.ProfitFactor,
-						AvgTrade:     result.AvgTrade,
-						AvgWin:       result.AvgWin,
-						AvgLoss:      result.AvgLoss,
-						NumTrades:    result.NumTrades,
-						Warnings:     result.Warnings,
-						AdverseSelectRate: result.AdverseSelectionRate,
+						Symbol:             sym,
+						StrategyID:         config.StrategyID,
+						Timeframe:          config.Timeframe,
+						SharpeRatio:        result.SharpeRatio,
+						SortinoRatio:       result.SortinoRatio,
+						MaxDrawdown:        result.MaxDrawdown,
+						MaxDrawdownDur:     result.MaxDrawdownDuration,
+						TotalReturn:        result.TotalReturnPct,
+						WinRate:            result.WinRate,
+						ProfitFactor:       result.ProfitFactor,
+						AvgTrade:           result.AvgTrade,
+						AvgWin:             result.AvgWin,
+						AvgLoss:            result.AvgLoss,
+						NumTrades:          result.NumTrades,
+						NumWins:            result.NumWins,
+						NumLosses:          result.NumLosses,
+						AvgMAE:             result.AvgMAE,
+						AvgMFE:             result.AvgMFE,
+						Warnings:           result.Warnings,
+						AdverseSelectRate:  result.AdverseSelectionRate,
+						StrategyParams:     result.StrategyParams,
+						EquityCurve:        result.EquityCurve,
+						Trades:             result.Trades,
 					}
 					return nil
 				})
@@ -178,7 +188,9 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 	// §1 per-strategy light optimization: each unique strategy gets a bounded
 	// train/test-split parameter sweep on a representative symbol subset.
 	// Optimized params are applied to all combos of that strategy in the matrix.
+	// Skipped when config.SkipLightOptimize is true.
 	optimizedParams := make(map[string]map[string]float64)
+	if !config.SkipLightOptimize {
 	seenStrats := make(map[string]bool)
 	for _, c := range combos {
 		if seenStrats[c.Strategy] {
@@ -220,6 +232,7 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 			})
 		}
 	}
+	} // end skipLightOptimize guard
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -250,6 +263,25 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 
 	for i, combo := range combos {
 		i, combo := i, combo
+
+		if config.DataSource == "synthetic" {
+			switch combo.Strategy {
+			case "breakout", "opening_range_breakout", "scalp", "session_scalp":
+				mu.Lock()
+				results[i] = ComboResult{
+					StrategyID: combo.Strategy,
+					Symbol:     combo.Symbol,
+					Timeframe:  combo.Timeframe,
+					Error:      "skipped: strategy requires real intraday data — not evaluated on synthetic data",
+				}
+				mu.Unlock()
+				if onProgress != nil {
+					onProgress(i, "skipped", "requires real intraday market data", nil)
+				}
+				continue
+			}
+		}
+
 		if err := sem.Acquire(ctx, 1); err != nil {
 			break
 		}
@@ -311,22 +343,39 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 			}
 			monitor.RecordMatrixCombo("completed")
 			results[i] = ComboResult{
-				Symbol:            combo.Symbol,
-				StrategyID:        combo.Strategy,
-				Timeframe:         combo.Timeframe,
-				SharpeRatio:       result.SharpeRatio,
-				SortinoRatio:      result.SortinoRatio,
-				MaxDrawdown:       result.MaxDrawdown,
-				TotalReturn:       result.TotalReturnPct,
-				WinRate:           result.WinRate,
-				ProfitFactor:      result.ProfitFactor,
-				AvgTrade:          result.AvgTrade,
-				AvgWin:            result.AvgWin,
-				AvgLoss:           result.AvgLoss,
-				NumTrades:         result.NumTrades,
-				Warnings:          result.Warnings,
-				GatePassed:        gateBool(result.MetricGateStatus),
-				AdverseSelectRate: result.AdverseSelectionRate,
+				Symbol:             combo.Symbol,
+				StrategyID:         combo.Strategy,
+				Timeframe:          combo.Timeframe,
+				SharpeRatio:        result.SharpeRatio,
+				SortinoRatio:       result.SortinoRatio,
+				MaxDrawdown:        result.MaxDrawdown,
+				MaxDrawdownDur:     result.MaxDrawdownDuration,
+				WinRate:            result.WinRate,
+				AvgTrade:           result.AvgTrade,
+				AvgWin:             result.AvgWin,
+				AvgLoss:            result.AvgLoss,
+				NumTrades:          result.NumTrades,
+				NumWins:            result.NumWins,
+				NumLosses:          result.NumLosses,
+				AvgMAE:             result.AvgMAE,
+				AvgMFE:             result.AvgMFE,
+				Warnings:           result.Warnings,
+				GatePassed:         gateBool(result.MetricGateStatus),
+				AdverseSelectRate:  result.AdverseSelectionRate,
+				StrategyParams:     result.StrategyParams,
+				Optimized:          len(result.StrategyParams) > 0,
+				EquityCurve:        result.EquityCurve,
+				Trades:             result.Trades,
+				LongTrades:         result.LongShort.LongTrades,
+				ShortTrades:        result.LongShort.ShortTrades,
+				LongWinRate:        result.LongShort.LongWinRate,
+				ShortWinRate:       result.LongShort.ShortWinRate,
+				LongGrossPnL:       clampAbs(result.LongShort.LongGrossPnL, config.InitialCapital*100),
+				ShortGrossPnL:      clampAbs(result.LongShort.ShortGrossPnL, config.InitialCapital*100),
+				LongPF:             clampAbs(result.LongShort.LongPF, 1000),
+				ShortPF:            clampAbs(result.LongShort.ShortPF, 1000),
+				ProfitFactor:       clampAbs(result.ProfitFactor, 1000),
+				TotalReturn:        clampAbs(result.TotalReturnPct, 10000),
 			}
 			if onProgress != nil {
 				onProgress(i, "completed", "", &results[i])
@@ -417,4 +466,68 @@ func pickDominantTimeframe(timeframes []string) string {
 		}
 	}
 	return timeframes[0]
+}
+
+func RunWalkForwardOnTopCombos(results []ComboResult, topN int, db Database, baseConfig BacktestConfig) ([]WalkForwardResult, error) {
+	if topN <= 0 {
+		topN = 4
+	}
+	type combo struct {
+		StrategyID string
+		Symbol     string
+		Timeframe  string
+		Sharpe     float64
+	}
+	var ranked []combo
+	for _, r := range results {
+		if r.Error != "" || r.NumTrades < 20 {
+			continue
+		}
+		ranked = append(ranked, combo{r.StrategyID, r.Symbol, r.Timeframe, r.SharpeRatio})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].Sharpe > ranked[j].Sharpe })
+	if len(ranked) > topN {
+		ranked = ranked[:topN]
+	}
+
+	var wfResults []WalkForwardResult
+	for _, c := range ranked {
+		wfCfg := WalkForwardConfig{
+			Config: BacktestConfig{
+				StrategyID:     c.StrategyID,
+				Symbols:        []string{c.Symbol},
+				StartDate:      baseConfig.StartDate,
+				EndDate:        baseConfig.EndDate,
+				InitialCapital: baseConfig.InitialCapital,
+				Timeframe:      c.Timeframe,
+				DataSource:     baseConfig.DataSource,
+				SizingPercent:  baseConfig.SizingPercent,
+				KellyFraction:  baseConfig.KellyFraction,
+				GateProfile:    baseConfig.GateProfile,
+			},
+			TrainWindows: 3,
+			PurgeTradingDays: 5,
+			EmbargoTradingDays: 10,
+		}
+		engine := NewEngine(db)
+		wfResult, err := engine.RunWalkForward(context.Background(), wfCfg)
+		if err != nil {
+			continue
+		}
+		wfResults = append(wfResults, *wfResult)
+	}
+	return wfResults, nil
+}
+
+func clampAbs(val, limit float64) float64 {
+	if math.IsNaN(val) || math.IsInf(val, 0) {
+		return 0
+	}
+	if val > limit {
+		return limit
+	}
+	if val < -limit {
+		return -limit
+	}
+	return val
 }

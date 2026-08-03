@@ -50,14 +50,30 @@ export function exportDailyReturnsCSV(returns: DailyReturn[], filename = 'daily_
 }
 
 export function exportMatrixResultsCSV(results: ComboResult[], filename = 'matrix_results.csv') {
-  const headers = ['Strategy', 'Symbol', 'Timeframe', 'Trades', 'Sharpe', 'Sortino', 'MaxDD%', 'Return%', 'WinRate', 'ProfitFactor', 'GatePassed']
+  const headers = [
+    'Strategy', 'Symbol', 'Timeframe', 'Trades', 'Sharpe', 'Sortino', 'MaxDD%',
+    'Return%', 'WinRate', 'ProfitFactor',
+    'LongTrades', 'ShortTrades', 'LongWinRate', 'ShortWinRate',
+    'LongGrossPnL', 'ShortGrossPnL', 'LongPF', 'ShortPF',
+    'Wins', 'Losses', 'AvgWin', 'AvgLoss', 'MFE', 'MAE',
+    'GatePassed', 'Optimized', 'Params',
+  ]
   const rows = results.map(r => [
     r.strategy_id, r.symbol, r.timeframe, r.num_trades,
     r.sharpe_ratio?.toFixed(4), r.sortino_ratio?.toFixed(4),
     r.max_drawdown?.toFixed(2), r.total_return?.toFixed(2),
     r.win_rate != null ? r.win_rate.toFixed(4) : '',
     r.profit_factor?.toFixed(2),
-    r.gate_passed,
+    r.long_trades ?? '', r.short_trades ?? '',
+    r.long_win_rate != null ? r.long_win_rate.toFixed(4) : '',
+    r.short_win_rate != null ? r.short_win_rate.toFixed(4) : '',
+    r.long_gross_pnl?.toFixed(2) ?? '', r.short_gross_pnl?.toFixed(2) ?? '',
+    r.long_profit_factor?.toFixed(2) ?? '', r.short_profit_factor?.toFixed(2) ?? '',
+    r.num_wins ?? '', r.num_losses ?? '',
+    r.avg_win?.toFixed(2), r.avg_loss?.toFixed(2),
+    r.avg_mfe?.toFixed(4), r.avg_mae?.toFixed(4),
+    r.gate_passed, r.optimized ?? false,
+    r.strategy_params ? JSON.stringify(r.strategy_params) : '',
   ].map(escapeCSV).join(','))
   const csv = [headers.join(','), ...rows].join('\n')
   downloadBlob(csv, filename)

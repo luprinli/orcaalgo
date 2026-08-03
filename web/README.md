@@ -32,7 +32,7 @@ Dark-mode optimized for extended monitoring sessions:
 Trading Desk:
   Dashboard (/)              → MonitorPage — 4 tabs (Overview, Positions & Orders, Risk, Signals)
   Execution (/execution)     → Order placement + active orders
-  Backtesting (/backtest)    → BacktestHub — Runner (Matrix/Single/Optimize) + History + Detail + Promote-to-Live
+  Backtesting (/backtest)    → BacktestHub — Runner (Matrix/Single) + History + Detail (quant finance report)
   Strategies (/strategies)   → StrategyHub — Catalog + Instances + Editor
 
 Analysis:
@@ -57,7 +57,7 @@ Still accessible via redirect: `/2fa`, `/propfirm`
 |------|------|-------------|
 | **MonitorPage** | `/` | Merged Dashboard + LiveTrading + Risk. 4 tabs: Overview (9 KPIs + equity + risk bars), Positions & Orders, Risk (emergency stop/resume + regime), Signals. Real-time via WebSocket + REST polling. System status indicators (broker, data feed, DB, WS) now use real health endpoint data |
 | **ExecutionPage** | `/execution` | Order placement (market/limit/stop/stop_limit) with active orders table |
-| **BacktestHub** | `/backtest` | **Runner**: Matrix/Single/Optimize modes with strategy multi-select, symbol input, timeframe checkboxes, optimize fields (objective, train/test years, step months, max combos). OptimizationPanel integrated into Optimize mode. **History**: Table with lazy-loaded metrics, compare mode with correlation matrix, rerun/delete. **Detail**: 17 metrics in collapsible groups (Primary/Advanced/Costs), equity curve, daily returns, Monte Carlo, calendar heatmap, yearly summary, regime breakdown, trade list, optimization, live comparison, Promote-to-Live 3-step wizard |
+| **BacktestHub** | `/backtest` | **Runner**: Matrix/Single modes with strategy/symbol/timeframe dropdown pickers, data source selection, gate profile, auto-optimize toggle, streaming matrix results. **History**: Lazy-loaded metrics table, compare mode, rerun/delete. **Detail**: Quant finance report — Performance Metrics (Sharpe, Sortino, Max DD, Win Rate, Profit Factor, Total Return, trade breakdown), Risk Profile (DD duration, MAE/MFE, hold time, gate status), Equity Curve chart, Daily Returns, collapsible Monte Carlo simulation, Monthly Returns calendar heatmap, Trade Analysis tabs (Regime / Trades / Optimization), cost metadata. Promote-to-Live wizard |
 | **StrategyHub** | `/strategies` | Catalog (template strategies), Instances (created strategy instances), Editor (create/edit with params) |
 | **ChartingHub** | `/charting` | Candles (interactive chart + tick table with timeframe/range selector), Indicators (computation + overlay management) |
 | **IntegrationsPage** | `/integrations` | 3 tabs: Brokers (connection status), Providers & Symbols (CRUD), Credentials (CRUD + rotation). Consolidated from separate CredentialManagement, DataSources, Brokers, Symbols pages |
@@ -134,10 +134,12 @@ cd web
 npm install                      # Install dependencies (requires Node 20+)
 npm run dev                      # Dev server (:5173, proxied to :8080)
 npm run build                    # Production build → dist/ (Vite + Tailwind)
+npm run test                     # Run 228 unit/component tests (vitest)
+npm run test:watch               # Watch mode
+npm run test:coverage            # With coverage report
+npm run test:e2e                 # Run 49 E2E tests (Playwright)
 npx tsc --noEmit                 # TypeScript type check
-npx vitest --run                 # Run 217 unit/component tests
-npx playwright test              # Run 49 E2E tests (requires dev server + API mocking)
-npx eslint .                     # Lint
+npm run lint                     # ESLint
 ```
 
 ## Configuration

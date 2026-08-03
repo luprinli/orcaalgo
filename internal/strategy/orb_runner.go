@@ -15,6 +15,7 @@ type OrbRunner struct {
 	AtrMultiplier    float64
 	TargetMultiplier float64
 	CloseExitMinutes float64
+	MinRangePct      float64
 	openingHigh      float64
 	openingLow       float64
 	rangeSet         bool
@@ -30,6 +31,7 @@ func NewOrbRunner() *OrbRunner {
 		AtrMultiplier:    2.0,
 		TargetMultiplier: 2.0,
 		CloseExitMinutes: 390,
+		MinRangePct:      0.3,
 		openingLow:       math.MaxFloat64,
 	}
 }
@@ -99,6 +101,11 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		}
 		if float64(r.barsInRange) >= r.RangeMinutes {
 			r.rangeSet = true
+			// Minimum volatility requirement: reject if opening range is too narrow.
+			rangePct := (r.openingHigh - r.openingLow) / candle.Close.Float64() * 100.0
+			if r.MinRangePct > 0 && rangePct < r.MinRangePct {
+				return nil
+			}
 		}
 		return nil
 	}

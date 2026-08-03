@@ -208,7 +208,7 @@ func (c *CapitalPoolSim) RequestCapital(ctx context.Context, req risk.CapitalReq
 	}
 
 	size := req.BaseSize
-	maxSize := c.PoolState.TotalBalance * p.MaxPositionPct / 100.0 / 100.0
+	maxSize := c.PoolState.TotalBalance * p.MaxPositionPct / 100.0
 	if size > maxSize {
 		size = maxSize
 	}
@@ -227,6 +227,30 @@ func (c *CapitalPoolSim) HaltReason() string { return c.PoolState.HaltReason }
 
 // TotalBalance returns the current pool equity.
 func (c *CapitalPoolSim) TotalBalance() float64 { return c.PoolState.TotalBalance }
+
+func (c *CapitalPoolSim) ApplyCorrelationReduction(side, symbol string, baseSize float64) float64 {
+	for _, strat := range c.Strategies {
+		if side == "BUY" && strat.OpenShort[symbol] > 0 {
+			return baseSize * 0.5
+		}
+		if side == "SELL" && strat.OpenLong[symbol] > 0 {
+			return baseSize * 0.5
+		}
+	}
+	return baseSize
+}
+
+func (c *CapitalPoolSim) PerStrategyDrawdown(strategyID string) float64 {
+	strat, ok := c.Strategies[strategyID]
+	if !ok || strat.PeakBalance <= 0 {
+		return 0
+	}
+	dd := (strat.PeakBalance - c.PoolState.TotalBalance) / strat.PeakBalance
+	if dd < 0 {
+		dd = 0
+	}
+	return dd
+}
 
 var _ risk.CapitalGate = (*CapitalPoolSim)(nil)
 

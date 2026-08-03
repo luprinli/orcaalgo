@@ -30,13 +30,24 @@ type ProcessSignalResult struct {
 
 // RiskPipeline is the canonical signal-audit pipeline shared by the backtest
 // Engine and the live LiveEngine. It composes sizing, exposure, capital-gate,
-// and prop-firm checks in a fixed, enforceable order. Adding a new risk check
-// here automatically applies to both backtest and live paths.
+// prop-firm checks, and regime-aware strategy gating in a fixed, enforceable
+// order. Adding a new risk check here automatically applies to both backtest
+// and live paths.
 type RiskPipeline struct {
-	SignalGate SignalGate
-	Capital    CapitalGate
-	PropFirm   PropFirmGate
-	KellyMult  float64
+	SignalGate  SignalGate
+	Capital     CapitalGate
+	PropFirm    PropFirmGate
+	KellyMult   float64
+
+	// RegimeMatrix gates strategies by regime. When set, every signal is
+	// checked against the matrix: if the strategy is not allowed in the
+	// current regime, the signal is rejected. The matrix also provides
+	// per-regime Kelly multiplier overrides.
+	RegimeMatrix *RegimeActivationMatrix
+
+	// CurrentRegime is the HMM regime state (0-3) at the time of the signal.
+	// Updated by the caller before each ProcessSignal call.
+	CurrentRegime int8
 }
 
 // ProcessSignal runs the full signal → approval/rejection pipeline.
@@ -66,6 +77,15 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 		return ProcessSignalResult{Approved: false, Reason: "propfirm_halted:" + p.PropFirm.HaltReason()}
 	}
 
+	// 3b. Regime activation gate — block strategies not allowed in current regime.
+	if p.RegimeMatrix != nil {
+		if !p.RegimeMatrix.IsAllowed(req.StrategyID, p.CurrentRegime) {
+			monitor.RecordReject()
+			monitor.RecordSignalReject("regime_blocked", req.StrategyID)
+			return ProcessSignalResult{Approved: false, Reason: "regime_blocked"}
+		}
+	}
+
 	// 4. Apply sizing: Kelly, regime, seasonal, confidence.
 	size := req.BaseSize
 	if size <= 0 {
@@ -76,7 +96,25 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	if p.SignalGate != nil {
 		size = p.SignalGate.ApplySizing(size, req.RunningCapital, req.Confidence)
 	}
-	size *= p.KellyMult
+	kelly := p.KellyMult
+	if p.RegimeMatrix != nil {
+		if override := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); override > 0 {
+			kelly = override
+		}
+	}
+	size *= kelly
+
+	// 4b. Soft halt: if the prop-firm gate indicates a soft halt (daily loss
+	// between soft and hard thresholds), reduce position size by 50%.
+	if p.PropFirm != nil {
+		if sh, ok := p.PropFirm.(interface {
+			IsSoftHalted() bool
+			SoftHaltMultiplier() float64
+		}); ok && sh.IsSoftHalted() {
+			size *= sh.SoftHaltMultiplier()
+		}
+	}
+
 	if size <= 0 {
 		monitor.RecordReject()
 		monitor.RecordSignalReject("size_zero_after_sizing", req.StrategyID)
@@ -93,7 +131,18 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 		}
 	}
 
-	// 6. Capital authorization through the pool.
+	// 6. Cross-strategy correlation brake: if any other strategy already has an
+	// open position on the same symbol + same direction, halve the total size
+	// to avoid overexposure to the same directional bet.
+	if p.Capital != nil {
+		if cs, ok := p.Capital.(interface {
+			HasOpenPosition(string, string) bool
+		}); ok && cs.HasOpenPosition(req.Symbol, req.Side) {
+			size *= 0.5
+		}
+	}
+
+	// 7. Capital authorization through the pool.
 	if p.Capital != nil {
 		capitalReq := CapitalRequest{
 			StrategyID: req.StrategyID,
@@ -109,6 +158,33 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 			return ProcessSignalResult{Approved: false, Reason: "capital:" + result.Reason}
 		}
 		size = result.ApprovedSize
+	}
+
+	// 6b. Optional: correlation penalty for opposing same-symbol signals.
+	if p.Capital != nil {
+		if cp, ok := p.Capital.(interface {
+			ApplyCorrelationReduction(string, string, float64) float64
+		}); ok {
+			size = cp.ApplyCorrelationReduction(req.Side, req.Symbol, size)
+			if size <= 0 {
+				monitor.RecordReject()
+				monitor.RecordSignalReject("correlation", req.StrategyID)
+				return ProcessSignalResult{Approved: false, Reason: "correlation_penalty"}
+			}
+		}
+	}
+
+	// 6c. Optional: per-strategy drawdown gate (halts individual strategies).
+	if p.Capital != nil {
+		if psd, ok := p.Capital.(interface {
+			PerStrategyDrawdown(string) float64
+		}); ok {
+			if dd := psd.PerStrategyDrawdown(req.StrategyID); dd > 0.05 {
+				monitor.RecordReject()
+				monitor.RecordSignalReject("strategy_dd", req.StrategyID)
+				return ProcessSignalResult{Approved: false, Reason: "per_strategy_drawdown:" + req.StrategyID}
+			}
+		}
 	}
 
 	// 7. If prop-firm gate provides position-size caps, apply them last.

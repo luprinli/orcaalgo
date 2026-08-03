@@ -1,24 +1,30 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { strategies } from '../api/client'
+import { strategies, backtests } from '../api/client'
 import { useCacheStore } from '../stores/cacheStore'
-import { STRATEGY_CATALOG, type CatalogWithInstance } from '../data/strategyCatalog'
-import type { Strategy } from '../types/api'
+import type { Strategy, BacktestHistoryEntry, EquityPoint } from '../types/api'
 import { Card, CardContent } from '../components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
+import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription,
+  AlertDialogAction, AlertDialogCancel,
 } from '../components/ui/alert-dialog'
 import CatalogTab from './strategy-hub/CatalogTab'
 import InstancesTab from './strategy-hub/InstancesTab'
 import EditorTab from './strategy-hub/EditorTab'
+
+const STRATEGY_DISPLAY: Record<string, string> = {
+  grid: 'Grid Trading', mean_reversion: 'Mean Reversion', intraday_mr: 'Mean Reversion',
+  trend: 'Trend Following', trend_following: 'Trend Following',
+  breakout: 'ORB Breakout', opening_range_breakout: 'ORB Breakout',
+  scalp: 'Session Scalp', session_scalp: 'Session Scalp',
+  vol_arb: 'Vol Harvesting', stat_arb: 'Stat Arb',
+  ma_crossover: 'MA Crossover', rsi2: 'RSI2 Reversion',
+  donchian: 'Donchian Breakout', keltner: 'Keltner MACD', ichimoku: 'Ichimoku Cloud',
+}
 
 export default function StrategyHub() {
   const { t } = useTranslation()
@@ -26,12 +32,11 @@ export default function StrategyHub() {
   const [dbList, setDbList] = useState<Strategy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [msg, setMsg] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('catalog')
   const [editorId, setEditorId] = useState<string | null>(null)
 
-  useEffect(() => {
+  const fetchDb = () => {
     cacheStore
       .fetchStrategies(async () => {
         const res = await strategies.list()
@@ -40,63 +45,23 @@ export default function StrategyHub() {
       .then((list) => setDbList(list as Strategy[]))
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
-  }, [])
-
-  const refreshDbList = async () => {
-    try {
-      const refreshed = await strategies.list()
-      setDbList(refreshed.strategies ?? [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Refresh failed')
-    }
   }
+  useEffect(fetchDb, [])
 
-  const dbByType: Record<string, Strategy[]> = {}
-  for (const s of dbList) {
-    if (!dbByType[s.type]) dbByType[s.type] = []
-    dbByType[s.type].push(s)
-  }
-
-  const catalog: CatalogWithInstance[] = STRATEGY_CATALOG.map((entry) => {
-    const instances = dbByType[entry.typeKey] ?? []
-    return { ...entry, dbInstance: instances.length > 0 ? instances[0] : null }
-  })
-
-  const toggleEnabled = async (id: string, current: boolean) => {
-    try {
-      await strategies.update(id, { enabled: !current })
-      setDbList((prev) => prev.map((s) => (s.id === id ? { ...s, enabled: !current } : s)))
-      setMsg(t('strategies:updated', 'Updated'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('strategies:updateFailed', 'Update failed'))
-    }
+  const handleToggle = async (id: string, current: boolean) => {
+    await strategies.update(id, { enabled: !current })
+    fetchDb()
   }
 
   const handleClone = async (id: string) => {
-    try {
-      const clone = await strategies.clone(id)
-      setMsg(t('strategies:clonedAs', 'Cloned as "{{name}}"', { name: clone.name }))
-      await refreshDbList()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('strategies:cloneFailed', 'Clone failed'))
-    }
+    await strategies.clone(id)
+    fetchDb()
   }
 
-  const handleDelete = (id: string) => {
-    setConfirmDelete(id)
-  }
-
-  const confirmDeleteStrategy = async () => {
-    if (!confirmDelete) return
-    try {
-      await strategies.delete(confirmDelete)
-      setDbList((prev) => prev.filter((s) => s.id !== confirmDelete))
-      setMsg(t('strategies:deleted', 'Deleted'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t('strategies:deleteFailed', 'Delete failed'))
-    } finally {
-      setConfirmDelete(null)
-    }
+  const handleDelete = async (id: string) => {
+    await strategies.delete(id)
+    setConfirmDelete(null)
+    fetchDb()
   }
 
   const handleEdit = (id: string) => {
@@ -104,100 +69,106 @@ export default function StrategyHub() {
     setActiveTab('editor')
   }
 
-  const handleNew = () => {
-    setEditorId(null)
-    setActiveTab('editor')
+  const totalActive = dbList.filter((s) => s.enabled).length
+  const strategyTypes = useMemo(() => [...new Set(dbList.map((s) => s.type))], [dbList])
+
+  if (editorId) {
+    return <EditorTab id={editorId} onCreated={fetchDb} onBack={() => { setEditorId(null); setActiveTab('catalog') }} />
   }
-
-  const handleEditorCreated = async () => {
-    await refreshDbList()
-    setActiveTab('instances')
-  }
-
-  if (loading)
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-sm text-muted-foreground">{t('strategies:loading', 'Loading strategies...')}</p>
-        </CardContent>
-      </Card>
-    )
-
-  if (error)
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <p className="text-destructive">{error}</p>
-        </CardContent>
-      </Card>
-    )
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="m-0">{t('strategies:title', 'Strategy Hub')}</h1>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg m-0">{t('strategies:title', 'Strategy Hub')}</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {t('strategies:subtitle', 'Manage and monitor strategy instances with performance metrics')}
+          </p>
+        </div>
       </div>
 
-      {msg && <p className="text-sm mb-2 text-trading-success">{msg}</p>}
+      <div className="grid grid-cols-4 gap-3">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-transparent">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold tabular-nums">{strategyTypes.length}</div>
+            <div className="text-[11px] text-muted-foreground">Strategy Types</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold tabular-nums text-green-600">{dbList.length}</div>
+            <div className="text-[11px] text-muted-foreground">Instances</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-purple-500/10 to-transparent">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold tabular-nums text-purple-600">{totalActive}</div>
+            <div className="text-[11px] text-muted-foreground">Active Instances</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-gradient-to-br from-amber-500/10 to-transparent">
+          <CardContent className="p-3">
+            <div className="text-2xl font-bold tabular-nums text-amber-600">{dbList.length - totalActive}</div>
+            <div className="text-[11px] text-muted-foreground">Inactive</div>
+          </CardContent>
+        </Card>
+      </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList>
-          <TabsTrigger value="catalog">
-            {t('strategies:catalogTab', 'Catalog')} ({catalog.length})
+      {error && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="p-3 text-xs text-destructive">{error}</CardContent>
+        </Card>
+      )}
+
+      <Tabs value={activeTab} onValueChange={(v) => { if (v === 'editor') setEditorId(null); setActiveTab(v) }}>
+        <TabsList className="w-full justify-start gap-1 h-8">
+          <TabsTrigger value="catalog" className="text-xs h-6 data-[state=active]:bg-card">
+            Catalog ({strategyTypes.length})
           </TabsTrigger>
-          <TabsTrigger value="instances">
-            {t('strategies:instancesTab', 'Instances')} ({dbList.length})
+          <TabsTrigger value="instances" className="text-xs h-6 data-[state=active]:bg-card">
+            Instances ({dbList.length})
           </TabsTrigger>
-          <TabsTrigger value="editor">
-            {editorId ? t('strategyEditor:editStrategy', 'Edit') : t('strategyEditor:newStrategy', 'Editor')}
+          <TabsTrigger value="editor" className="text-xs h-6 data-[state=active]:bg-card">
+            Editor
           </TabsTrigger>
         </TabsList>
-
-        <TabsContent value="catalog">
+        <TabsContent value="catalog" className="mt-3">
           <CatalogTab
             dbList={dbList}
-            catalog={catalog}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDelete={(id) => setConfirmDelete(id)}
             onClone={handleClone}
-            onToggle={toggleEnabled}
-            onNew={handleNew}
+            onToggle={handleToggle}
+            onNew={() => { setEditorId(null); setActiveTab('editor') }}
           />
         </TabsContent>
-
-        <TabsContent value="instances">
+        <TabsContent value="instances" className="mt-3">
           <InstancesTab
             dbList={dbList}
+            loading={loading}
             onEdit={handleEdit}
-            onDelete={handleDelete}
+            onDelete={(id) => setConfirmDelete(id)}
             onClone={handleClone}
-            onToggle={toggleEnabled}
+            onToggle={handleToggle}
           />
         </TabsContent>
-
-        <TabsContent value="editor">
-          <EditorTab
-            id={editorId}
-            onCreated={handleEditorCreated}
-            onBack={() => setActiveTab('catalog')}
-          />
+        <TabsContent value="editor" className="mt-3">
+          <EditorTab id={null} onCreated={fetchDb} onBack={() => setActiveTab('catalog')} />
         </TabsContent>
       </Tabs>
 
-      <AlertDialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+      <AlertDialog open={confirmDelete !== null} onOpenChange={(v) => { if (!v) setConfirmDelete(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('strategies:deleteTitle', 'Delete Strategy')}</AlertDialogTitle>
+            <AlertDialogTitle>Delete Strategy Instance?</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('strategies:deleteConfirm', 'Delete this strategy instance? This action cannot be undone.')}
+              This permanently removes the instance. Active deployments will be halted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmDelete(null)}>
-              {t('common:cancel', 'Cancel')}
-            </AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={confirmDeleteStrategy}>
-              {t('common:delete', 'Delete')}
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => confirmDelete && handleDelete(confirmDelete)} className="bg-destructive hover:bg-destructive/90">
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

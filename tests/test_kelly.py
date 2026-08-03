@@ -173,3 +173,43 @@ class TestKellyWithAttenuators:
     def test_no_side_edge_discount(self):
         result = kelly_with_attenuators(p=0.01, price=0.50, side="no", edge_discount=0.02)
         assert result.discounted_p == pytest.approx(0.03)
+
+
+class TestKellyRegimeMultipliers:
+    """Regime-specific Kelly multipliers per §5.2 of the Senior Quantitative Review."""
+
+    def test_calm_regime_kelly(self):
+        """Calm regime uses standard k=0.25."""
+        result = kelly_with_attenuators(p=0.55, price=0.50, side="yes", multiplier=0.25)
+        assert result.final_allocation > 0
+        assert result.fractional_kelly == pytest.approx(result.raw_kelly * 0.25)
+
+    def test_high_vol_regime_kelly(self):
+        """High Vol regime uses reduced k=0.15."""
+        result = kelly_with_attenuators(p=0.55, price=0.50, side="yes", multiplier=0.15)
+        assert result.final_allocation > 0
+        assert result.fractional_kelly == pytest.approx(result.raw_kelly * 0.15)
+        # HighVol allocation should be smaller than Calm allocation.
+        calm = kelly_with_attenuators(p=0.55, price=0.50, side="yes", multiplier=0.25)
+        assert result.fractional_kelly < calm.fractional_kelly
+
+    def test_crisis_regime_kelly(self):
+        """Crisis regime uses k=0.0 — no allocation."""
+        result = kelly_with_attenuators(p=0.55, price=0.50, side="yes", multiplier=0.0)
+        assert result.final_allocation == pytest.approx(0.0)
+        assert result.fractional_kelly == pytest.approx(0.0)
+
+    def test_kelly_attenuators_still_apply(self):
+        """Even with regime-specific Kelly, all three attenuators must apply."""
+        result = kelly_with_attenuators(
+            p=0.65, price=0.50, side="yes",
+            multiplier=0.15,
+            edge_discount=0.02,
+            per_trade_cap_pct=0.02,
+            total_exposure_cap_pct=0.15,
+            current_exposure_pct=0.05,
+        )
+        assert result.final_allocation >= 0
+        assert result.discounted_p < 0.65  # edge discount applied
+        assert result.fractional_kelly <= result.raw_kelly * 0.15
+        assert result.final_allocation <= result.fractional_kelly  # caps applied

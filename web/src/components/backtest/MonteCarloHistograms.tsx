@@ -12,7 +12,7 @@ export default function MonteCarloHistograms({
   allMaxDDPct,
   stats,
 }: MonteCarloHistogramsProps) {
-  if (!allPnlPct.length || !allMaxDDPct.length) {
+  if (!allPnlPct || !allPnlPct.length || !allMaxDDPct || !allMaxDDPct.length) {
     return (
       <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ padding: 16 }}>
         <p className="text-muted">Insufficient data for Monte Carlo histograms.</p>

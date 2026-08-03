@@ -83,9 +83,11 @@ func computeMCSummary(iterations []MCIterationResult, cfg MCConfig) MCSummary {
 
 	var sumPnl float64
 	bustCount := 0
-	for _, p := range sortedPnl {
+	for i, p := range sortedPnl {
 		sumPnl += p
-		if p < 0 {
+		dd := iterations[i].MaxDDPct
+		busted := p < 0 || dd > 20.0
+		if busted {
 			bustCount++
 		}
 	}
@@ -175,19 +177,27 @@ func extractReturns(daily []DailyReturn) []float64 {
 }
 
 func bootstrapPath(returns []float64, bars int, rng *rand.Rand) []float64 {
+	return bootstrapBlockPath(returns, bars, rng, 7)
+}
+
+func bootstrapBlockPath(returns []float64, bars int, rng *rand.Rand, blockLen int) []float64 {
+	if blockLen <= 1 || blockLen > len(returns)/4 {
+		blockLen = 1
+	}
 	path := make([]float64, bars)
 	equity := 1.0
-	peak := 1.0
 
-	for i := 0; i < bars; i++ {
-		idx := rng.IntN(len(returns))
-		equity *= (1.0 + returns[idx])
-		if equity <= 0 {
-			equity = 0.0001
-		}
-		path[i] = equity
-		if equity > peak {
-			peak = equity
+	n := len(returns)
+	for i := 0; i < bars; {
+		start := rng.IntN(n)
+		for j := 0; j < blockLen && i < bars; j++ {
+			idx := (start + j) % n
+			equity *= (1.0 + returns[idx])
+			if equity <= 0 {
+				equity = 0.0001
+			}
+			path[i] = equity
+			i++
 		}
 	}
 	return path

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import Enum, auto
 from pathlib import Path
@@ -209,7 +209,14 @@ def check_win_rate_degradation(
 def check_acceptance_rate(
     acceptance_rate: float,
     min_rate: float = 0.30,
+    accepted_wins: int = 0,
+    accepted_total: int = 0,
 ) -> Alert | None:
+    reason = f"Signal acceptance rate {acceptance_rate:.2%} below minimum {min_rate:.2%}"
+    if accepted_total > 0:
+        from orca.math.wilson import wilson_ci
+        ci_low, ci_high = wilson_ci(accepted_wins, accepted_total)
+        reason = f"Signal acceptance rate {acceptance_rate:.2%} [95% CI: {ci_low:.2%}–{ci_high:.2%}] below minimum {min_rate:.2%}"
     if acceptance_rate < min_rate:
         return Alert(
             AlertSeverity.WARN,
@@ -217,7 +224,7 @@ def check_acceptance_rate(
             "acceptance_rate",
             acceptance_rate,
             min_rate,
-            f"Signal acceptance rate {acceptance_rate:.2%} below minimum {min_rate:.2%}",
+            reason,
         )
     return None
 
@@ -255,7 +262,7 @@ def generate_health_report(
     distribution = compute_prediction_distribution(
         recent_pwins, recent_accepted, bins=config.prediction_bins,
     )
-    distribution.model_name = model_name
+    distribution = replace(distribution, model_name=model_name)
 
     ar_alert = check_acceptance_rate(distribution.acceptance_rate, config.acceptance_rate_min)
 

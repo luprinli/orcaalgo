@@ -45,19 +45,26 @@ def main() -> None:
 
 
 def _predict_json_model(model_path: str, X: np.ndarray) -> float:
-    """Predict using a JSON-exported XGBoost model."""
+    with open(model_path) as f:
+        model_data = json.load(f)
+
+    platt_a = model_data.get("platt_a", 1.0)
+    platt_b = model_data.get("platt_b", 0.0)
+
     try:
         import xgboost as xgb
         model = xgb.XGBClassifier()
         model.load_model(model_path)
         proba = model.predict_proba(X)
-        return float(proba[0, 1])
+        p_raw = float(proba[0, 1])
+        if platt_a != 1.0 or platt_b != 0.0:
+            p_raw = max(min(p_raw, 0.9999), 0.0001)
+            logit = float(np.log(p_raw / (1.0 - p_raw)))
+            p_cal = 1.0 / (1.0 + np.exp(-(platt_a * logit + platt_b)))
+            return max(0.0, min(1.0, p_cal))
+        return max(0.0, min(1.0, p_raw))
     except ImportError:
         pass
-
-    # Fallback: simple logistic model using feature importances
-    with open(model_path) as f:
-        model_data = json.load(f)
 
     importances = model_data.get("feature_importances", [])
     if len(importances) != X.shape[1]:
@@ -66,7 +73,7 @@ def _predict_json_model(model_path: str, X: np.ndarray) -> float:
         )
 
     score = float(np.dot(X[0], importances))
-    p_win = 1.0 / (1.0 + np.exp(-score))
+    p_win = 1.0 / (1.0 + np.exp(-(platt_a * score + platt_b)))
     return max(0.0, min(1.0, p_win))
 
 

@@ -2,10 +2,10 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { backtests } from '../api/client'
-import { submitOptimizationRun, getOptimizationStatus, getOptimizationResults, type OptimizationResult } from '../api/optimize'
+import { backtests, strategies as strategiesApi, symbols as symbolsApi } from '../api/client'
 import { useMatrixStore } from '../stores/matrixStore'
 import { useMatrixStream } from '../hooks/useMatrixStream'
+import { useCacheStore } from '../stores/cacheStore'
 import MatrixProgressBar from '../components/backtest/MatrixProgressBar'
 import CancelButton from '../components/backtest/CancelButton'
 import MatrixResultsPanel from '../components/backtest/MatrixResultsPanel'
@@ -13,11 +13,9 @@ import PromoteToLiveWizard from '../components/deploy/PromoteToLiveWizard'
 import ErrorCard from '../components/ErrorCard'
 import ErrorBoundary from '../components/ErrorBoundary'
 import ConfirmDialog from '../components/ConfirmDialog'
-import MetricCard from '../components/MetricCard'
 import OverviewTab from '../components/backtest/OverviewTab'
 import TradesTab from '../components/backtest/TradesTab'
 import OptimizationTab from '../components/backtest/OptimizationTab'
-import ComparisonTab from '../components/backtest/ComparisonTab'
 import EquityCurveChart from '../charts/EquityCurveChart'
 import DailyReturnsChart from '../charts/DailyReturnsChart'
 import MonteCarloChart, { type MCResultData } from '../charts/MonteCarloChart'
@@ -35,18 +33,20 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../co
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../components/ui/select'
 import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
+import { Popover, PopoverTrigger, PopoverContent } from '../components/ui/popover'
+import { ScrollArea } from '../components/ui/scroll-area'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/table'
 import type {
   MatrixResultsResponse, ComboResult, BacktestHistoryEntry, BacktestMetrics,
   EquityPoint, DailyReturn, TradeSummary, RegimeStat, OptimizationFootprint,
-  LiveComparisonResponse, MonthlyReturn,
+  MonthlyReturn, Strategy,
 } from '../types/api'
-import { ALL_STRATEGIES, GATE_PROFILES, DATA_SOURCES, type SortField } from '../data/constants'
+import { GATE_PROFILES, DATA_SOURCES, ALL_STRATEGIES as FALLBACK_STRATEGIES, type SortField } from '../data/constants'
 
 type HubView = 'runner' | 'history' | 'detail'
 
-const ALL_TIMEFRAMES = ['1d', '1h', '5m']
+const ALL_TIMEFRAMES = ['1d', '4h', '1h', '30m', '15m', '5m']
 
 const COMPARE_COLORS = ['#2962FF', '#3fb950', '#d29922', '#f85149', '#58a6ff', '#bc8cff']
 
@@ -75,34 +75,96 @@ export default function BacktestHub() {
 
 function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
   const preselectedStrategy = new URLSearchParams(window.location.search).get('strategy')
-  const runMode = new URLSearchParams(window.location.search).get('view') === 'optimize' ? 'optimize' as const : null
-  const [mode, setMode] = useState<'matrix' | 'single' | 'optimize'>(runMode || 'matrix')
+  const cacheStore = useCacheStore()
+  const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
+  const [availableSymbols, setAvailableSymbols] = useState<string[]>([])
+  const [mode, setMode] = useState<'matrix' | 'single'>('single')
   const [strategies, setStrategies] = useState<string[]>(() => {
-    if (preselectedStrategy && ALL_STRATEGIES.includes(preselectedStrategy)) return [preselectedStrategy]
-    return ['ma_crossover']
+    if (preselectedStrategy && FALLBACK_STRATEGIES.includes(preselectedStrategy)) return [preselectedStrategy]
+    return FALLBACK_STRATEGIES.slice(0, 1)
   })
-  const [symbols, setSymbols] = useState('SPX500,NAS100')
-  const [start, setStart] = useState('2024-01-01')
-  const [end, setEnd] = useState('2024-06-30')
+  const [symbols, setSymbols] = useState('')
+  const [start, setStart] = useState('2023-01-01')
+  const [end, setEnd] = useState('2025-12-31')
   const [capital, setCapital] = useState('100000')
   const [dataSource, setDataSource] = useState('synthetic')
   const [gateProfile, setGateProfile] = useState('none')
   const [timeframes, setTimeframes] = useState<string[]>(['1d'])
+  const [lightOptimize, setLightOptimize] = useState(true)
+  const [favoriteSymbols, setFavoriteSymbols] = useState<string[]>(() => {
+    try { const raw = localStorage.getItem('orca_fav_symbols'); return raw ? JSON.parse(raw) : [] } catch { return [] }
+  })
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
-  const [matrixBatchId, setMatrixBatchId] = useState<string | null>(null)
-  const [optObjective, setOptObjective] = useState('sharpe')
-  const [optTrainYears, setOptTrainYears] = useState(2)
-  const [optTestYears, setOptTestYears] = useState(1)
-  const [optStepMonths, setOptStepMonths] = useState(3)
-  const [optMaxCombos, setOptMaxCombos] = useState(100)
-  const [optRunId, setOptRunId] = useState<string | null>(null)
-  const [optStatus, setOptStatus] = useState<{ status: string; progress?: number; elapsed_seconds?: number } | null>(null)
-  const [optResult, setOptResult] = useState<OptimizationResult | null>(null)
-  const [optInterval, setOptInterval] = useState<ReturnType<typeof setInterval> | null>(null)
+  const [symbolsOpen, setSymbolsOpen] = useState(false)
+  const matrixBatchId = useMatrixStore((s) => s.batchId)
 
-  const toggleStrat = (s: string) => { setStrategies(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s]) }
-  const symbolList = symbols.split(',').map(s => s.trim()).filter(Boolean)
+  const toggleFavoriteSymbol = (sym: string) => {
+    setFavoriteSymbols(prev => {
+      const next = prev.includes(sym) ? prev.filter(s => s !== sym) : [...prev, sym]
+      localStorage.setItem('orca_fav_symbols', JSON.stringify(next))
+      return next
+    })
+  }
+
+  useEffect(() => {
+    cacheStore.fetchStrategies(() => strategiesApi.list().then(r => r.strategies))
+      .then(strats => { if (strats.length > 0) setAvailableStrategies(strats) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    cacheStore.fetchSymbols(() =>
+      (symbolsApi.list() as Promise<unknown>).then((r: unknown) => {
+        const data = r as { symbols?: { ticker: string }[] }
+        return (data.symbols || []).map((s: { ticker: string }) => s.ticker)
+      })
+    )
+      .then(syms => { if (syms.length > 0) setAvailableSymbols(syms) })
+      .catch(() => {})
+  }, [])
+
+  const displayStrategies = useMemo(() => {
+    if (availableStrategies.length > 0) return availableStrategies.map(s => ({ key: s.type, label: s.name }))
+    return FALLBACK_STRATEGIES.map(s => ({ key: s, label: s.replace(/_/g, ' ') }))
+  }, [availableStrategies])
+
+  const symbolList = useMemo(() => symbols.split(',').map(s => s.trim()).filter(Boolean), [symbols])
+
+  const sortedAvailableSymbols = useMemo(() => {
+    const favs: string[] = []
+    const rest: string[] = []
+    for (const s of availableSymbols) {
+      if (favoriteSymbols.includes(s)) favs.push(s)
+      else rest.push(s)
+    }
+    return [...favs.sort(), ...rest.sort()]
+  }, [availableSymbols, favoriteSymbols])
+
+  useEffect(() => {
+    if (displayStrategies.length > 0 && strategies.length === 0) {
+      const initStrats = mode === 'matrix'
+        ? displayStrategies.map(s => s.key)
+        : [displayStrategies[0].key]
+      setStrategies(initStrats)
+    }
+  }, [displayStrategies])
+
+  useEffect(() => {
+    if (mode === 'matrix') {
+      if (displayStrategies.length > 0) setStrategies(displayStrategies.map(s => s.key))
+      if (availableSymbols.length > 0) setSymbols(availableSymbols.join(','))
+      setTimeframes([...ALL_TIMEFRAMES])
+    } else {
+      if (displayStrategies.length > 0) setStrategies([displayStrategies[0].key])
+      if (availableSymbols.length > 0) setSymbols(availableSymbols[0])
+      setTimeframes(['1d'])
+    }
+  }, [mode, displayStrategies, availableSymbols])
+
+  const selectAllStrategies = () => setStrategies(displayStrategies.map(s => s.key))
+  const selectAllSymbols = () => setSymbols(availableSymbols.length > 0 ? availableSymbols.join(',') : '')
+  const selectAllTimeframes = () => setTimeframes([...ALL_TIMEFRAMES])
 
   const matrixStatus = useMatrixStore((s) => s.status)
   const matrixTelemetry = useMatrixStore((s) => s.telemetry)
@@ -111,26 +173,6 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   const matrixBegin = useMatrixStore((s) => s.begin)
   const matrixReset = useMatrixStore((s) => s.reset)
   useMatrixStream(matrixBatchId)
-
-  useEffect(() => {
-    if (!optRunId) return
-    const interval = setInterval(async () => {
-      try {
-        const s = await getOptimizationStatus(optRunId)
-        setOptStatus(s)
-        if (s.status === 'completed') {
-          const r = await getOptimizationResults(optRunId)
-          setOptResult(r)
-          clearInterval(interval)
-          setLoading(false)
-        } else if (s.status === 'failed') {
-          clearInterval(interval)
-          setLoading(false)
-        }
-      } catch { /* ignore poll errors */ }
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [optRunId])
 
   const [filterStrategy, setFilterStrategy] = useState('')
   const [filterSymbol, setFilterSymbol] = useState('')
@@ -188,41 +230,18 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   const run = async () => {
     setLoading(true)
     setResult(null)
-    setMatrixBatchId(null)
-    if (mode === 'optimize') {
-      try {
-        const config = {
-          strategy_id: strategies[0],
-          symbols: symbolList,
-          objective: optObjective,
-          max_combinations: optMaxCombos,
-          train_years: optTrainYears,
-          test_years: optTestYears,
-          step_months: optStepMonths,
-          capital: parseFloat(capital) || 100000,
-        }
-        const res = await submitOptimizationRun(config as any)
-        setOptRunId(res.run_id)
-        setOptStatus({ status: 'running', progress: 0 })
-        setOptResult(null)
-        toast.success('Optimization queued')
-      } catch (err) {
-        setOptStatus({ status: 'failed' })
-      } finally { setLoading(false) }
-      return
-    }
     try {
       const body: Record<string, unknown> = {
         strategy_ids: strategies, symbols: symbolList, start_date: start, end_date: end,
         capital: parseFloat(capital) || 100000, data_source: dataSource, gate_profile: gateProfile,
       }
-      if (mode === 'matrix') { body.mode = 'matrix'; body.timeframes = timeframes }
+      if (mode === 'matrix') { body.mode = 'matrix'; body.timeframes = timeframes; body.light_optimize = lightOptimize }
+      if (mode === 'single' && lightOptimize) { body.light_optimize = true }
       const data = await backtests.run(body as any) as unknown as Record<string, unknown>
-      if (mode === 'matrix' && data && typeof data === 'object' && 'batch_run_id' in data) {
+      if (data && typeof data === 'object' && 'batch_run_id' in data) {
         const batchId = data.batch_run_id as string
         const total = (data.total_combos as number) ?? 0
         matrixBegin(batchId, total)
-        setMatrixBatchId(batchId)
         setResult({ status: 'running', total_combos: total })
         toast.success(`Backtest queued \u2014 ID: ${batchId}`)
       } else {
@@ -237,135 +256,142 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   }
 
   const comboCount = mode === 'single' ? 1 : strategies.length * symbolList.length * timeframes.length
+  const isAllStrategies = strategies.length === displayStrategies.length && displayStrategies.length > 0
+  const isAllSymbols = symbolList.length === availableSymbols.length && availableSymbols.length > 0
+  const isAllTimeframes = timeframes.length === ALL_TIMEFRAMES.length
 
   return <div>
-    <div className="flex items-center justify-between mb-4">
-      <h1 className="m-0">{tFn('backtest:title', 'Backtest Runner')}</h1>
-      <Button variant="outline" onClick={() => setView('history')}>{tFn('backtest:historyLink', 'History')}</Button>
+    <div className="flex items-center justify-between mb-3">
+      <h1 className="m-0 text-lg">{tFn('backtest:title', 'Backtest Runner')}</h1>
+      <Button variant="outline" size="sm" onClick={() => setView('history')}>{tFn('backtest:historyLink', 'History')}</Button>
     </div>
 
     <Card>
-      <CardHeader><CardTitle>{tFn('backtest:configTitle', 'Backtest Configuration')}</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex gap-4">
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="radio" name="run_mode" checked={mode === 'matrix'} onChange={() => setMode('matrix')} /> {tFn('backtest:matrix', 'Matrix')}
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 cursor-pointer text-xs">
             <input type="radio" name="run_mode" checked={mode === 'single'} onChange={() => setMode('single')} /> {tFn('backtest:single', 'Single')}
           </label>
-          <label className="flex items-center gap-2 cursor-pointer text-sm">
-            <input type="radio" name="run_mode" checked={mode === 'optimize'} onChange={() => setMode('optimize')} /> {tFn('backtest:optimize', 'Optimize')}
+          <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="run_mode" checked={mode === 'matrix'} onChange={() => setMode('matrix')} /> {tFn('backtest:matrix', 'Matrix')}
           </label>
+          <div className="flex items-center gap-2 ml-2">
+            <Label className="text-xs whitespace-nowrap">{tFn('backtest:startDate', 'Start')}</Label>
+            <Input className="h-7 w-28 text-xs" type="date" value={start} onChange={e => setStart(e.target.value)} />
+            <Label className="text-xs whitespace-nowrap">{tFn('backtest:endDate', 'End')}</Label>
+            <Input className="h-7 w-28 text-xs" type="date" value={end} onChange={e => setEnd(e.target.value)} />
+            <Label className="text-xs whitespace-nowrap">{tFn('backtest:capital', 'Capital')}</Label>
+            <Input className="h-7 w-20 text-xs" type="number" value={capital} onChange={e => setCapital(e.target.value)} />
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          {mode !== 'optimize' && (
-            <>
-              <div><Label>{tFn('backtest:startDate', 'Start Date')}</Label><Input type="date" value={start} onChange={e => setStart(e.target.value)} /></div>
-              <div><Label>{tFn('backtest:endDate', 'End Date')}</Label><Input type="date" value={end} onChange={e => setEnd(e.target.value)} /></div>
-            </>
-          )}
-          <div><Label>{tFn('backtest:symbols', 'Symbols')}</Label><Input placeholder="EURUSD, BTCUSD, US30" value={symbols} onChange={e => setSymbols(e.target.value)} /></div>
-          <div><Label>{tFn('backtest:capital', 'Capital ($)')}</Label><Input type="number" value={capital} onChange={e => setCapital(e.target.value)} /></div>
-        </div>
-        {mode !== 'optimize' && (
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label>{tFn('backtest:dataSource', 'Data Source')}</Label>
+
+        <div className="flex gap-3">
+          <div className="flex-[2_2_0%] min-w-0">
+            <Label className="text-xs">{tFn('backtest:strategies', 'Strategies')}</Label>
+            <Select value={isAllStrategies ? '__all__' : strategies[0] || ''} onValueChange={v => { if (v === '__all__') selectAllStrategies(); else setStrategies([v]) }}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue>{isAllStrategies ? `All (${strategies.length})` : (displayStrategies.find(s => s.key === strategies[0])?.label || strategies[0])}</SelectValue></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All ({displayStrategies.length})</SelectItem>
+                {displayStrategies.map(s => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-[2_2_0%] min-w-0">
+            <Label className="text-xs">{tFn('backtest:symbols', 'Symbols')}</Label>
+            <Popover open={symbolsOpen} onOpenChange={setSymbolsOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50">
+                  <span className={isAllSymbols ? '' : 'text-foreground'}>
+                    {isAllSymbols ? `All (${symbolList.length})` : symbolList[0] || <span className="text-muted-foreground">{'\u2014'}</span>}
+                  </span>
+                  <svg className="h-3.5 w-3.5 shrink-0 opacity-50" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-0" align="start">
+                <ScrollArea className="h-64">
+                  <button
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent cursor-pointer"
+                    onClick={() => { selectAllSymbols(); setSymbolsOpen(false) }}
+                  >
+                    <span className="font-medium">All ({availableSymbols.length})</span>
+                  </button>
+                  {favoriteSymbols.length > 0 && (
+                    <>
+                      <div className="mx-3 my-0.5 border-t border-border" />
+                      {sortedAvailableSymbols.filter(s => favoriteSymbols.includes(s)).map(s => (
+                        <div key={s} className="flex items-center hover:bg-accent">
+                          <button
+                            className="flex-1 text-left px-3 py-1.5 text-xs cursor-pointer"
+                            onClick={() => { setSymbols(s); setSymbolsOpen(false) }}
+                          >★ {s}</button>
+                          <button
+                            className="shrink-0 px-2 py-1.5 text-xs cursor-pointer hover:text-yellow-500"
+                            onClick={(e) => { e.stopPropagation(); toggleFavoriteSymbol(s) }}
+                          >★</button>
+                        </div>
+                      ))}
+                      {sortedAvailableSymbols.some(s => !favoriteSymbols.includes(s)) && (
+                        <div className="mx-3 my-0.5 border-t border-border" />
+                      )}
+                    </>
+                  )}
+                  {sortedAvailableSymbols.filter(s => !favoriteSymbols.includes(s)).map(s => (
+                    <div key={s} className="flex items-center hover:bg-accent">
+                      <button
+                        className="flex-1 text-left px-3 py-1.5 text-xs cursor-pointer"
+                        onClick={() => { setSymbols(s); setSymbolsOpen(false) }}
+                      >{s}</button>
+                      <button
+                        className="shrink-0 px-2 py-1.5 text-xs cursor-pointer text-muted-foreground hover:text-yellow-500"
+                        onClick={(e) => { e.stopPropagation(); toggleFavoriteSymbol(s) }}
+                      >☆</button>
+                    </div>
+                  ))}
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div className="flex-[1_1_0%] min-w-0">
+            <Label className="text-xs">{tFn('backtest:timeframes', 'Timeframes')}</Label>
+            <Select value={isAllTimeframes ? '__all__' : timeframes[0] || ''} onValueChange={v => { if (v === '__all__') selectAllTimeframes(); else setTimeframes([v]) }}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue>{isAllTimeframes ? `All (${timeframes.length})` : timeframes[0]}</SelectValue></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All ({ALL_TIMEFRAMES.length})</SelectItem>
+                {ALL_TIMEFRAMES.map(tf => <SelectItem key={tf} value={tf}>{tf}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-[1.5_1.5_0%] min-w-0">
+            <Label className="text-xs">{tFn('backtest:dataSource', 'Data')}</Label>
             <Select value={dataSource} onValueChange={setDataSource}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>{DATA_SOURCES.map(ds => <SelectItem key={ds} value={ds}>{ds}</SelectItem>)}</SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>{tFn('backtest:gateProfile', 'Gate Profile')}</Label>
+          <div className="flex-[1.5_1.5_0%] min-w-0">
+            <Label className="text-xs">{tFn('backtest:gateProfile', 'Gate')}</Label>
             <Select value={gateProfile} onValueChange={setGateProfile}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>{GATE_PROFILES.map(gp => <SelectItem key={gp} value={gp}>{gp}</SelectItem>)}</SelectContent>
             </Select>
           </div>
         </div>
-        )}
-        {mode === 'matrix' && (
-          <div>
-            <Label>{tFn('backtest:timeframes', 'Timeframes')}</Label>
-            <div className="flex flex-wrap gap-3 mt-1">
-              {ALL_TIMEFRAMES.map(tf => (
-                <label key={tf} className="flex items-center gap-1 cursor-pointer text-sm">
-                  <input type="checkbox" checked={timeframes.includes(tf)} onChange={() => setTimeframes(p => p.includes(tf) ? p.filter(x => x !== tf) : [...p, tf])} />{tf}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
-        {mode === 'optimize' && (
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Strategy</Label>
-              <Select value={strategies[0]} onValueChange={(v) => setStrategies([v])}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ALL_STRATEGIES.map(s => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Objective</Label>
-              <Select value={optObjective} onValueChange={setOptObjective}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sharpe">Sharpe Ratio</SelectItem>
-                  <SelectItem value="sortino">Sortino Ratio</SelectItem>
-                  <SelectItem value="profit_factor">Profit Factor</SelectItem>
-                  <SelectItem value="win_rate">Win Rate</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Max Combinations</Label>
-              <Input type="number" value={optMaxCombos} onChange={e => setOptMaxCombos(Number(e.target.value))} min={1} />
-            </div>
-            <div>
-              <Label>Train Years</Label>
-              <Input type="number" value={optTrainYears} onChange={e => setOptTrainYears(Number(e.target.value))} min={1} />
-            </div>
-            <div>
-              <Label>Test Years</Label>
-              <Input type="number" value={optTestYears} onChange={e => setOptTestYears(Number(e.target.value))} min={1} />
-            </div>
-            <div>
-              <Label>Step Months</Label>
-              <Input type="number" value={optStepMonths} onChange={e => setOptStepMonths(Number(e.target.value))} min={1} />
-            </div>
-          </div>
-        )}
-        {mode !== 'optimize' && (
-        <div>
-          <Label>{tFn('backtest:strategies', 'Strategies')}</Label>
-          <div className="flex flex-col gap-1 mt-1">
-            {ALL_STRATEGIES.map(s => (
-              <label key={s} className="flex items-center gap-2 py-1 cursor-pointer text-sm">
-                <input type="checkbox" value={s} checked={strategies.includes(s)} onChange={() => toggleStrat(s)} />
-                <span>{tFn('backtest:strategy.' + s, s.replace(/_/g, ' '))}</span>
-              </label>
-            ))}
-          </div>
+
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="checkbox" checked={lightOptimize} onChange={() => setLightOptimize(p => !p)} />
+            <span>{tFn('backtest:lightOptimize', 'Auto-Optimize')}</span>
+          </label>
+          <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap">
+            {mode === 'single' ? '1 backtest' : `${comboCount} combos: ${strategies.length}s \u00d7 ${symbolList.length}sym \u00d7 ${timeframes.length}tf`}
+          </span>
+          <Button size="sm" className="h-8 text-xs px-3" onClick={run} disabled={loading || strategies.length === 0 || symbolList.length === 0}>
+            {loading ? tFn('backtest:running', 'Running...') : mode === 'matrix' ? tFn('backtest:runMatrix', 'Run Matrix') : tFn('backtest:runBacktest', 'Run')}
+          </Button>
         </div>
-        )}
-        {mode === 'single' && strategies.length > 1 && (
-          <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4" style={{ background: 'rgba(210,153,34,.08)', border: '1px solid var(--trading-warning, #d29922)', padding: 8, marginTop: 8 }}>
-            <p className="text-sm" style={{ color: 'var(--trading-warning, #d29922)' }}>Only <strong>{strategies[0].replace(/_/g, ' ')}</strong> will be run. Single mode uses the first selected strategy.</p>
-          </div>
-        )}
-        <p className="text-sm text-muted-foreground">{mode === 'optimize' ? 'Will run walk-forward optimization' : mode === 'single' ? tFn('backtest:willRunSingle', 'Will run 1 backtest') : tFn('backtest:willRunMatrix', 'Will run {{n}} backtests', { n: comboCount })}</p>
-        <Button className="w-full justify-center" onClick={run} disabled={loading || (mode !== 'optimize' && strategies.length === 0)}>
-          {loading ? tFn('backtest:running', 'Running...') : mode === 'optimize' ? 'Run Optimization' : mode === 'matrix' ? tFn('backtest:runMatrix', 'Run Matrix') : tFn('backtest:runBacktest', 'Run Backtest')}
-        </Button>
       </CardContent>
     </Card>
 
-    {mode !== 'optimize' && (
-    <>
     {matrixBatchId && matrixStatus !== 'idle' && <MatrixProgressBar />}
     {matrixBatchId && matrixStatus !== 'idle' && <CancelButton batchId={matrixBatchId} />}
 
@@ -377,73 +403,30 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
         onFilterStrategyChange={setFilterStrategy} onFilterSymbolChange={setFilterSymbol} onFilterTfChange={setFilterTf}
         onClearFilters={() => { setFilterStrategy(''); setFilterSymbol(''); setFilterTf('') }}
         onSortToggle={onSortToggle} sortIndicator={sortIndicator}
-        onViewDetail={() => setView('history')}
+        onViewDetail={(runId) => setView('detail', runId)}
       />
     )}
 
     {matrixBatchId && matrixStatus === 'running' && !matrixResults.length && <Card>
-      <CardHeader><CardTitle>{tFn('backtest:results', 'Matrix Backtest')}</CardTitle></CardHeader>
-      <CardContent><p className="text-sm text-muted-foreground">Matrix running \u2014 {matrixTelemetry.completed}/{matrixTelemetry.total} combos completed. Results will appear as they finish.</p></CardContent>
+      <CardContent className="p-3"><p className="text-xs text-muted-foreground">Matrix running \u2014 {matrixTelemetry.completed}/{matrixTelemetry.total} combos completed. Results will appear as they finish.</p></CardContent>
     </Card>}
 
-    {result && !matrixBatchId && <Card>
-      <CardHeader><CardTitle>{tFn('backtest:results', 'Backtest Results')}</CardTitle></CardHeader>
-      <CardContent>
-        {result.error ? <p className="text-sm text-destructive">{String(result.error)}</p> : <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+    {result && !matrixBatchId && (<Card>
+      <CardContent className="p-4">
+        {result.error ? <p className="text-sm text-destructive">{String(result.error)}</p> : <div className="grid grid-cols-5 gap-3 mb-3">
           {[
-            { tKey: 'backtest:sharpe', value: Number(result.sharpe_ratio || 0).toFixed(2) },
-            { tKey: 'backtest:maxDd', value: `${Number(result.max_drawdown || 0).toFixed(1)}%` },
-            { tKey: 'backtest:winRate', value: `${Number(result.win_rate || 0).toFixed(1)}%` },
-            { tKey: 'backtest:trades', value: Number(result.num_trades || 0) },
-            { tKey: 'backtest:profitFactor', value: Number(result.profit_factor || 0).toFixed(2) },
+            { label: 'Sharpe', value: Number(result.sharpe_ratio || 0).toFixed(2) },
+            { label: 'Max DD', value: `${Number(result.max_drawdown || 0).toFixed(1)}%` },
+            { label: 'Win Rate', value: `${Number(result.win_rate || 0).toFixed(1)}%` },
+            { label: 'Trades', value: Number(result.num_trades || 0) },
+            { label: 'Profit Factor', value: Number(result.profit_factor || 0).toFixed(2) },
           ].map(m => (
-            <Card key={m.tKey}><CardContent className="p-4"><p className="text-sm text-muted-foreground">{tFn(m.tKey)}</p><p className="text-xl font-bold mt-1">{m.value}</p></CardContent></Card>
+            <div key={m.label} className="text-center"><p className="text-xs text-muted-foreground">{m.label}</p><p className="text-sm font-bold">{m.value}</p></div>
           ))}
         </div>}
-        {((result as any).run_id) && (
-          <Button variant="outline" className="mt-3 w-full" onClick={() => setView('detail', String((result as any).run_id))}>View Full Report</Button>
-        )}
+        {((result as any).run_id) && <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => setView('detail', String((result as any).run_id))}>View Full Report</Button>}
       </CardContent>
-    </Card>}
-    </> )}
-
-    {mode === 'optimize' && optStatus && optStatus.status === 'running' && (
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Optimization Progress</CardTitle></CardHeader>
-        <CardContent>
-          <p className="text-2xl font-bold">{optStatus.progress ?? 0}%</p>
-          <div className="w-full h-2 bg-muted rounded mt-2 overflow-hidden">
-            <div className="h-full bg-primary rounded transition-all duration-500" style={{ width: `${optStatus.progress ?? 0}%` }} />
-          </div>
-          {optStatus.elapsed_seconds != null && <p className="text-xs text-muted-foreground mt-1">Elapsed: {optStatus.elapsed_seconds}s</p>}
-        </CardContent>
-      </Card>
-    )}
-
-    {mode === 'optimize' && optResult && (
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Optimization Results</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-3">
-            <MetricCard label="Best Metric" value={optResult.best_metric?.toFixed(4) ?? '-'} color="positive" />
-            <MetricCard label="Total Trials" value={optResult.trials?.length ?? 0} format="number" />
-          </div>
-          {optResult.best_params && Object.keys(optResult.best_params).length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-sm font-medium mb-2">Best Parameters</h3>
-              <Table>
-                <TableHeader><TableRow><TableHead>Parameter</TableHead><TableHead className="text-right">Value</TableHead></TableRow></TableHeader>
-                <TableBody>
-                  {Object.entries(optResult.best_params).map(([k, v]) => (
-                    <TableRow key={k}><TableCell>{k}</TableCell><TableCell className="text-right font-bold text-trading-success">{v.toFixed(4)}</TableCell></TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    )}
+    </Card>)}
   </div>
 }
 
@@ -748,21 +731,20 @@ function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =
 
 function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView, id?: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
   const [showWizard, setShowWizard] = useState(false)
-  const [metrics, setMetrics] = useState<BacktestMetrics | null>(null)
+  const [run, setRun] = useState<Record<string, any> | null>(null)
   const [equity, setEquity] = useState<EquityPoint[]>([])
   const [dailyReturns, setDailyReturns] = useState<DailyReturn[]>([])
   const [trades, setTrades] = useState<TradeSummary[]>([])
   const [regimeStats, setRegimeStats] = useState<RegimeStat[]>([])
   const [optimization, setOptimization] = useState<OptimizationFootprint | null>(null)
-  const [liveComparison, setLiveComparison] = useState<LiveComparisonResponse | null>(null)
   const [monthlyReturns, setMonthlyReturns] = useState<MonthlyReturn[]>([])
   const [monthlyReturnsError, setMonthlyReturnsError] = useState(false)
   const [filteredMonth, setFilteredMonth] = useState<{ year: number; month: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [showMonteCarlo, setShowMonteCarlo] = useState(false)
   const [showCosts, setShowCosts] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'optimization' | 'comparison'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'trades' | 'optimization'>('overview')
   const [mcResult, setMCResult] = useState<MCResultData | null>(null)
 
   const filteredTrades = useMemo(() => {
@@ -771,222 +753,271 @@ function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView,
   }, [trades, filteredMonth])
 
   const maxDDDuration = useMemo(() => {
-    let peak = 0
-    let maxDuration = 0
-    let currentDuration = 0
+    let peak = 0; let maxDuration = 0; let currentDuration = 0
     for (const p of equity) {
       if (p.value > peak) { peak = p.value; currentDuration = 0; continue }
       currentDuration++
       if (currentDuration > maxDuration) maxDuration = currentDuration
     }
-    return maxDuration > 0 ? `${maxDuration} bars` : '--'
+    return maxDuration > 0 ? String(maxDuration) : '--'
   }, [equity])
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [m, e, d, tr] = await Promise.all([
-        backtests.metrics(id), backtests.equity(id), backtests.dailyReturns(id), backtests.trades(id),
-      ])
-      setMetrics(m)
-      setEquity(Array.isArray(e) ? e.map((p: any) => ({
-        time: (typeof p.timestamp === 'string' ? p.timestamp : p.time) ?? '',
-        value: (typeof p.equity === 'number' ? p.equity : p.value) ?? 0,
-        regime: (typeof p.regime_label === 'number' ? p.regime_label : p.regime) ?? 0,
-      })) : [])
-      setDailyReturns(Array.isArray(d) ? d : [])
-      setTrades(tr?.trades ?? [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : tFn('backtestDetail:failedToLoad', 'Failed to load backtest'))
-      setMetrics(null)
-    } finally { setLoading(false) }
-  }, [id])
+  const avgHoldingTime = useMemo(() => {
+    if (trades.length === 0) return '--'
+    const total = trades.reduce((s, t) => s + (t.hold_duration || 0), 0)
+    const avg = total / trades.length
+    return avg >= 60 * 24 ? `${(avg / 60 / 24).toFixed(1)}d` : avg >= 60 ? `${(avg / 60).toFixed(0)}h` : `${avg.toFixed(0)}m`
+  }, [trades])
 
-  const fetchMonthlyReturns = useCallback(async () => {
-    try { const mr = await backtests.monthlyReturns(id); setMonthlyReturns(Array.isArray(mr) ? mr : []); setMonthlyReturnsError(false) } catch { setMonthlyReturnsError(true) }
-  }, [id])
-
-  const fetchRegimeStats = useCallback(async () => {
-    try { setRegimeStats(await backtests.regimeStats(id)) } catch { /* optional */ }
-  }, [id])
-
-  const fetchOptimization = useCallback(async () => {
-    try { setOptimization(await backtests.optimization(id)) } catch { /* optional */ }
-  }, [id])
-
-  const fetchLiveComparison = useCallback(async () => {
-    try { setLiveComparison(await backtests.liveComparison(id)) } catch { /* optional */ }
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setLoading(true); setError(null)
+      try {
+        const matrixByKey = useMatrixStore.getState().byKey
+        const matrixCombo = matrixByKey[id]
+        if (matrixCombo) {
+          const base: Record<string, any> = {
+            id: matrixCombo.run_id,
+            strategy_ids: [matrixCombo.strategy_id],
+            symbols: [matrixCombo.symbol],
+            timeframes: [matrixCombo.timeframe],
+            start_date: '',
+            end_date: '',
+            sharpe_ratio: matrixCombo.sharpe_ratio,
+            sortino_ratio: matrixCombo.sortino_ratio,
+            max_drawdown: matrixCombo.max_drawdown,
+            total_return: matrixCombo.total_return,
+            win_rate: matrixCombo.win_rate,
+            profit_factor: matrixCombo.profit_factor,
+            num_trades: matrixCombo.num_trades,
+            avg_trade: matrixCombo.avg_trade,
+            avg_win: matrixCombo.avg_win,
+            avg_loss: matrixCombo.avg_loss,
+            avg_mae: matrixCombo.avg_mae,
+            avg_mfe: matrixCombo.avg_mfe,
+            num_wins: matrixCombo.num_wins,
+            num_losses: matrixCombo.num_losses,
+            gate_passed: matrixCombo.gate_passed,
+            engine_version: 'matrix',
+          }
+          if (cancelled) return
+          setRun(base)
+          setEquity(matrixCombo.equity_curve || [])
+          setTrades(matrixCombo.trades || [])
+          setDailyReturns([])
+          setLoading(false)
+          return
+        }
+        const base = await backtests.get(id) as unknown as Record<string, any>
+        if (cancelled) return
+        setRun(base)
+        const [e, d, tr] = await Promise.all([
+          backtests.equity(id).catch(() => []),
+          backtests.dailyReturns(id).catch(() => []),
+          backtests.trades(id).catch(() => ({ trades: [] as TradeSummary[] })),
+        ])
+        if (cancelled) return
+        setEquity(Array.isArray(e) ? e.map((p: any) => ({
+          time: (typeof p.timestamp === 'string' ? p.timestamp : p.time) ?? '',
+          value: (typeof p.equity === 'number' ? p.equity : p.value) ?? 0,
+          regime: (typeof p.regime_label === 'number' ? p.regime_label : p.regime) ?? 0,
+        })) : [])
+        setDailyReturns(Array.isArray(d) ? d : [])
+        setTrades(Array.isArray(tr?.trades) ? tr.trades : [])
+      } catch (err) {
+        if (cancelled) return
+        setRun(null)
+        setError(err instanceof Error ? err.message : 'Failed to load backtest')
+      } finally { if (!cancelled) setLoading(false) }
+    }
+    load()
+    return () => { cancelled = true }
   }, [id])
 
   useEffect(() => {
-    fetchAll()
-    fetchMonthlyReturns()
-    fetchRegimeStats()
-    fetchOptimization()
-    fetchLiveComparison()
-  }, [fetchAll, fetchMonthlyReturns, fetchRegimeStats, fetchOptimization, fetchLiveComparison])
+    backtests.monthlyReturns(id).then(mr => setMonthlyReturns(Array.isArray(mr) ? mr : [])).catch(() => setMonthlyReturnsError(true))
+    backtests.regimeStats(id).then(rs => setRegimeStats(Array.isArray(rs) ? rs : [])).catch(() => {})
+    backtests.optimization(id).then(o => setOptimization(o)).catch(() => {})
+  }, [id])
 
-  if (loading) {
-    return <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground">{tFn('backtestDetail:loading', 'Loading backtest data...')}</p></CardContent></Card>
-  }
+  if (loading) return <Card><CardContent className="p-8 text-center"><p className="text-sm text-muted-foreground">Loading backtest...</p></CardContent></Card>
+  if (error) return <Card><CardContent className="p-6"><ErrorCard message={error} onRetry={() => { setError(null); setLoading(true); window.location.reload() }} /></CardContent></Card>
+  if (!run) return <Card><CardContent className="p-8 text-center"><p className="text-sm text-muted-foreground">Backtest not found</p></CardContent></Card>
 
-  if (error) {
-    return <Card><CardContent className="p-6"><ErrorCard message={error} onRetry={fetchAll} /></CardContent></Card>
-  }
+  const sharpe = run.sharpe_ratio as number ?? 0
+  const sortino = run.sortino_ratio as number
+  const maxDD = run.max_drawdown as number
+  const maxDDPct = maxDD != null ? maxDD * 100 : (run.max_drawdown_pct as number | undefined)
+  const totalReturn = run.total_return as number
+  const totalReturnPct = totalReturn != null ? totalReturn * 100 : (run.total_return_pct as number | undefined)
+  const winRate = run.win_rate as number
+  const winRatePct = winRate != null ? (winRate > 1 ? winRate : winRate * 100) : (run.win_rate_pct as number | undefined)
+  const profitFactor = (run.profit_factor ?? 0) as number
+  const numTrades = (run.num_trades ?? 0) as number
+  const numWins = (run.num_wins ?? 0) as number
+  const numLosses = (run.num_losses ?? 0) as number
+  const avgMAE = run.avg_mae as number | undefined
+  const avgMFE = run.avg_mfe as number | undefined
+  const avgTrade = run.avg_trade as number | undefined
+  const avgWin = run.avg_win as number | undefined
+  const avgLoss = run.avg_loss as number | undefined
+  const gatePassed = run.gate_passed as boolean | undefined
+  const strategyId = (run.strategy_id ?? run.strategy_ids?.[0] ?? '--') as string
+  const symbols = (run.symbols as string[] | undefined) ?? []
+  const timeframe = (run.timeframe as string) ?? (run.results_json as any)?.timeframe ?? '1d'
+  const startDate = run.start_date as string | undefined
+  const endDate = run.end_date as string | undefined
+  const capital = (run.initial_capital ?? 100000) as number
+  const status = (run.status ?? 'unknown') as string
+  const warnings = (run.warnings as string[] | undefined) ?? []
 
-  if (!metrics) {
-    return <Card><CardContent className="p-6"><p className="text-sm text-muted-foreground">{tFn('backtestDetail:notFound', 'Backtest not found')}</p></CardContent></Card>
-  }
+  const Stat = ({ label, value, color = '' }: { label: string; value: string | number; color?: string }) => (
+    <Card><CardContent className="p-2 text-center">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className={`text-sm font-bold tabular-nums leading-tight ${color}`}>{value}</p>
+    </CardContent></Card>
+  )
 
   return <div>
-    <div className="flex items-center justify-between mb-4">
+    <div className="flex items-center justify-between mb-3">
       <div className="flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={() => setView('history')}>&larr; {tFn('backtestHistory:title', 'History')}</Button>
-        <h1 className="m-0">{tFn('backtestDetail:title', 'Backtest Detail')}</h1>
+        <Button variant="outline" size="sm" onClick={() => setView('history')}>&larr; History</Button>
+        <div>
+          <h1 className="m-0 text-base font-semibold">{strategyId.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} {symbols.length > 0 ? `on ${symbols.join(', ')}` : ''} ({timeframe})</h1>
+          {startDate && endDate && <p className="text-[11px] text-muted-foreground mt-0.5">{new Date(startDate).toLocaleDateString()} → {new Date(endDate).toLocaleDateString()} · ${capital.toLocaleString()} capital · {status !== 'completed' ? <Badge variant="secondary" className="text-[10px] h-4">{status}</Badge> : null}</p>}
+        </div>
       </div>
       <div className="flex gap-2">
-        {trades.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => { exportTradesCSV(filteredTrades); toast.success(tFn('backtestDetail:exportedTrades', 'Exported {{n}} trades', { n: filteredTrades.length })) }}>
-            {tFn('backtestDetail:exportTrades', 'Export Trades')}
-          </Button>
-        )}
-        {equity.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => { exportEquityCSV(equity); toast.success(tFn('backtestDetail:exportedEquity', 'Exported equity curve')) }}>
-            {tFn('backtestDetail:exportEquity', 'Export Equity')}
-          </Button>
-        )}
-        {dailyReturns.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => { exportDailyReturnsCSV(dailyReturns); toast.success(tFn('backtestDetail:exportedReturns', 'Exported daily returns')) }}>
-            {tFn('backtestDetail:exportReturns', 'Export Returns')}
-          </Button>
-        )}
-        <Button onClick={() => setShowWizard(true)}>{tFn('backtestDetail:promoteToLive', 'Promote to Live')}</Button>
+        {trades.length > 0 && <Button variant="outline" size="sm" className="text-xs" onClick={() => { exportTradesCSV(filteredTrades); toast.success(`Exported ${filteredTrades.length} trades`) }}>Export Trades</Button>}
+        {equity.length > 0 && <Button variant="outline" size="sm" className="text-xs" onClick={() => { exportEquityCSV(equity); toast.success('Exported equity') }}>Export Equity</Button>}
+        <Button size="sm" className="text-xs" onClick={() => setShowWizard(true)}>Promote</Button>
       </div>
     </div>
 
-    {metrics.warnings && metrics.warnings.length > 0 && (
-      <Card className="mb-4 border-amber-500/50 bg-amber-500/10">
-        <CardContent className="p-4">
-          <h3 className="text-amber-400 font-semibold mb-2">{tFn('backtestDetail:warnings', 'Warnings')}</h3>
-          <ul className="m-0 pl-5 text-sm text-muted-foreground space-y-1">{metrics.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
-        </CardContent>
+    {warnings.length > 0 && (
+      <Card className="mb-3 border-amber-500/40 bg-amber-500/[0.04]">
+        <CardContent className="p-2.5"><h3 className="text-amber-500 font-semibold text-[11px] mb-1">Data Quality Warnings</h3><ul className="m-0 pl-4 text-[11px] text-muted-foreground space-y-0.5">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></CardContent>
       </Card>
     )}
 
-    {(() => {
-      const primary = [
-        { tKey: 'backtestDetail:metrics:sharpe', value: metrics.sharpe_ratio?.toFixed(2) },
-        { tKey: 'backtestDetail:metrics:maxDd', value: metrics.max_drawdown_pct != null ? `${metrics.max_drawdown_pct.toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:winRate', value: metrics.win_rate_pct != null ? `${metrics.win_rate_pct.toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:profitFactor', value: metrics.profit_factor?.toFixed(2) },
-        { tKey: 'backtestDetail:metrics:totalReturn', value: metrics.total_return_pct != null ? `${metrics.total_return_pct.toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:trades', value: metrics.num_trades },
-      ]
-      const advanced = [
-        { tKey: 'backtestDetail:metrics:sortino', value: metrics.sortino_ratio?.toFixed(2) },
-        { tKey: 'backtestDetail:metrics:maxDdDuration', value: maxDDDuration },
-        { tKey: 'backtestDetail:metrics:calmar', value: metrics.calmar?.toFixed(2) },
-        { tKey: 'backtestDetail:metrics:cagr', value: metrics.cagr != null ? `${(metrics.cagr * 100).toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:var95', value: metrics.var_95 != null ? `${(metrics.var_95 * 100).toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:cvar95', value: metrics.cvar_95 != null ? `${(metrics.cvar_95 * 100).toFixed(1)}%` : '--' },
-        { tKey: 'backtestDetail:metrics:passProb', value: metrics.pass_probability != null ? `${metrics.pass_probability.toFixed(0)}%` : '--' },
-      ]
-      const costs = [
-        { tKey: 'backtestDetail:metrics:volume', value: metrics.trading_volume?.toLocaleString() },
-        { tKey: 'backtestDetail:metrics:commission', value: metrics.commission_bps != null ? `${metrics.commission_bps.toFixed(1)} bps` : '--' },
-        { tKey: 'backtestDetail:metrics:totalFees', value: metrics.total_commission != null ? `$${metrics.total_commission.toFixed(2)}` : '--' },
-      ]
-      const p = primary.map(m => <Card key={m.tKey}><CardContent className="p-3"><p className="text-xs text-muted-foreground">{tFn(m.tKey)}</p><p className="text-lg font-bold mt-0.5">{m.value ?? '--'}</p></CardContent></Card>)
-      const a = advanced.map(m => <Card key={m.tKey}><CardContent className="p-3"><p className="text-xs text-muted-foreground">{tFn(m.tKey)}</p><p className="text-lg font-bold mt-0.5">{m.value ?? '--'}</p></CardContent></Card>)
-      const c = costs.map(m => <Card key={m.tKey}><CardContent className="p-3"><p className="text-xs text-muted-foreground">{tFn(m.tKey)}</p><p className="text-lg font-bold mt-0.5">{m.value ?? '--'}</p></CardContent></Card>)
-      return (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">{p}</div>
-          <button className="w-full text-sm mb-3 flex items-center gap-1 cursor-pointer border-none bg-transparent" style={{ color: 'var(--muted-foreground)' }} onClick={() => setShowAdvanced(s => !s)}>
-            <span style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}>&#9654;</span>
-            {showAdvanced ? 'Hide' : 'Show'} Advanced Metrics ({advanced.length})
-          </button>
-          {showAdvanced && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">{a}</div>}
-          <button className="w-full text-sm mb-3 flex items-center gap-1 cursor-pointer border-none bg-transparent" style={{ color: 'var(--muted-foreground)' }} onClick={() => setShowCosts(s => !s)}>
-            <span style={{ transform: showCosts ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .15s' }}>&#9654;</span>
-            {showCosts ? 'Hide' : 'Show'} Cost Metrics ({costs.length})
-          </button>
-          {showCosts && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-3">{c}</div>}
-        </>
-      )
-    })()}
-
-    {monthlyReturns.length > 0 && <div className="mb-4"><YearlySummaryTable data={monthlyReturns} /></div>}
-    {monthlyReturnsError && (
-      <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4 mb-4" style={{ background: 'rgba(210,153,34,.06)', border: '1px solid var(--trading-warning, #d29922)' }}>
-        <p className="text-sm" style={{ color: 'var(--trading-warning, #d29922)' }}>Monthly returns data is unavailable. Yearly summary and calendar heatmap may be incomplete.</p>
+    <div className="mb-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Performance Metrics</h2>
+      <div className="grid grid-cols-5 gap-1.5">
+        <Stat label="Sharpe" value={sharpe.toFixed(2)} color={sharpe >= 1 ? 'text-green-500' : sharpe >= 0 ? 'text-foreground' : 'text-red-500'} />
+        <Stat label="Sortino" value={sortino != null ? sortino.toFixed(2) : '--'} />
+        <Stat label="Max Drawdown" value={maxDDPct != null ? `${maxDDPct.toFixed(1)}%` : '--'} color="text-red-500" />
+        <Stat label="Win Rate" value={winRatePct != null ? `${winRatePct.toFixed(1)}%` : '--'} color={winRatePct != null && winRatePct >= 50 ? 'text-green-500' : ''} />
+        <Stat label="Profit Factor" value={profitFactor.toFixed(2)} color={profitFactor >= 1.5 ? 'text-green-500' : ''} />
+        <Stat label="Total Return" value={totalReturnPct != null ? `${totalReturnPct.toFixed(1)}%` : '--'} color={totalReturnPct != null && totalReturnPct > 0 ? 'text-green-500' : 'text-red-500'} />
+        <Stat label="Trades (W/L)" value={`${numTrades} (${numWins}/${numLosses})`} />
+        <Stat label="Avg Trade" value={avgTrade != null ? `$${avgTrade.toFixed(2)}` : '--'} color={avgTrade != null && avgTrade > 0 ? 'text-green-500' : 'text-red-500'} />
+        <Stat label="Avg Win / Loss" value={avgWin != null && avgLoss != null ? `$${avgWin.toFixed(0)} / $${Math.abs(avgLoss).toFixed(0)}` : '--'} />
+        <Stat label="Win/Loss Ratio" value={avgWin != null && avgLoss != null && avgLoss !== 0 ? (Math.abs(avgWin / avgLoss)).toFixed(2) : '--'} />
       </div>
+    </div>
+
+    <div className="mb-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Risk Profile</h2>
+      <div className="grid grid-cols-5 gap-1.5">
+        <Stat label="Max DD %" value={maxDDPct != null ? `${maxDDPct.toFixed(1)}%` : '--'} color="text-red-500" />
+        <Stat label="DD Duration" value={maxDDDuration ? `${maxDDDuration} bars` : '--'} />
+        <Stat label="Avg MAE" value={avgMAE != null ? `$${avgMAE.toFixed(2)}` : '--'} />
+        <Stat label="Avg MFE" value={avgMFE != null ? `$${avgMFE.toFixed(2)}` : '--'} />
+        <Stat label="Avg Hold" value={avgHoldingTime} />
+        <Stat label="Gate" value={gatePassed === true ? 'PASS' : gatePassed === false ? 'FAIL' : '--'} color={gatePassed === true ? 'text-green-500' : gatePassed === false ? 'text-red-500' : ''} />
+      </div>
+    </div>
+
+    {equity.length === 0 && dailyReturns.length === 0 && trades.length === 0 && (
+      <Card className="mb-3 border-border bg-muted/20">
+        <CardContent className="p-2.5"><p className="text-[11px] text-muted-foreground">Detailed results (equity curve, trades, daily returns) are not stored for matrix-run backtests. Run a single backtest for full analytics.</p></CardContent>
+      </Card>
     )}
 
-    <ErrorBoundary>
-      <div className="grid grid-cols-2 gap-6 mb-4">
-        {equity.length > 0 && <EquityCurveChart data={equity} height={300} title={tFn('backtestDetail:equityCurve', 'Equity Curve')} color="#2962FF" />}
-        {dailyReturns.length > 0 && <DailyReturnsChart data={dailyReturns} height={200} title={tFn('backtestDetail:dailyReturns', 'Daily Returns')} />}
-      </div>
-    </ErrorBoundary>
-
-    {dailyReturns.length >= 2 && (
-      <ErrorBoundary>
-        <div className="mb-4">
-          <MonteCarloChart dailyReturns={dailyReturns} simulations={500} forwardDays={252} height={280}
-            title={tFn('backtestDetail:monteCarlo', 'Monte Carlo Simulation')} seed={42} onMCResult={setMCResult} />
-          {mcResult && (
-            <div className="flex flex-col gap-4 mt-4">
-              <MonteCarloContextCard data={{
-                strategyId: metrics?.strategy_name, barCount: dailyReturns.length,
-                dataStart: dailyReturns[0]?.date ? new Date(dailyReturns[0].date).toLocaleDateString() : undefined,
-                dataEnd: dailyReturns[dailyReturns.length - 1]?.date ? new Date(dailyReturns[dailyReturns.length - 1].date).toLocaleDateString() : undefined,
-                commissionBps: metrics?.commission_bps,
-              }} stats={mcResult.stats} seed={42} />
-              <MonteCarloSummaryCard stats={mcResult.stats} />
-              <MonteCarloHistograms allPnlPct={mcResult.allPnlPct} allMaxDDPct={mcResult.allMaxDDPct} stats={mcResult.stats} />
-            </div>
-          )}
+    {equity.length > 0 && (
+      <>
+        <div className="mb-3"><h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Equity Curve & Returns</h2>
+          <ErrorBoundary><div className="mb-3"><EquityCurveChart data={equity} height={300} title="Equity Curve" color="#2962FF" /></div></ErrorBoundary>
         </div>
-      </ErrorBoundary>
+        {dailyReturns.length > 0 && (
+          <ErrorBoundary>
+            <div className="mb-3"><DailyReturnsChart data={dailyReturns} height={200} title="Daily Returns Distribution" /></div>
+            <div className="mb-3">
+              <button className="w-full text-[11px] text-muted-foreground flex items-center gap-1 cursor-pointer border-none bg-transparent py-1" onClick={() => setShowMonteCarlo(s => !s)}>
+                <span style={{ transform: showMonteCarlo ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .15s', display: 'inline-block' }}>&#9654;</span>
+                {showMonteCarlo ? 'Hide' : 'Show'} Monte Carlo Simulation (500 trials, 252 days forward)
+              </button>
+              {showMonteCarlo && (
+                <div className="mt-2">
+                  <MonteCarloChart dailyReturns={dailyReturns} simulations={500} forwardDays={252} height={280} title="Monte Carlo Simulation" seed={42} onMCResult={setMCResult} />
+                  {mcResult && (
+                    <div className="flex flex-col gap-3 mt-3">
+                      <MonteCarloContextCard data={{ strategyId, barCount: dailyReturns.length,
+                        dataStart: dailyReturns[0]?.date ? new Date(dailyReturns[0].date).toLocaleDateString() : undefined,
+                        dataEnd: dailyReturns[dailyReturns.length - 1]?.date ? new Date(dailyReturns[dailyReturns.length - 1].date).toLocaleDateString() : undefined,
+                        commissionBps: run.commission_bps }} stats={mcResult.stats} seed={42} />
+                      <MonteCarloSummaryCard stats={mcResult.stats} />
+                      <MonteCarloHistograms allPnlPct={mcResult.allPnlPct} allMaxDDPct={mcResult.allMaxDDPct} stats={mcResult.stats} />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </ErrorBoundary>
+        )}
+      </>
     )}
 
     {monthlyReturns.length > 0 && (
-      <ErrorBoundary>
-        <div className="mb-4">
-          <CalendarHeatmap data={monthlyReturns} onMonthClick={(year, month) => {
-            setFilteredMonth(prev => prev?.year === year && prev?.month === month ? null : { year, month })
-            if (filteredMonth?.year !== year || filteredMonth?.month !== month) setActiveTab('trades')
-          }} />
-        </div>
-      </ErrorBoundary>
+      <div className="mb-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Monthly Returns</h2>
+        <ErrorBoundary><div className="mb-3"><CalendarHeatmap data={monthlyReturns} onMonthClick={(year, month) => { setFilteredMonth(prev => prev?.year === year && prev?.month === month ? null : { year, month }); if (filteredMonth?.year !== year || filteredMonth?.month !== month) setActiveTab('trades') }} /></div></ErrorBoundary>
+        <YearlySummaryTable data={monthlyReturns} />
+      </div>
     )}
 
-    <Card className="mb-4">
-      <CardContent className="p-4">
-        <Tabs value={activeTab} onValueChange={v => setActiveTab(v as 'overview' | 'trades' | 'optimization' | 'comparison')} className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="overview">{tFn('backtestDetail:tab:overview')}</TabsTrigger>
-            <TabsTrigger value="trades">{tFn('backtestDetail:tab:trades', { n: filteredTrades.length })}</TabsTrigger>
-            <TabsTrigger value="optimization">{tFn('backtestDetail:tab:optimization')}</TabsTrigger>
-            <TabsTrigger value="comparison">{tFn('backtestDetail:tab:liveVsBt')}</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview"><OverviewTab regimeStats={regimeStats} /></TabsContent>
-          <TabsContent value="trades"><TradesTab trades={trades} filteredTrades={filteredTrades} filteredMonth={filteredMonth} onClearFilter={() => setFilteredMonth(null)} /></TabsContent>
-          <TabsContent value="optimization"><OptimizationTab optimization={optimization} /></TabsContent>
-          <TabsContent value="comparison"><ComparisonTab liveComparison={liveComparison} /></TabsContent>
-        </Tabs>
-      </CardContent>
-    </Card>
+    <div className="mb-3">
+      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Trade Analysis & Details</h2>
+      <Card>
+        <CardContent className="p-3">
+          <Tabs value={activeTab} onValueChange={v => setActiveTab(v as 'overview' | 'trades' | 'optimization')} className="w-full">
+            <TabsList className="mb-3">
+              <TabsTrigger value="overview" className="text-xs">Regime Analysis</TabsTrigger>
+              <TabsTrigger value="trades" className="text-xs">Trades ({filteredTrades.length})</TabsTrigger>
+              <TabsTrigger value="optimization" className="text-xs">Optimization</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview"><OverviewTab regimeStats={regimeStats} /></TabsContent>
+            <TabsContent value="trades"><TradesTab trades={trades} filteredTrades={filteredTrades} filteredMonth={filteredMonth} onClearFilter={() => setFilteredMonth(null)} /></TabsContent>
+            <TabsContent value="optimization"><OptimizationTab optimization={optimization} /></TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+
+    <button className="w-full text-[11px] text-muted-foreground flex items-center gap-1 cursor-pointer border-none bg-transparent py-1" onClick={() => setShowCosts(s => !s)}>
+      <span style={{ transform: showCosts ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform .15s', display: 'inline-block' }}>&#9654;</span>
+      {showCosts ? 'Hide' : 'Show'} Costs & Run Metadata
+    </button>
+    {showCosts && (
+      <div className="grid grid-cols-5 gap-1.5 mt-1.5">
+        {[
+          { label: 'Volume', value: (run.trading_volume as number)?.toLocaleString() ?? '--' },
+          { label: 'Commission', value: (run.commission_bps as number) != null ? `${(run.commission_bps as number).toFixed(1)} bps` : '--' },
+          { label: 'Total Fees', value: (run.total_commission as number) != null ? `$${(run.total_commission as number).toFixed(2)}` : '--' },
+          { label: 'Run ID', value: id.slice(0, 8) + '...' },
+          { label: 'Data Source', value: run.data_source ?? '--' },
+        ].map(m => <Card key={m.label}><CardContent className="p-2 text-center"><p className="text-[10px] uppercase tracking-wide text-muted-foreground">{m.label}</p><p className="text-sm font-bold tabular-nums">{m.value}</p></CardContent></Card>)}
+      </div>
+    )}
 
     {showWizard && (
       <PromoteToLiveWizard
-        strategyName={metrics?.strategy_name || id || ''} backtestId={id}
-        sharpe={metrics?.sharpe_ratio || 0} maxDD={metrics?.max_drawdown_pct || 0}
-        passProb={metrics?.pass_probability || 0} profitFactor={metrics?.profit_factor || 0}
+        strategyName={strategyId || id || ''} backtestId={id}
+        sharpe={sharpe} maxDD={maxDDPct ?? 0}
+        passProb={0} profitFactor={profitFactor}
         onClose={() => setShowWizard(false)}
-        onDeployed={() => { setShowWizard(false); alert(tFn('backtestDetail:deployedSuccess', 'Strategy deployed successfully!')) }}
+        onDeployed={() => { setShowWizard(false); alert('Strategy deployed successfully!') }}
       />
     )}
   </div>

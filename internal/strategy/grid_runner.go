@@ -18,6 +18,16 @@ type GridRunner struct {
 	lastPrice      types.Price
 	referencePrice types.Price
 	priceInit      bool
+	barCount       int
+	Disabled       bool
+
+	// Vol-adjusted grid: when AdjustByVolatility is true, grid spacing is
+	// dynamically scaled based on current ATR / VIX. Wider spacing in high
+	// volatility, tighter in low volatility.
+	AdjustByVolatility bool
+	CurrentVIX         float64
+	CurrentATR         float64
+	VolMaxSpacingMult  float64
 
 	irVersion        string
 	canonicalVersion string
@@ -41,8 +51,11 @@ func NewGridRunner() *GridRunner {
 		MaxOpen:           10,
 		TakeProfitPct:     0.5,
 		StopLossPct:       1.5,
-		openPositions:     make(map[int]*gridPosition),
-		irVersion:         "qst-ir/0.4",
+		openPositions:      make(map[int]*gridPosition),
+		Disabled:           true,
+		AdjustByVolatility: false,
+		VolMaxSpacingMult:  2.0,
+		irVersion:          "qst-ir/0.4",
 		canonicalVersion:  "qst-canonical/0.4",
 	}
 }
@@ -68,6 +81,40 @@ func (r *GridRunner) Reset() {
 	r.referencePrice = 0
 	r.priceInit = false
 	r.openPositions = make(map[int]*gridPosition)
+}
+
+func (r *GridRunner) SetVIX(vix float64) { r.CurrentVIX = vix }
+func (r *GridRunner) SetATR(atr float64) { r.CurrentATR = atr }
+
+// computeVolatilityMultiplier returns a spacing multiplier based on current
+// VIX and ATR relative to baseline levels. Higher vol -> wider grid spacing.
+func (r *GridRunner) computeVolatilityMultiplier() float64 {
+	// ATR-based: if current ATR is available, use it as the primary signal.
+	if r.CurrentATR > 0 {
+		baselineATR := 5.0
+		mult := 1.0 + (r.CurrentATR-baselineATR)/baselineATR*0.5
+		if mult < 0.7 {
+			mult = 0.7
+		}
+		if mult > r.VolMaxSpacingMult {
+			mult = r.VolMaxSpacingMult
+		}
+		return mult
+	}
+
+	// VIX-based: fall back to VIX if ATR is not available.
+	if r.CurrentVIX > 0 {
+		mult := 1.0 + (r.CurrentVIX-15.0)/15.0*0.5
+		if mult < 0.7 {
+			mult = 0.7
+		}
+		if mult > r.VolMaxSpacingMult {
+			mult = r.VolMaxSpacingMult
+		}
+		return mult
+	}
+
+	return 1.0
 }
 
 func (r *GridRunner) Params() map[string]float64 {
@@ -114,12 +161,31 @@ func (r *GridRunner) ParamDefs() []ParamDef {
 }
 
 func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
+	if r.Disabled {
+		return nil
+	}
 	if regime == 3 {
 		return nil
 	}
 	price := candle.Close
 	if price.IsZero() {
 		return nil
+	}
+
+	effectiveMaxOpen := r.MaxOpen
+	effectiveSpacing := r.GridSpacingPct
+	switch regime {
+	case 0:
+		effectiveSpacing *= 0.8
+	case 2:
+		effectiveMaxOpen = math.Max(1, r.MaxOpen*0.5)
+		effectiveSpacing *= 1.5
+	}
+
+	// Vol-adjusted grid: dynamically scale spacing based on VIX or ATR.
+	if r.AdjustByVolatility {
+		volMult := r.computeVolatilityMultiplier()
+		effectiveSpacing *= volMult
 	}
 
 	if !r.priceInit {
@@ -129,7 +195,12 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	spacing := r.GridSpacingPct / 100.0
+	r.barCount++
+	if r.barCount > 0 && r.barCount%100 == 0 && r.openCount == 0 {
+		r.referencePrice = price
+	}
+
+	spacing := effectiveSpacing / 100.0
 	if spacing <= 0 {
 		spacing = 0.01
 	}
@@ -179,7 +250,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
 	}
 
-	if r.openCount >= int(r.MaxOpen) {
+	if r.openCount >= int(effectiveMaxOpen) {
 		r.lastPrice = price
 		return nil
 	}

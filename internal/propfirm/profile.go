@@ -30,6 +30,14 @@ type Profile struct {
 	WeekendHoldingAllowed bool       `json:"weekend_holding_allowed" yaml:"weekend_holding_allowed"`
 	NewsTradingAllowed    bool       `json:"news_trading_allowed" yaml:"news_trading_allowed"`
 	RegimeMultipliers     [4]float64 `json:"regime_multipliers" yaml:"regime_multipliers"`
+
+	// SoftHaltThresholdPct is the daily loss percentage at which positions are
+	// reduced by 50% (early warning). Default: 4.5 for FTMO (pre-5% hard halt).
+	SoftHaltThresholdPct float64 `json:"soft_halt_threshold_pct" yaml:"soft_halt_threshold_pct"`
+
+	// HardHaltThresholdPct is the daily loss percentage at which all trading
+	// stops immediately. Default: 5.0 for FTMO.
+	HardHaltThresholdPct float64 `json:"hard_halt_threshold_pct" yaml:"hard_halt_threshold_pct"`
 }
 
 type State struct {
@@ -45,6 +53,7 @@ type State struct {
 	PhaseTargetMet  bool    `json:"phase_target_met"`
 	Violated        bool    `json:"violated"`
 	ViolationReason string  `json:"violation_reason"`
+	SoftHalted      bool    `json:"soft_halted"`
 }
 
 type Manager struct {
@@ -227,6 +236,8 @@ func DefaultFTMOProfile() *Profile {
 		WeekendHoldingAllowed:   true,
 		NewsTradingAllowed:      true,
 		RegimeMultipliers:       [4]float64{1.0, 0.85, 0.75, 0.5},
+		SoftHaltThresholdPct:    4.5,
+		HardHaltThresholdPct:    5.0,
 	}
 }
 

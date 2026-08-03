@@ -1,0 +1,59 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-volatility-harvesting-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "vol_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      params:
+        blocked_states: [0, 1, 3]
+    - id: "vix_check"
+      token_ref:
+        token_id: "indicator.vix_threshold"
+        version: ">=1.0"
+      params:
+        vix_threshold: 25.0
+    - id: "vol_signal"
+      token_ref:
+        token_id: "signal.mean_reversion"
+        version: ">=1.0"
+      inputs:
+        vix_gate: "vix_check.allowed"
+      params:
+        lookback: 10
+        entry_z: 1.5
+        exit_z: 0.5
+        stop_atr_mult: 2.0
+        profit_atr_mult: 3.0
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "vol_signal.signal"
+      params:
+        multiplier: 0.15
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.15
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "vol_signal.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 3
+  outputs:
+    signal: "vol_signal.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware
+  - volatility_gated

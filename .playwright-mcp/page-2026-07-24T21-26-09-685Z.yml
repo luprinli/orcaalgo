@@ -1,6 +1,0 @@
-- generic [ref=f1e4]:
-  - heading "Orca Algo" [level=3] [ref=f1e6]
-  - generic [ref=f1e7]:
-    - textbox "Username" [ref=f1e8]
-    - textbox "Password" [ref=f1e9]
-    - button "Sign In" [ref=f1e10]

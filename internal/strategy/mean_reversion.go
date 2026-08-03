@@ -14,13 +14,15 @@ type MeanReversionRunner struct {
 	TrendPeriod int
 	VolPeriod   int
 	VolMaxMult  float64
+	Mode        string // "sma" (default) or "vwap"
 
-	closeHistory []float64
-	histIndex    int
-	histCount    int
-	emaMean      types.Price
-	trendEMA     types.Price
-	histVariance float64
+	closeHistory  []float64
+	volumeHistory []float64
+	histIndex     int
+	histCount     int
+	emaMean       types.Price
+	trendEMA      types.Price
+	histVariance  float64
 
 	openPosition *position
 	barsHeld     int
@@ -58,7 +60,30 @@ func (sr *MeanReversionRunner) Version() (irVersion string, canonicalVersion str
 	return sr.irVersion, sr.canonicalVersion
 }
 func (sr *MeanReversionRunner) SetVersion(irVersion, canonicalVersion string) { sr.irVersion = irVersion; sr.canonicalVersion = canonicalVersion }
-func (sr *MeanReversionRunner) SetInstanceHash(h string)                      { sr.instanceHash = h }
+func (sr *MeanReversionRunner) SetInstanceHash(h string) { sr.instanceHash = h }
+
+func (sr *MeanReversionRunner) computeVWAP(start, end int) float64 {
+	if len(sr.volumeHistory) == 0 {
+		return 0
+	}
+	var totalPV, totalV float64
+	for i := start; i < end; i++ {
+		idx := i % (sr.Lookback + 200)
+		p := sr.closeHistory[idx]
+		v := 0.0
+		if idx < len(sr.volumeHistory) {
+			v = sr.volumeHistory[idx]
+		}
+		if p > 0 && v > 0 {
+			totalPV += p * v
+			totalV += v
+		}
+	}
+	if totalV <= 0 {
+		return 0
+	}
+	return totalPV / totalV
+}
 func (sr *MeanReversionRunner) InstanceHash() string                          { return sr.instanceHash }
 
 func (sr *MeanReversionRunner) Reset() {
@@ -78,6 +103,14 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	_ = regime
 	idx := sr.histIndex % (sr.Lookback + 200)
 	sr.closeHistory[idx] = candle.Close.Float64()
+	if idx >= len(sr.volumeHistory) {
+		newVol := make([]float64, sr.Lookback+200)
+		copy(newVol, sr.volumeHistory)
+		sr.volumeHistory = newVol
+	}
+	if idx < len(sr.volumeHistory) {
+		sr.volumeHistory[idx] = candle.Volume
+	}
 	sr.histIndex++
 	if sr.histCount < sr.Lookback+200 {
 		sr.histCount++
@@ -96,11 +129,10 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	isTrendingDown := candle.Close.Compare(sr.trendEMA) < 0
 
 	isHighVol := false
-	normStd := atrVol / candle.Close.Float64()
-	if normStd > sr.VolMaxMult*sr.emaMean.Float64()*0.01/candle.Close.Float64() {
+	normStd := atrVol / math.Max(candle.Close.Float64(), 0.0001)
+	if normStd > sr.VolMaxMult*math.Sqrt(sr.histVariance)/math.Max(candle.Close.Float64(), 0.0001)*0.1 {
 		isHighVol = true
 	}
-	_ = isHighVol
 
 	z := (candle.Close.Float64() - mean) / std
 
@@ -130,7 +162,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	if z < -sr.EntryZ {
-		if !isTrendingDown {
+		if !isTrendingUp {
 			return nil
 		}
 		sr.openPosition = &position{
@@ -144,7 +176,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	if z > sr.EntryZ {
-		if !isTrendingUp {
+		if !isTrendingDown {
 			return nil
 		}
 		sr.openPosition = &position{
@@ -182,6 +214,14 @@ func (sr *MeanReversionRunner) computeStats() (float64, float64, float64) {
 		sum += p
 	}
 	simpleMean := sum / float64(nLB)
+
+	// VWAP mode: use volume-weighted average instead of EMA/SMA.
+	if sr.Mode == "vwap" && len(sr.volumeHistory) > 0 {
+		vwapMean := sr.computeVWAP(start, sr.histCount)
+		if vwapMean > 0 {
+			simpleMean = vwapMean
+		}
+	}
 
 	alpha := 2.0 / float64(sr.Lookback+1)
 	if sr.emaMean.IsZero() {

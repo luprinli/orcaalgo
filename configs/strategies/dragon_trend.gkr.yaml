@@ -1,0 +1,59 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-dragon-trend-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "ema_ribbon"
+      token_ref:
+        token_id: "indicator.multi_ema"
+        version: ">=1.0"
+      params:
+        ema_periods: [8, 21, 50, 200]
+        min_aligned: 3
+    - id: "adx_filter"
+      token_ref:
+        token_id: "filter.adx"
+        version: ">=1.0"
+      inputs:
+        signal: "ema_ribbon.signal"
+      params:
+        length: 14
+        threshold: 20.0
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "adx_filter.signal"
+      params:
+        blocked_states: [0, 3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware
+  - trend_verified

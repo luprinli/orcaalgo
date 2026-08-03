@@ -9,6 +9,8 @@ import { Label } from '../../components/ui/label'
 import { Progress } from '../../components/ui/progress'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table'
 import MetricCard from '../../components/MetricCard'
+import SoftHaltGauge from '../../components/backtest/SoftHaltGauge'
+import RegimeActivationMatrix from '../../components/backtest/RegimeActivationMatrix'
 import type { OverviewComputed } from './OverviewTab'
 
 interface RiskTabProps {
@@ -180,6 +182,28 @@ export default function RiskTab({ computed: c, regimeHistory, onRefresh }: RiskT
           </CardContent>
         </Card>
       )}
+
+      {/* Soft/Hard Halt Gauge */}
+      <Card className="mb-4">
+        <CardHeader>
+          <CardTitle>Daily Loss Gauge</CardTitle>
+          <CardDescription>Soft halt at 4.5%, Hard halt at 5.0%</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SoftHaltGauge
+            dailyLossPct={c.dailyLossUsed ?? 0}
+            softHaltThreshold={4.5}
+            hardHaltThreshold={c.dailyLimitPct ?? 5.0}
+            isSoftHalted={false}
+            isHardHalted={c.halted ?? false}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Regime Activation Matrix */}
+      <div className="mb-4">
+        <RegimeActivationMatrix editable={false} />
+      </div>
 
       {/* Kill-Switch History */}
       {killHistory.length > 0 && (

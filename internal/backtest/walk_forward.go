@@ -41,6 +41,7 @@ type WindowResult struct {
 	TestEnd      time.Time
 	InSampleSharpe  float64
 	OutSampleSharpe float64
+	OutSampleSortino float64
 	OOSWinRate   float64
 	OOSReturnPct float64
 	OOSProfitFactor float64
@@ -53,13 +54,13 @@ func GenerateWalkForwardWindows(config WalkForwardConfig) []WalkForwardWindow {
 	start := config.Config.StartDate
 	end := config.Config.EndDate
 
-	trainDuration := time.Duration(config.TrainYears) * 365 * 24 * time.Hour
-	stepDuration := time.Duration(config.StepMonths) * 30 * 24 * time.Hour
+	trainDuration := time.Duration(config.TrainYears) * 252 * 24 * time.Hour
+	stepDuration := time.Duration(config.StepMonths) * 21 * 24 * time.Hour
 
 	currentStart := start
 	for currentStart.Add(trainDuration).Before(end) {
 		testStart := currentStart.Add(trainDuration)
-		testEnd := testStart.Add(time.Duration(config.TestYears) * 365 * 24 * time.Hour)
+		testEnd := testStart.Add(time.Duration(config.TestYears) * 252 * 24 * time.Hour)
 		if testEnd.After(end) {
 			testEnd = end
 		}
@@ -116,6 +117,7 @@ func (e *Engine) RunWalkForward(ctx context.Context, config WalkForwardConfig) (
 			TestEnd:        w.TestEnd,
 			InSampleSharpe: trainResult.SharpeRatio,
 			OutSampleSharpe: testResult.SharpeRatio,
+			OutSampleSortino: testResult.SortinoRatio,
 			OOSWinRate:     testResult.WinRate,
 			OOSReturnPct:   testResult.TotalReturnPct,
 			OOSTrades:      testResult.NumTrades,

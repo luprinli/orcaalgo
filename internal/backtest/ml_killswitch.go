@@ -15,9 +15,14 @@ import (
 // body of this function should be updated to call Disable() on each component.
 func (e *Engine) RegisterMLWithKillSwitch(ks *risk.KillSwitch) {
 	ks.OnTrigger(func(reason string, ts time.Time) {
-		// TODO: when metaLabeler, regimeEnhancer, exitOrch fields are restored to Engine:
-		//   if e.metaLabeler != nil { e.metaLabeler.Disable() }
-		//   if e.regimeEnhancer != nil { e.regimeEnhancer.Disable() }
-		//   if e.exitOrch != nil { e.exitOrch.Disable() }
+		if e.metaLabeler != nil {
+			e.metaLabeler.Close()
+		}
+		if e.regimeEnhancer != nil {
+			e.regimeEnhancer.Disable()
+		}
+		if e.exitOrch != nil {
+			e.exitOrch.Disable()
+		}
 	})
 }

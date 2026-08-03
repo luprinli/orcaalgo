@@ -18,10 +18,19 @@ type BacktestRunRecord struct {
 	InitialCapital   float64         `json:"initial_capital"`
 	Config           json.RawMessage `json:"config,omitempty"`
 	SharpeRatio      float64         `json:"sharpe_ratio"`
+	SortinoRatio     float64         `json:"sortino_ratio"`
 	MaxDrawdown      float64         `json:"max_drawdown"`
+	MaxDrawdownDur   int             `json:"max_drawdown_duration"`
 	TotalReturn      float64         `json:"total_return"`
 	WinRate          float64         `json:"win_rate"`
+	ProfitFactor     float64         `json:"profit_factor"`
+	AvgTrade         float64         `json:"avg_trade"`
+	AvgWin           float64         `json:"avg_win"`
+	AvgLoss          float64         `json:"avg_loss"`
 	NumTrades        int             `json:"num_trades"`
+	NumWins          int             `json:"num_wins"`
+	NumLosses        int             `json:"num_losses"`
+	GatePassed       *bool           `json:"gate_passed,omitempty"`
 	ResultsJSON      json.RawMessage `json:"results_json,omitempty"`
 	ErrorMessage     *string         `json:"error_message,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
@@ -46,13 +55,21 @@ type BacktestResultRecord struct {
 func (r *Repository) CreateBacktestRun(ctx context.Context, br *BacktestRunRecord) error {
 	sids, _ := json.Marshal(br.StrategyIDs)
 	syms, _ := json.Marshal(br.Symbols)
+	gatePassed := false
+	if br.GatePassed != nil {
+		gatePassed = *br.GatePassed
+	}
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
 		 RETURNING id`,
 		br.StrategyID, br.RunType, br.Status, sids, syms,
 		br.StartDate, br.EndDate, br.InitialCapital, br.Config,
-		br.SharpeRatio, br.MaxDrawdown, br.TotalReturn, br.WinRate, br.NumTrades, br.ResultsJSON,
+		br.SharpeRatio, br.SortinoRatio, br.MaxDrawdown, br.MaxDrawdownDur,
+		br.TotalReturn, br.WinRate, br.ProfitFactor,
+		br.AvgTrade, br.AvgWin, br.AvgLoss,
+		br.NumTrades, br.NumWins, br.NumLosses, gatePassed,
+		br.ResultsJSON,
 	).Scan(&br.ID)
 }
 

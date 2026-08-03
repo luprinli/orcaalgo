@@ -10,10 +10,17 @@ import (
 func TestGlobalRegistry_HasAllStrategies(t *testing.T) {
 	reg := strategy.GlobalRegistry()
 	expected := []string{
-		"opening_range_breakout", "breakout",
+		"opening_range_breakout", "orb", "breakout",
+		"orb_15m",
 		"grid", "grid_trading",
 		"trend_following", "trend",
+		"dragon_trend",
 		"session_scalp", "scalp",
+		"volume_scalp",
+		"mean_reversion", "intraday_mr",
+		"vwap_mr",
+		"pairs_trading", "stat_arb",
+		"volatility_harvesting", "vol_arb",
 	}
 	for _, name := range expected {
 		s := reg.Get(name)

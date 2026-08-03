@@ -250,6 +250,9 @@ type ParamScore struct {
 }
 
 func ComputeObjective(result *BacktestResult, objType ObjectiveType, weights map[ObjectiveType]float64) float64 {
+	if result.NumTrades < 30 {
+		return -1e6
+	}
 	switch objType {
 	case ObjectiveSharpe:
 		return result.SharpeRatio
@@ -268,6 +271,9 @@ func ComputeObjective(result *BacktestResult, objType ObjectiveType, weights map
 		return result.SharpeRatio
 	case ObjectiveComposite:
 		score := 0.0
+		if result.NumTrades < 30 {
+			return -1e6
+		}
 		if w, ok := weights[ObjectiveSharpe]; ok {
 			score += w * (result.SharpeRatio / 2.0)
 		}
@@ -368,25 +374,58 @@ func defaultStrategySearchSpace(strategyID string) SearchSpace {
 		space["fast_period"] = ParamConstraint{Name: "fast_period", Type: ParamInteger, Min: 5, Max: 40, Step: 5,
 			Condition: &ConditionalRule{LeftParam: "fast_period", Operator: "lt", RightParam: "slow_period"}}
 		return space
-	case "intraday_mr":
-		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("intraday_mr"))
-		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.0, Max: 3.5, Step: 0.5,
+	case "intraday_mr", "mean_reversion":
+		space := SearchSpaceFromParamDefs(ParamDefsForStrategy(strategyID))
+		if space == nil {
+			return nil
+		}
+		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.0, Max: 2.5, Step: 0.25,
 			Condition: &ConditionalRule{LeftParam: "exit_z", Operator: "lt", RightParam: "entry_z"}}
+		return space
+	case "opening_range_breakout":
+		space := SearchSpaceFromParamDefs(ParamDefsForStrategy(strategyID))
+		if space == nil {
+			return nil
+		}
+		space["atr_multiplier"] = ParamConstraint{Name: "atr_multiplier", Type: ParamContinuous, Min: 1.0, Max: 3.0, Step: 0.5}
+		space["range_minutes"] = ParamConstraint{Name: "range_minutes", Type: ParamInteger, Min: 2, Max: 15, Step: 1}
 		return space
 	case "session_scalp":
 		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("session_scalp"))
 		space["stop_loss_atr_mult"] = ParamConstraint{Name: "stop_loss_atr_mult", Type: ParamContinuous, Min: 0.25, Max: 2.0, Step: 0.25,
 			Condition: &ConditionalRule{LeftParam: "stop_loss_atr_mult", Operator: "lt", RightParam: "take_profit_atr_mult"}}
 		return space
-	case "pairs_trading":
+	case "pairs_trading", "stat_arb":
 		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("pairs_trading"))
-		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.0, Max: 3.5, Step: 0.5,
+		if space == nil {
+			return nil
+		}
+		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.5, Max: 2.5, Step: 0.25,
 			Condition: &ConditionalRule{LeftParam: "exit_z", Operator: "lt", RightParam: "entry_z"}}
 		return space
-	case "volatility_harvesting":
+	case "volatility_harvesting", "vol_arb":
 		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("volatility_harvesting"))
-		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.0, Max: 3.0, Step: 0.25,
-			Condition: &ConditionalRule{LeftParam: "exit_z", Operator: "lt", RightParam: "entry_z"}}
+		if space == nil {
+			return nil
+		}
+		space["vix_threshold"] = ParamConstraint{Name: "vix_threshold", Type: ParamContinuous, Min: 15, Max: 35, Step: 2.0}
+		space["mean_rev_entry_z"] = ParamConstraint{Name: "mean_rev_entry_z", Type: ParamContinuous, Min: 1.0, Max: 2.5, Step: 0.25,
+			Condition: &ConditionalRule{LeftParam: "mean_rev_exit_z", Operator: "lt", RightParam: "mean_rev_entry_z"}}
+		return space
+	case "dragon_trend":
+		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("dragon_trend"))
+		if space == nil {
+			return nil
+		}
+		space["adx_threshold"] = ParamConstraint{Name: "adx_threshold", Type: ParamContinuous, Min: 15, Max: 30, Step: 2.0}
+		space["atr_multiplier"] = ParamConstraint{Name: "atr_multiplier", Type: ParamContinuous, Min: 1.5, Max: 3.5, Step: 0.5}
+		return space
+	case "volume_scalp":
+		space := SearchSpaceFromParamDefs(ParamDefsForStrategy("volume_scalp"))
+		if space == nil {
+			return nil
+		}
+		space["volume_multiplier"] = ParamConstraint{Name: "volume_multiplier", Type: ParamContinuous, Min: 1.0, Max: 3.5, Step: 0.5}
 		return space
 	default:
 		runner := strategy.GlobalRegistry().Get(strategyID)

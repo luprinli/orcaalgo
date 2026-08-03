@@ -159,3 +159,27 @@ func (m *MultiAccountCapitalPool) MarkAllViolated(reason string) {
 		})
 	}
 }
+
+// Halted returns true if any registered pool is halted.
+func (m *MultiAccountCapitalPool) Halted() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, pool := range m.pools {
+		if pool.Halted() {
+			return true
+		}
+	}
+	return false
+}
+
+// HaltReason returns the first non-empty halt reason across all pools.
+func (m *MultiAccountCapitalPool) HaltReason() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, pool := range m.pools {
+		if r := pool.HaltReason(); r != "" {
+			return r
+		}
+	}
+	return ""
+}
