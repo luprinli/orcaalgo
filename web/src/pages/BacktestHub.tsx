@@ -9,6 +9,11 @@ import { useCacheStore } from '../stores/cacheStore'
 import MatrixProgressBar from '../components/backtest/MatrixProgressBar'
 import CancelButton from '../components/backtest/CancelButton'
 import MatrixResultsPanel from '../components/backtest/MatrixResultsPanel'
+import OrchestrationRunner from '../components/backtest/OrchestrationRunner'
+import OrchestrationProgressBar from '../components/backtest/OrchestrationProgressBar'
+import OrchestrationDetail from '../components/backtest/OrchestrationDetail'
+import OrchestrationHistoryTab from '../components/backtest/OrchestrationHistoryTab'
+import { useOrchestrationPoll } from '../hooks/useOrchestrationPoll'
 import PromoteToLiveWizard from '../components/deploy/PromoteToLiveWizard'
 import ErrorCard from '../components/ErrorCard'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -60,25 +65,30 @@ export default function BacktestHub() {
   const [searchParams, setSearchParams] = useSearchParams()
   const view = (searchParams.get('view') as HubView) || 'runner'
   const detailId = searchParams.get('id')
+  const detailType = (searchParams.get('type') as 'backtest' | 'orchestration') || 'backtest'
 
-  const setView = useCallback((v: HubView, id?: string) => {
+  const setView = useCallback((v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => {
     const params = new URLSearchParams()
     params.set('view', v)
     if (id) params.set('id', id)
+    if (opts?.type) params.set('type', opts.type)
     setSearchParams(params, { replace: true })
   }, [setSearchParams])
 
   if (view === 'history') return <HistoryView setView={setView} t={t} />
-  if (view === 'detail' && detailId) return <DetailView id={detailId} setView={setView} t={t} />
+  if (view === 'detail' && detailId) {
+    if (detailType === 'orchestration') return <div><OrchestrationDetail runId={detailId} /></div>
+    return <DetailView id={detailId} setView={setView} t={t} />
+  }
   return <RunnerView setView={setView} t={t} />
 }
 
-function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
+function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => void; t: ReturnType<typeof useTranslation>['t'] }) {
   const preselectedStrategy = new URLSearchParams(window.location.search).get('strategy')
   const cacheStore = useCacheStore()
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
   const [availableSymbols, setAvailableSymbols] = useState<string[]>([])
-  const [mode, setMode] = useState<'matrix' | 'single'>('single')
+  const [mode, setMode] = useState<'matrix' | 'single' | 'orchestrated'>('matrix')
   const [strategies, setStrategies] = useState<string[]>(() => {
     if (preselectedStrategy && FALLBACK_STRATEGIES.includes(preselectedStrategy)) return [preselectedStrategy]
     return FALLBACK_STRATEGIES.slice(0, 1)
@@ -96,6 +106,9 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   })
   const [result, setResult] = useState<Record<string, unknown> | null>(null)
   const [loading, setLoading] = useState(false)
+  const [orchRunId, setOrchRunId] = useState<string | null>(null)
+  const [orchStartTime, setOrchStartTime] = useState(0)
+  const orchPollState = useOrchestrationPoll(orchRunId, (id) => { setView('detail', id, { type: 'orchestration' }); setOrchRunId(null) })
   const [symbolsOpen, setSymbolsOpen] = useState(false)
   const matrixBatchId = useMatrixStore((s) => s.batchId)
 
@@ -259,6 +272,28 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   const isAllStrategies = strategies.length === displayStrategies.length && displayStrategies.length > 0
   const isAllSymbols = symbolList.length === availableSymbols.length && availableSymbols.length > 0
   const isAllTimeframes = timeframes.length === ALL_TIMEFRAMES.length
+
+  if (mode === 'orchestrated') return <div>
+    <div className="flex items-center justify-between mb-3">
+      <h1 className="m-0 text-lg">{tFn('backtest:title', 'Backtest Runner')}</h1>
+      <Button variant="outline" size="sm" onClick={() => setView('history')}>{tFn('backtest:historyLink', 'History')}</Button>
+    </div>
+    <div className="flex items-center gap-3 mb-3">
+      <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+        <input type="radio" name="run_mode" checked={false} onChange={() => setMode('single')} /> {tFn('backtest:single', 'Single')}
+      </label>
+      <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+        <input type="radio" name="run_mode" checked={false} onChange={() => setMode('matrix')} /> {tFn('backtest:matrix', 'Matrix')}
+      </label>
+      <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+        <input type="radio" name="run_mode" checked={true} onChange={() => setMode('orchestrated')} /> Orch
+      </label>
+      {orchPollState.status !== 'idle' && (
+        <OrchestrationProgressBar status={orchPollState.status} startTime={orchStartTime} />
+      )}
+    </div>
+    <OrchestrationRunner onSubmit={(id) => { setOrchRunId(id); setOrchStartTime(Date.now()) }} />
+  </div>
 
   return <div>
     <div className="flex items-center justify-between mb-3">
@@ -430,13 +465,14 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =>
   </div>
 }
 
-function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
+function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => void; t: ReturnType<typeof useTranslation>['t'] }) {
   const [list, setList] = useState<EntryWithMetrics[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [limit] = useState(50)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [compareMode, setCompareMode] = useState(false)
+  const [historySubTab, setHistorySubTab] = useState('backtests')
   const [selectedForCompare, setSelectedForCompare] = useState<Set<string>>(new Set())
   const [compareEquity, setCompareEquity] = useState<Record<string, EquityPoint[]>>({})
   const [compareLoading, setCompareLoading] = useState(false)
@@ -531,6 +567,19 @@ function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =
         <Button variant="outline" onClick={fetchList}>{tFn('backtestHistory:refresh', 'Refresh')}</Button>
       </div>
     </div>
+
+    <Tabs value={historySubTab} onValueChange={setHistorySubTab} className="mb-4">
+      <TabsList className="h-8">
+        <TabsTrigger value="backtests" className="text-xs h-7 data-[state=active]:bg-card">Backtests</TabsTrigger>
+        <TabsTrigger value="orchestration" className="text-xs h-7 data-[state=active]:bg-card">Orchestration</TabsTrigger>
+      </TabsList>
+    </Tabs>
+
+    {historySubTab === 'orchestration' ? (
+      <OrchestrationHistoryTab onSelectRun={(id) => setView('detail', id, { type: 'orchestration' })} />
+    ) : null}
+
+    <div style={{ display: historySubTab === 'backtests' ? undefined : 'none' }}>
 
     {error && <ErrorCard message={error} onRetry={fetchList} />}
 
@@ -717,6 +766,7 @@ function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =
         </CardContent>
       </Card>
     )}
+    </div>
 
     {confirmDelete && (
       <ConfirmDialog
@@ -729,7 +779,7 @@ function HistoryView({ setView, t: tFn }: { setView: (v: HubView, id?: string) =
   </div>
 }
 
-function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView, id?: string) => void; t: ReturnType<typeof useTranslation>['t'] }) {
+function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => void; t: ReturnType<typeof useTranslation>['t'] }) {
   const [showWizard, setShowWizard] = useState(false)
   const [run, setRun] = useState<Record<string, any> | null>(null)
   const [equity, setEquity] = useState<EquityPoint[]>([])

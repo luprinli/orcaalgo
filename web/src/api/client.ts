@@ -16,6 +16,8 @@ import type {
   SimulateValidateResponse,
   SystemHealth,
   ParamVersion,
+  OrchestrationRun, OrchestrationSubmitRequest, OrchestrationRunResult,
+  AllocationEntry, StrategyStatus, BreachEvent,
 } from '../types/api'
 
 export interface Symbol {
@@ -416,6 +418,28 @@ export const paramVersions = {
     post<{ status: string; active_version: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params/activate`, { version_tag: versionTag }),
   deactivate: (strategyId: string) =>
     post<{ status: string; message: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/params/deactivate`),
+}
+
+export const orchestrator = {
+  submit: (data: OrchestrationSubmitRequest) =>
+    post<{ run_id: string; status: string; message: string }>('/api/v1/orchestrator/run', data),
+  list: (limit?: number, offset?: number) =>
+    get<{ runs: OrchestrationRun[]; total: number }>(`/api/v1/orchestrator/runs?limit=${limit || 20}&offset=${offset || 0}`),
+  get: (id: string) => get<OrchestrationRun>(`/api/v1/orchestrator/runs/${encodeURIComponent(id)}`),
+  getAllocation: (id: string) => get<AllocationEntry[]>(`/api/v1/orchestrator/runs/${encodeURIComponent(id)}/allocation`),
+  getCorrelation: (id: string) => get<{ run_id: string; strategy_ids: string[]; result_json?: OrchestrationRunResult }>(`/api/v1/orchestrator/runs/${encodeURIComponent(id)}/correlation`),
+  getTrades: (id: string) => get<any[]>(`/api/v1/orchestrator/runs/${encodeURIComponent(id)}/trades`),
+  cancel: (id: string) => del<{ run_id: string; status: string }>(`/api/v1/orchestrator/runs/${encodeURIComponent(id)}`),
+  submitMatrix: (data: any) => post<{ batch_id: string; total_sets: number; message: string }>('/api/v1/orchestrator/matrix', data),
+}
+
+export const strategyStatus = {
+  get: (strategyId: string) => get<StrategyStatus>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/status`),
+  list: () => get<StrategyStatus[]>('/api/v1/strategies/statuses'),
+  promote: (strategyId: string, reason: string, allocationPct?: number, orchestrationRunId?: string) =>
+    post<{ strategy_id: string; status: string; reason: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/promote`, { reason, allocation_pct: allocationPct || 0.5, orchestration_run_id: orchestrationRunId }),
+  demote: (strategyId: string, reason: string, allocationPct: number) =>
+    post<{ strategy_id: string; status: string; allocation_pct: number; reason: string }>(`/api/v1/strategies/${encodeURIComponent(strategyId)}/demote`, { reason, allocation_pct: allocationPct }),
 }
 
 export const system = {

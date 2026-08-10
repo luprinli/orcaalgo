@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { strategies, backtests } from '../api/client'
 import { useCacheStore } from '../stores/cacheStore'
+import { STRATEGY_DISPLAY } from '../data/constants'
 import type { Strategy, BacktestHistoryEntry, EquityPoint } from '../types/api'
 import { Card, CardContent } from '../components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
@@ -15,16 +16,7 @@ import {
 import CatalogTab from './strategy-hub/CatalogTab'
 import InstancesTab from './strategy-hub/InstancesTab'
 import EditorTab from './strategy-hub/EditorTab'
-
-const STRATEGY_DISPLAY: Record<string, string> = {
-  grid: 'Grid Trading', mean_reversion: 'Mean Reversion', intraday_mr: 'Mean Reversion',
-  trend: 'Trend Following', trend_following: 'Trend Following',
-  breakout: 'ORB Breakout', opening_range_breakout: 'ORB Breakout',
-  scalp: 'Session Scalp', session_scalp: 'Session Scalp',
-  vol_arb: 'Vol Harvesting', stat_arb: 'Stat Arb',
-  ma_crossover: 'MA Crossover', rsi2: 'RSI2 Reversion',
-  donchian: 'Donchian Breakout', keltner: 'Keltner MACD', ichimoku: 'Ichimoku Cloud',
-}
+import StatusTab from './strategy-hub/StatusTab'
 
 export default function StrategyHub() {
   const { t } = useTranslation()
@@ -131,6 +123,9 @@ export default function StrategyHub() {
           <TabsTrigger value="editor" className="text-xs h-6 data-[state=active]:bg-card">
             Editor
           </TabsTrigger>
+          <TabsTrigger value="status" className="text-xs h-6 data-[state=active]:bg-card">
+            Status
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="catalog" className="mt-3">
           <CatalogTab
@@ -154,6 +149,9 @@ export default function StrategyHub() {
         </TabsContent>
         <TabsContent value="editor" className="mt-3">
           <EditorTab id={null} onCreated={fetchDb} onBack={() => setActiveTab('catalog')} />
+        </TabsContent>
+        <TabsContent value="status" className="mt-3">
+          <StatusTab />
         </TabsContent>
       </Tabs>
 

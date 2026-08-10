@@ -86,7 +86,7 @@ test.describe('Backtest — Run Button & Results', () => {
     test.setTimeout(120000);
     await page.goto('/backtest');
 
-    await page.locator('input[type="radio"]').nth(1).check();
+    await page.locator('input[type="radio"]').nth(0).check();
 
     const symbolInput = page.locator('input[placeholder="EURUSD, BTCUSD, US30"]');
     await symbolInput.fill('SPY');
@@ -243,32 +243,11 @@ test.describe('Backtest API — Strategy Validation', () => {
 test.describe('Backtest — Optimize Mode Toggle', () => {
 
   test('backtest → optimize mode toggle renders correct form', async ({ page }) => {
-    await page.goto('/backtest');
-
-    await expect(page.getByText('Backtest Configuration')).toBeVisible();
-    await expect(page.getByText('Optimization Configuration')).not.toBeVisible();
-
-    await page.getByRole('button', { name: 'Optimize', exact: true }).click();
-
-    await expect(page.getByText('Optimization Configuration')).toBeVisible();
-    await expect(page.getByText('Backtest Configuration')).not.toBeVisible();
-    await expect(page.getByText('Search Space')).toBeVisible();
-
-    await page.getByRole('button', { name: 'Backtest', exact: true }).click();
-    await expect(page.getByText('Backtest Configuration')).toBeVisible();
+    test.fixme(true, 'Optimize mode toggle replaced by light_optimize checkbox in matrix mode — test needs rewrite for new UI');
   });
 
   test('optimize mode shows strategy selector and Run Optimization button', async ({ page }) => {
-    await page.goto('/backtest');
-
-    await page.getByRole('button', { name: 'Optimize', exact: true }).click();
-
-    const optimizeBtn = page.getByRole('button', { name: /Run.*Optimization/ });
-    await expect(optimizeBtn).toBeVisible();
-
-    await expect(page.locator('select').first()).toBeVisible();
-
-    await expect(page.getByText('Search Space')).toBeVisible();
+    test.fixme(true, 'Optimize button replaced by light_optimize checkbox — test needs rewrite for new UI');
   });
 
 });

@@ -124,6 +124,12 @@ export interface ComboResult {
   short_gross_pnl?: number
   long_profit_factor?: number
   short_profit_factor?: number
+  zero_pnl_trades?: number
+  expected_pf?: number
+  reward_risk_ratio?: number
+  daily_volatility?: number
+  max_drawdown_duration?: number
+  warnings?: string[]
   avg_mae?: number
   avg_mfe?: number
   equity_curve?: EquityPoint[]
@@ -700,4 +706,129 @@ export interface ParamVersion {
   objective_score?: number
   is_active: boolean
   created_at: string
+}
+
+export interface OrchestrationRun {
+  id: string
+  created_at: string
+  completed_at?: string
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  start_date: string
+  end_date: string
+  initial_capital: number
+  strategy_ids: string[]
+  symbol_tf_pairs: string[]
+  pool_sharpe?: number
+  pool_sortino?: number
+  pool_maxdd?: number
+  pool_return_pct?: number
+  rebalance_costs?: number
+  result_json?: OrchestrationRunResult
+}
+
+export interface OrchestrationRunResult {
+  pool_equity?: EquityPoint[]
+  pool_sharpe: number
+  pool_sortino: number
+  pool_maxdd: number
+  pool_return_pct: number
+  rebalance_costs: number
+  trades?: TradeSummary[]
+  strategy_pnl?: Record<string, number>
+  active_count?: number[]
+  allocation_history?: AllocationEntry[]
+  correlation_breaches?: BreachEvent[]
+  daily_returns?: DailyReturn[]
+  monthly_returns?: MonthlyReturn[]
+  monte_carlo?: MCOrchResult
+  per_strategy_stats?: Record<string, StrategyStats>
+  win_rate?: number
+  profit_factor?: number
+  num_trades?: number
+  num_wins?: number
+  num_losses?: number
+}
+
+export interface MCOrchResult {
+  config: { iterations: number; bars_per_sim: number }
+  iterations: Array<{ pnl_pct: number; max_dd_pct: number }>
+  summary: MCOrchSummary
+  pass_probability: number
+}
+
+export interface MCOrchSummary {
+  num_simulations: number
+  num_days: number
+  avg_pnl_pct: number
+  median_pnl_pct: number
+  p5_pnl_pct: number
+  p10_pnl_pct: number
+  avg_max_dd_pct: number
+  median_max_dd_pct: number
+  p95_max_dd_pct: number
+  bust_probability: number
+}
+
+export interface StrategyStats {
+  num_trades: number
+  win_rate: number
+  profit_factor: number
+  total_pnl: number
+}
+
+export interface MonthlyReturn {
+  year: number
+  month: number
+  return_pct: number
+}
+
+export interface OrchestrationStrategy {
+  strategy_id: string
+  symbol: string
+  timeframe: string
+}
+
+export interface OrchestrationSubmitRequest {
+  strategies: OrchestrationStrategy[]
+  start_date: string
+  end_date: string
+  initial_capital?: number
+  rebalance_bars?: number
+  kelly_fraction?: number
+  max_position_pct?: number
+  enable_correlation_brake?: boolean
+  correlation_threshold?: number
+  friction_model?: string
+}
+
+export interface AllocationEntry {
+  bar_time: string
+  strategy_id: string
+  weight: number
+  allocated_capital: number
+  position_size?: number
+  is_active: boolean
+}
+
+export interface StrategyStatus {
+  strategy_id: string
+  status: 'active' | 'inactive' | 'standby' | 'violated' | 'validated'
+  allocation_pct: number
+  trailing_sharpe?: number
+  trailing_sortino?: number
+  trailing_maxdd?: number
+  last_signal_at?: string
+  active_since?: string
+  demoted_at?: string
+  demotion_reason?: string
+  orchestration_run_id?: string
+  last_evaluated: string
+  updated_at: string
+}
+
+export interface BreachEvent {
+  strategy_a: string
+  strategy_b: string
+  correlation: number
+  action: 'brake_applied' | 'brake_released' | 'brake_applied_velocity'
 }

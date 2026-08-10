@@ -60,7 +60,8 @@ type BacktestConfig struct {
 	StrategyHash          string `json:"strategy_hash,omitempty"`
 	GKRPath               string `json:"gkr_path,omitempty"`
 	EnablePrefetch        bool   `json:"enable_prefetch,omitempty"`
-	WarmUpBars            int    `json:"warmup_bars,omitempty"`
+	WarmUpBars            int               `json:"warmup_bars,omitempty"`
+	SecondarySymbols      map[string]string `json:"secondary_symbols,omitempty"` // primary → secondary for pairs trading
 }
 
 type MatrixBacktestConfig struct {
@@ -76,6 +77,7 @@ type MatrixBacktestConfig struct {
 	SizingPercent     float64   `json:"sizing_percent"`
 	KellyFraction     float64   `json:"kelly_fraction"`
 	SkipLightOptimize bool      `json:"skip_light_optimize"`
+	WirePipeline      bool      `json:"wire_pipeline"`
 }
 
 type ComboResult struct {
@@ -115,6 +117,11 @@ type ComboResult struct {
 	ShortGrossPnL      float64             `json:"short_gross_pnl"`
 	LongPF             float64             `json:"long_profit_factor"`
 	ShortPF            float64             `json:"short_profit_factor"`
+	ZeroPnLTrades      int                 `json:"zero_pnl_trades"`
+	ExpectedPF         float64             `json:"expected_pf"`
+	RewardRiskRatio    float64             `json:"reward_risk_ratio"`
+	DailyVolatility    float64             `json:"daily_volatility"`
+	TrainPct           float64             `json:"train_pct"`
 }
 
 type MatrixResult struct {
@@ -199,7 +206,8 @@ type BacktestResult struct {
 	RegimeLogError string          `json:"regime_log_error,omitempty"`
 	Warnings       []string        `json:"warnings,omitempty"`
 	MetricGateStatus *MultiMetricVerdict `json:"metric_gate_status,omitempty"`
-	StrategyParams map[string]float64   `json:"strategy_params,omitempty"`
+	StrategyParams   map[string]float64   `json:"strategy_params,omitempty"`
+	TrainPct         float64
 	SignalDiag     SignalDiag          `json:"signal_diag,omitempty"`
 	EngineVersion  string          `json:"engine_version,omitempty"`
 	StrategyHash   string          `json:"strategy_hash,omitempty"`
@@ -629,6 +637,15 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		vix := getVIXAt(candle.Time, vixLogs)
 		sentiment := getSentimentAt(candle.Time, sentimentLogs)
 		e.positionSizer.UpdateMarketState(vix, sentiment, regime)
+
+		sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
+		if receiver, ok := sr.(strategy.VIXReceiver); ok {
+			receiver.SetVIX(vix)
+		}
+		if atrReceiver, ok := sr.(strategy.ATRReceiver); ok {
+			atrVal := ComputeATR(atrWindow, atrPeriod)
+			atrReceiver.SetATR(atrVal)
+		}
 		if pendingTrade, ok := pendingAS[candle.Symbol]; ok {
 			if pendingTrade.Side == "BUY" && candle.Close.Float64() < pendingTrade.EntryPrice.Float64() {
 				pendingTrade.AdverseSelection = true
@@ -742,15 +759,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				brokerFee := config.BrokerFee.CalculateFee(fillQty, ot.EntryPrice.Float64()) +
 					config.BrokerFee.CalculateFee(fillQty, exitPrice)
 
-				if ot.Side == "BUY" {
-					ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
-				} else {
-					ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
-				}
-				if math.IsNaN(ot.PnL) || math.IsInf(ot.PnL, 0) || math.Abs(ot.PnL) > config.InitialCapital*2 {
-					ot.PnL = 0
-					exitReason = "pnl_clamped"
-				}
+			if ot.Side == "BUY" {
+				ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
+			} else {
+				ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
+			}
+			safe, clamped := risk.SanitizeTradePnL(ot.PnL, fillQty, ot.EntryPrice.Float64(), config.InitialCapital)
+			ot.PnL = safe
+			if clamped {
+				exitReason = "pnl_clamped"
+			}
 				ot.PnLPct = ot.PnL / config.InitialCapital * 100
 				ot.ExitPrice = types.PriceFromFloat(exitPrice)
 				ot.ExitTime = candle.Time
@@ -790,6 +808,32 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		}
 
 		if _, alreadyOpen := openTrades[candle.Symbol]; !alreadyOpen {
+			// MaxDD guard (E7): stop entering new positions at 80% drawdown.
+			if peakCapital > 0 {
+				currentDD := (peakCapital - capital) / peakCapital
+				if currentDD > 0.80 {
+					e.signalDiag.SignalAttempts++
+					continue
+				}
+			}
+			isSecondary := false
+			if len(config.SecondarySymbols) > 0 {
+				for primary := range config.SecondarySymbols {
+					if secondary := config.SecondarySymbols[primary]; secondary == candle.Symbol {
+						if sr := e.getRunnerForSymbolAndStrategy(primary, config.StrategyID, config); sr != nil {
+							if receiver, ok := sr.(strategy.SecondaryPriceReceiver); ok {
+								receiver.PushSecondaryPrice(candle.Close)
+							}
+						}
+						isSecondary = true
+						break
+					}
+				}
+			}
+			if isSecondary {
+				e.signalDiag.SignalAttempts++
+				continue
+			}
 			e.signalDiag.SignalAttempts++
 			if i < config.WarmUpBars {
 				sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
@@ -926,11 +970,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		commission := ot.EntryPrice.Float64() * ot.Quantity * config.CommissionBps / 10000.0 * 2
 		brokerFee := config.BrokerFee.CalculateFee(ot.Quantity, ot.EntryPrice.Float64()) +
 			config.BrokerFee.CalculateFee(ot.Quantity, exitPrice)
-		if ot.Side == "BUY" {
-			ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
-		} else {
-			ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*ot.Quantity - commission - brokerFee
-		}
+	if ot.Side == "BUY" {
+		ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
+	} else {
+		ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*ot.Quantity - commission - brokerFee
+	}
+	safe, clamped := risk.SanitizeTradePnL(ot.PnL, ot.Quantity, ot.EntryPrice.Float64(), config.InitialCapital)
+	ot.PnL = safe
+	if clamped {
+		exitReason = "pnl_clamped"
+	}
 		ot.PnLPct = ot.PnL / config.InitialCapital * 100
 		ot.ExitPrice = types.PriceFromFloat(exitPrice)
 		ot.ExitTime = lastCandle.Time
@@ -1447,7 +1496,7 @@ func calculateSharpe(equity []EquityPoint, barsPerDay float64) float64 {
 		return 0
 	}
 	stdDev := math.Sqrt(variance)
-	if stdDev == 0 {
+	if stdDev < 1e-6 {
 		return 0
 	}
 	return mean / stdDev * math.Sqrt(252.0)
@@ -1505,8 +1554,8 @@ func calculateSortino(equity []EquityPoint, barsPerDay float64) float64 {
 	if math.IsNaN(mean) || math.IsNaN(sumSq) || math.IsInf(mean, 0) || math.IsInf(sumSq, 0) {
 		return 0
 	}
-	downStdDev := math.Sqrt(sumSq / float64(count))
-	if downStdDev < 1e-9 {
+	downStdDev := math.Sqrt(sumSq / float64(count-1))
+	if downStdDev < 1e-6 {
 		return 0
 	}
 	result := mean / downStdDev * math.Sqrt(252.0)

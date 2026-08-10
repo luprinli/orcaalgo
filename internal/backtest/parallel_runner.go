@@ -20,7 +20,8 @@ func (e *Engine) RunParallel(ctx context.Context, configs []BacktestConfig) map[
 		wg.Add(1)
 		go func(cfg BacktestConfig) {
 			defer wg.Done()
-			r, err := e.Run(ctx, cfg)
+			engine := NewEngine(e.db)
+			r, err := engine.Run(ctx, cfg)
 			if err == nil {
 			mu.Lock()
 			for _, sym := range cfg.Symbols {

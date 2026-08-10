@@ -55,23 +55,17 @@ test.describe('Backtest Runner UI — Interactive', () => {
 
     await expect(page.getByLabel('Matrix')).toBeVisible();
     await expect(page.getByLabel('Single')).toBeVisible();
-    await expect(page.getByLabel('Optimize')).toBeVisible();
+    await expect(page.getByLabel('Orch')).toBeVisible();
   });
 
   test('switch to optimize mode shows optimize fields', async ({ page }) => {
-    await page.goto('/backtest', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1000);
-    await page.getByLabel('Optimize').click();
-    await page.waitForTimeout(500);
-
-    await expect(page.getByText('Objective')).toBeVisible();
-    await expect(page.getByText('Max Combinations')).toBeVisible();
+    test.fixme(true, 'Optimize mode replaced by light_optimize checkbox in matrix mode');
   });
 
   test('strategy checkboxes are present', async ({ page }) => {
     await page.goto('/backtest', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
-    await expect(page.locator('[id="main-content"]').getByText('ma crossover', { exact: false })).toBeVisible();
+    await expect(page.locator('[id="main-content"]').getByText('grid trading', { exact: false })).toBeVisible();
   });
 
   test('backtest history page loads', async ({ page }) => {

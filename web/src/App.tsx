@@ -76,6 +76,9 @@ function AuthenticatedApp() {
             <Route path="/strategies/:id/edit" element={<Navigate to="/strategies?edit=:id" replace />} />
             <Route path="/strategies/new" element={<Navigate to="/strategies?edit=new" replace />} />
             <Route path="/strategies/edit/:id" element={<Navigate to="/strategies?edit=:id" replace />} />
+            <Route path="/orchestration" element={<Navigate to="/backtest?mode=orchestrated" replace />} />
+            <Route path="/audit" element={<Navigate to="/admin" replace />} />
+            <Route path="/users" element={<Navigate to="/admin" replace />} />
 
             {/* Accounts & Prop Firms */}
             <Route path="/accounts" element={<AccountsPage />} />

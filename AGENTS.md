@@ -167,7 +167,7 @@ These are **NEVER** permitted. Violations block PR merge.
 
 - **SignalGateImpl** (`internal/risk/signal_gate_impl.go`): Concrete implementation wrapping VolatilityHalt, PositionSizer, ExposureTracker, and OrderRateLimiter. Used by both engines.
 
-- **RegimeActivationMatrix** (`internal/risk/regime_activation.go`): 14 strategies × 4 regimes with per-regime Kelly multiplier overrides. Default mappings from the Senior Quantitative Review §3.1 and §5.2.
+- **RegimeActivationMatrix** (`internal/risk/regime_activation.go`): 14 strategies × 4 regimes with per-regime Kelly multiplier overrides. Default mappings from the original Strategy Selection & Deployment Architecture (2026-08-10).
 
 - **PropFirmEnforcer** (`internal/backtest/propfirm_enforcer.go`): Soft halt (positions reduced 50%) at configurable daily loss threshold, hard halt (trading stopped) at configurable limit. Per-profile configurable via `propfirm.Profile`.
 
@@ -198,7 +198,8 @@ These are **NEVER** permitted. Violations block PR merge.
 | `web/src/pages/ParamVersionPage.tsx` | 6 | Parameter version management |
 | `web/src/__tests__/regimeMatrix.test.tsx` | 7 | Frontend tests |
 | `docs/Senior Quantitative Audit Report 2026-08-02.md` | — | Full audit report |
-| `docs/Senior Quantitative Review.md` | — | Original review |
+| `docs/Multi-Strategy Orchestration Design 2026-08-10.md` | — | Strategy selection & deployment architecture |
+| `docs/Orchestration-Backtest Integration Plan 2026-08-10.md` | — | Orchestration integration plan |
 
 ### Known Issues
 

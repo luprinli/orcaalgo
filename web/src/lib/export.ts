@@ -84,3 +84,31 @@ export function exportMetricsCSV(metrics: Record<string, unknown>, filename = 'm
   const csv = ['Metric,Value', ...rows].join('\n')
   downloadBlob(csv, filename)
 }
+
+export function exportOrchTradesCSV(trades: TradeSummary[], filename = 'orch_trades.csv') {
+  if (!trades.length) return
+  const header = 'symbol,side,quantity,entry_price,exit_price,pnl,pnl_pct,entry_time,exit_time,strategy_id,slippage_bps,regime'
+  const rows = trades.map(t => [
+    t.symbol, t.side, t.quantity, t.entry_price, t.exit_price, t.pnl, t.pnl_pct,
+    t.entry_time, t.exit_time, t.strategy_id ?? '', t.slippage_mid_bps ?? '', t.hmm_regime ?? '',
+  ].map(v => String(v ?? '')).map(escapeCSV).join(','))
+  downloadBlob([header, ...rows].join('\n'), filename)
+}
+
+export function exportOrchAllocationCSV(allocation: Array<{ bar_time: string; strategy_id: string; weight: number; allocated_capital: number; is_active: boolean }>, filename = 'orch_allocation.csv') {
+  if (!allocation.length) return
+  const header = 'bar_time,strategy_id,weight,allocated_capital,is_active'
+  const rows = allocation.map(a => [
+    a.bar_time, a.strategy_id, a.weight.toFixed(4), a.allocated_capital.toFixed(2), String(a.is_active),
+  ].map(escapeCSV).join(','))
+  downloadBlob([header, ...rows].join('\n'), filename)
+}
+
+export function exportOrchBreachesCSV(breaches: Array<{ strategy_a: string; strategy_b: string; correlation: number; action: string }>, filename = 'orch_breaches.csv') {
+  if (!breaches.length) return
+  const header = 'strategy_a,strategy_b,correlation,action'
+  const rows = breaches.map(b => [
+    b.strategy_a, b.strategy_b, b.correlation.toFixed(4), b.action,
+  ].map(escapeCSV).join(','))
+  downloadBlob([header, ...rows].join('\n'), filename)
+}

@@ -51,6 +51,9 @@ type LiveEngine struct {
 
 	accountRegistries map[string]*strategy.Registry // per-account isolated strategy instances
 	defaultRegistry   *strategy.Registry            // fallback for single-account (created from factories)
+
+	slippageModel       backtest.SlippageModel // adaptive slippage model calibrated from observed fills
+	slippageSampleCount int
 }
 
 func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) { e.metaLabeler = p }
@@ -201,6 +204,13 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 
 	candle := s.Aggregator.GetLatestBar("1m")
 	goCandle := strategy.BarToCandle(candle)
+
+	reg := e.getRegistryForAccount(accountID)
+	for _, runner := range reg.All() {
+		if receiver, ok := runner.(strategy.VIXReceiver); ok {
+			receiver.SetVIX(e.lastVIX)
+		}
+	}
 
 	signals := e.getRegistryForAccount(accountID).EvaluateAll(goCandle, regimeInt8)
 
@@ -485,6 +495,33 @@ func (e *LiveEngine) ReconcileLiveFill(strategyID, symbol, side string, pnl, qua
 			e.multiPool.RecordFill(aid, strategyID, symbol, side, pnl, quantity)
 		}
 	}
+}
+
+// SetSlippageModel sets the initial or replacement slippage model for adaptive
+// calibration. Call before starting the engine.
+func (e *LiveEngine) SetSlippageModel(m backtest.SlippageModel) {
+	e.slippageModel = m
+	e.slippageSampleCount = 0
+}
+
+// GetSlippageModel returns the current slippage model after calibration.
+func (e *LiveEngine) GetSlippageModel() backtest.SlippageModel {
+	return e.slippageModel
+}
+
+// RecordSlippageObservation feeds an observed fill (expected price vs actual
+// fill price) into the adaptive slippage calibration pipeline. After 10+
+// observations, the model is recalibrated using CalibrateSlippageModel.
+func (e *LiveEngine) RecordSlippageObservation(symbol string, expectedPrice, actualPrice float64) {
+	if expectedPrice <= 0 || actualPrice <= 0 {
+		return
+	}
+	observedBps := (actualPrice - expectedPrice) / expectedPrice * 10000.0
+	if observedBps < 0 {
+		observedBps = -observedBps
+	}
+	e.slippageSampleCount++
+	e.slippageModel = backtest.CalibrateSlippageModel(e.slippageModel, observedBps, e.slippageSampleCount)
 }
 
 func NanoToTime(ns int64) time.Time {

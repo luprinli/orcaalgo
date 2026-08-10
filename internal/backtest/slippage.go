@@ -84,13 +84,23 @@ func (s *FillSimulator) SimulateFill(orderID uint32, symbol string, limitPrice f
 func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limitPrice float64, quantity float64, side string, tickPrice float64, tickTime time.Time, midPrice float64, lastPrice float64, barVolume float64) *SimulatedFill {
 	delay := time.Duration(s.model.LatencyMs) * time.Millisecond
 
-	slippageBps := s.model.SpreadBps + s.model.AdverseSelectBps
-	if s.model.MaxSlippage > 0 {
-		randomFactor := math.Abs(s.rng.NormFloat64()) * s.model.MaxSlippage * 0.5
+	sm := s.model
+	if s.model.Type == "relative" && s.model.SpreadBps == 0.5 && s.model.MaxSlippage == 2.0 &&
+		s.model.VolumeImpactFactor == 0.5 && s.model.AdverseSelectBps == 0.5 {
+		base := SlippageForSymbol(symbol)
+		sm.SpreadBps = base.SpreadBps
+		sm.MaxSlippage = base.MaxSlippage
+		sm.VolumeImpactFactor = base.VolumeImpactFactor
+		sm.AdverseSelectBps = base.AdverseSelectBps
+	}
+
+	slippageBps := sm.SpreadBps + sm.AdverseSelectBps
+	if sm.MaxSlippage > 0 {
+		randomFactor := math.Abs(s.rng.NormFloat64()) * sm.MaxSlippage * 0.5
 		slippageBps += randomFactor
 	}
-	if barVolume > 0 && s.model.VolumeImpactFactor > 0 && quantity > 0 {
-		slippageBps += s.model.VolumeImpactFactor * math.Sqrt(quantity / barVolume)
+	if barVolume > 0 && sm.VolumeImpactFactor > 0 && quantity > 0 {
+		slippageBps += sm.VolumeImpactFactor * math.Sqrt(quantity / barVolume)
 	}
 	if slippageBps < 0 {
 		slippageBps = 0
@@ -104,6 +114,12 @@ func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limit
 	}
 
 	fillQuantity := quantity
+	if barVolume > 0 {
+		maxQtyByVolume := barVolume * 0.01
+		if fillQuantity > maxQtyByVolume {
+			fillQuantity = maxQtyByVolume
+		}
+	}
 	if fillQuantity > 0 && s.rng.Float64() < 0.05 {
 		fillQuantity *= 0.5 + s.rng.Float64()*0.5
 	}
@@ -154,5 +170,78 @@ func LowLatencySlippage() SlippageModel {
 		SpreadBps:   0.1,
 		MaxSlippage: 0.5,
 		LatencyMs:   0.1,
+	}
+}
+
+func RealisticEquitySlippage() SlippageModel {
+	return SlippageModel{
+		Type:               "relative",
+		SpreadBps:          2.0,
+		MaxSlippage:        5.0,
+		LatencyMs:          10.0,
+		VolumeImpactFactor: 1.0,
+		AdverseSelectBps:   1.0,
+	}
+}
+
+func SmallCapSlippage() SlippageModel {
+	return SlippageModel{
+		Type:               "relative",
+		SpreadBps:          8.0,
+		MaxSlippage:        15.0,
+		LatencyMs:          15.0,
+		VolumeImpactFactor: 2.0,
+		AdverseSelectBps:   2.0,
+	}
+}
+
+func ForexSlippage() SlippageModel {
+	return SlippageModel{
+		Type:               "relative",
+		SpreadBps:          0.3,
+		MaxSlippage:        1.0,
+		LatencyMs:          5.0,
+		VolumeImpactFactor: 0.1,
+		AdverseSelectBps:   0.2,
+	}
+}
+
+func CryptoSlippage() SlippageModel {
+	return SlippageModel{
+		Type:               "relative",
+		SpreadBps:          12.0,
+		MaxSlippage:        25.0,
+		LatencyMs:          20.0,
+		VolumeImpactFactor: 3.0,
+		AdverseSelectBps:   3.0,
+	}
+}
+
+func CommoditySlippage() SlippageModel {
+	return SlippageModel{
+		Type:               "relative",
+		SpreadBps:          4.0,
+		MaxSlippage:        8.0,
+		LatencyMs:          10.0,
+		VolumeImpactFactor: 1.5,
+		AdverseSelectBps:   1.0,
+	}
+}
+
+func SlippageForSymbol(symbol string) SlippageModel {
+	switch {
+	case symbol == "BTCUSD" || symbol == "ETHUSD":
+		return CryptoSlippage()
+	case symbol == "XAUUSD" || symbol == "XAGUSD" || symbol == "CL" || symbol == "USO":
+		return CommoditySlippage()
+	case symbol == "EURUSD" || symbol == "GBPUSD" || symbol == "USDJPY" || symbol == "USDCHF" ||
+		symbol == "AUDUSD" || symbol == "USDCAD" || symbol == "NZDUSD":
+		return ForexSlippage()
+	case symbol == "IWM" || symbol == "TSLA" || symbol == "NVDA":
+		return SmallCapSlippage()
+	case symbol == "GLD" || symbol == "TLT":
+		return CommoditySlippage()
+	default:
+		return RealisticEquitySlippage()
 	}
 }

@@ -68,6 +68,9 @@ type Server struct {
 	modelHandler           *ModelHandler
 	indicatorHandler       *IndicatorHandler
 	progressStore          *ProgressStore
+	paramVersionHandler    *ParamVersionHandler
+	orchestratorHandler    *OrchestratorHandler
+	strategyStatusHandler  *StrategyStatusHandler
 	monitoringHandler      *MonitoringHandler
 	dataSource            string
 }
@@ -144,6 +147,7 @@ func (s *Server) registerRoutes() {
 	protected.Use(middleware.AuthMiddleware())
 	{
 		protected.GET("/strategies", s.listStrategies)
+		protected.GET("/strategies/:id", s.getStrategy)
 		protected.POST("/strategies", s.createStrategy)
 		protected.PUT("/strategies/:id", s.updateStrategy)
 		protected.DELETE("/strategies/:id", s.deleteStrategy)
@@ -269,6 +273,17 @@ func (s *Server) registerRoutes() {
 	}
 	s.monitoringHandler.RegisterRoutes(v1)
 
+	if s.repo != nil {
+		s.paramVersionHandler = NewParamVersionHandler(s.repo)
+		s.paramVersionHandler.RegisterRoutes(v1)
+
+		s.orchestratorHandler = NewOrchestratorHandler(s.repo, &backtestRepoAdapter{repo: s.repo})
+		s.orchestratorHandler.RegisterRoutes(v1)
+
+		s.strategyStatusHandler = NewStrategyStatusHandler(s.repo)
+		s.strategyStatusHandler.RegisterRoutes(v1)
+	}
+
 	s.router.GET("/ws", func(c *gin.Context) {
 		token := c.Query("token")
 		if token != "" {
@@ -371,6 +386,24 @@ func (s *Server) listStrategies(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"strategies": strategies})
+}
+
+func (s *Server) getStrategy(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id required"})
+		return
+	}
+	strategy, err := s.repo.GetStrategy(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if strategy == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "strategy not found"})
+		return
+	}
+	c.JSON(http.StatusOK, strategy)
 }
 
 func (s *Server) createStrategy(c *gin.Context) {
@@ -2020,7 +2053,19 @@ func randNorm(rng *rand.Rand) float64 {
 }
 
 func (a *backtestRepoAdapter) LoadVIXLogs(ctx context.Context, start, end time.Time) ([]backtest.VIXLog, error) {
-	return nil, nil
+	logs, err := a.repo.LoadVIXLogs(ctx, start, end)
+	if err != nil {
+		return nil, nil
+	}
+	out := make([]backtest.VIXLog, len(logs))
+	for i, l := range logs {
+		out[i] = backtest.VIXLog{
+			Time:      l.Time,
+			VIXValue:  l.VIXValue,
+			VIXChange: l.VIXChange,
+		}
+	}
+	return out, nil
 }
 
 func (a *backtestRepoAdapter) LoadSentimentLogs(ctx context.Context, start, end time.Time) ([]backtest.SentimentLog, error) {

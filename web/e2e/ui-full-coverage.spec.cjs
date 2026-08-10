@@ -1,7 +1,7 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-const BASE = 'http://localhost:8081';
+const BASE = 'http://localhost:8080';
 
 function headers() {
   return { 'Content-Type': 'application/json' }

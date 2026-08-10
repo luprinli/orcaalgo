@@ -56,11 +56,11 @@ func NewRegimeActivationMatrix() *RegimeActivationMatrix {
 				Allowed:        [4]bool{true, false, false, false},   // Calm only
 				KellyMultiplier: [4]float64{0.25, 0, 0, 0},
 			},
-			"opening_range_breakout": {
-				StrategyID:     "opening_range_breakout",
-				Allowed:        [4]bool{false, true, true, false},    // Trending, HighVol
-				KellyMultiplier: [4]float64{0, 0.25, 0.15, 0},
-			},
+		"opening_range_breakout": {
+			StrategyID:     "opening_range_breakout",
+			Allowed:        [4]bool{true, true, true, false},    // Calm, Trending, HighVol
+			KellyMultiplier: [4]float64{0.10, 0.25, 0.15, 0},
+		},
 			"pairs_trading": {
 				StrategyID:     "pairs_trading",
 				Allowed:        [4]bool{true, false, true, false},    // Calm, HighVol
@@ -94,11 +94,11 @@ func NewRegimeActivationMatrix() *RegimeActivationMatrix {
 				Allowed:        [4]bool{true, true, false, false},    // Calm, Trending
 				KellyMultiplier: [4]float64{0.25, 0.25, 0, 0},
 			},
-			"orb_15m": {
-				StrategyID:     "orb_15m",
-				Allowed:        [4]bool{false, true, true, false},
-				KellyMultiplier: [4]float64{0, 0.25, 0.15, 0},
-			},
+		"orb_15m": {
+			StrategyID:     "orb_15m",
+			Allowed:        [4]bool{true, true, true, false},    // Calm, Trending, HighVol
+			KellyMultiplier: [4]float64{0.10, 0.25, 0.15, 0},
+		},
 			"vix_futures_carry": {
 				StrategyID:     "vix_futures_carry",
 				Allowed:        [4]bool{false, false, true, false},
@@ -109,17 +109,22 @@ func NewRegimeActivationMatrix() *RegimeActivationMatrix {
 				Allowed:        [4]bool{true, false, false, false},
 				KellyMultiplier: [4]float64{0.15, 0, 0, 0},
 			},
-			"multi_asset_statarb": {
+		"multi_asset_statarb": {
 				StrategyID:     "multi_asset_statarb",
 				Allowed:        [4]bool{true, false, true, false},    // Calm, HighVol
 				KellyMultiplier: [4]float64{0.25, 0, 0.15, 0},
-			},
+		},
+			"rsi2_reversion": {
+				StrategyID:     "rsi2_reversion",
+				Allowed:        [4]bool{true, true, false, false},    // Calm, Trending
+				KellyMultiplier: [4]float64{0.25, 0.25, 0, 0},
+		},
 
-			// === Permissive defaults for strategies not explicitly mapped ===
-			// Any strategy not in the matrix falls through to the default entry
-			// which allows all regimes with Kelly=0.25. This keeps existing
-			// strategies (ichimoku, donchian, keltner_macd, ma_crossover,
-			// rsi2_reversion, rsi_divergence) running without being gated.
+		// === Permissive defaults for strategies not explicitly mapped ===
+		// Any strategy not in the matrix falls through to the default entry
+		// which allows all regimes with Kelly=0.25. This keeps existing
+		// strategies (ichimoku, donchian, keltner_macd, ma_crossover,
+		// rsi_divergence) running without being gated.
 		},
 	}
 	return m

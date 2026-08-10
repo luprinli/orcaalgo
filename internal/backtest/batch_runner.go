@@ -152,19 +152,19 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 						NumWins:            result.NumWins,
 						NumLosses:          result.NumLosses,
 						AvgMAE:             result.AvgMAE,
-						AvgMFE:             result.AvgMFE,
-						Warnings:           result.Warnings,
-						AdverseSelectRate:  result.AdverseSelectionRate,
-						StrategyParams:     result.StrategyParams,
-						EquityCurve:        result.EquityCurve,
-						Trades:             result.Trades,
-					}
-					return nil
-				})
+				AvgMFE:             result.AvgMFE,
+				Warnings:           result.Warnings,
+				AdverseSelectRate:  result.AdverseSelectionRate,
+				StrategyParams:     result.StrategyParams,
+				EquityCurve:        result.EquityCurve,
+				Trades:             result.Trades,
 			}
-		}
-		_ = g.Wait()
-		results = append(results, chunkResults...)
+			return nil
+		})
+	}
+}
+_ = g.Wait()
+results = append(results, chunkResults...)
 	}
 
 	return results, nil
@@ -320,10 +320,19 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 					RRRatio: 2.0,
 				},
 			}
+			if combo.Strategy == "pairs_trading" || combo.Strategy == "stat_arb" {
+				if sec := defaultSecondarySymbol(combo.Symbol); sec != "" {
+					btConfig.SecondarySymbols = map[string]string{combo.Symbol: sec}
+					btConfig.Symbols = append(btConfig.Symbols, sec)
+				}
+			}
 			if optParams, ok := optimizedParams[combo.Strategy]; ok {
 				btConfig.StrategyParams = optParams
 			}
 			engine := NewEngine(db)
+			if config.WirePipeline {
+				engine.WirePipeline()
+			}
 			result, err := engine.Run(ctx, btConfig)
 			monitor.RecordBacktestDuration(time.Since(start).Seconds())
 			mu.Lock()
@@ -342,6 +351,11 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				return nil
 			}
 			monitor.RecordMatrixCombo("completed")
+			warnings := result.Warnings
+			if (combo.Strategy == "grid_trading" || combo.Strategy == "grid") &&
+				result.NumTrades == 0 {
+				warnings = append(warnings, "disabled: strategy is disabled by default (HP agenda)")
+			}
 			results[i] = ComboResult{
 				Symbol:             combo.Symbol,
 				StrategyID:         combo.Strategy,
@@ -376,6 +390,11 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				ShortPF:            clampAbs(result.LongShort.ShortPF, 1000),
 				ProfitFactor:       clampAbs(result.ProfitFactor, 1000),
 				TotalReturn:        clampAbs(result.TotalReturnPct, 10000),
+				ZeroPnLTrades:      result.NumTrades - result.NumWins - result.NumLosses,
+				ExpectedPF:         computeExpectedPF(result.WinRate, result.AvgWin, result.AvgLoss),
+				RewardRiskRatio:    computeRewardRisk(result.AvgWin, result.AvgLoss),
+				DailyVolatility:    computeDailyVolatility(result.DailyReturns),
+				TrainPct:           result.TrainPct,
 			}
 			if onProgress != nil {
 				onProgress(i, "completed", "", &results[i])
@@ -530,4 +549,59 @@ func clampAbs(val, limit float64) float64 {
 		return -limit
 	}
 	return val
+}
+
+func defaultSecondarySymbol(primary string) string {
+	pairs := map[string]string{
+		"XAGUSD": "XAUUSD",
+		"XAUUSD": "XAGUSD",
+		"GBPUSD": "EURUSD",
+		"USDCHF": "EURUSD",
+		"CL":     "XLE",
+		"USDCAD": "EURUSD",
+		"NZDUSD": "AUDUSD",
+		"AUDUSD": "NZDUSD",
+	}
+	return pairs[primary]
+}
+
+func computeExpectedPF(winRate, avgWin, avgLoss float64) float64 {
+	if winRate <= 0 || winRate >= 100 || avgWin <= 0 || avgLoss <= 0 {
+		return 0
+	}
+	wr := winRate / 100.0
+	expected := (wr * avgWin) / ((1 - wr) * avgLoss)
+	if math.IsNaN(expected) || math.IsInf(expected, 0) {
+		return 0
+	}
+	return expected
+}
+
+func computeRewardRisk(avgWin, avgLoss float64) float64 {
+	if avgLoss <= 0 {
+		return 0
+	}
+	rr := avgWin / avgLoss
+	if math.IsNaN(rr) || math.IsInf(rr, 0) {
+		return 0
+	}
+	return rr
+}
+
+func computeDailyVolatility(returns []DailyReturn) float64 {
+	if len(returns) < 2 {
+		return 0
+	}
+	sum := 0.0
+	for _, dr := range returns {
+		sum += dr.Return
+	}
+	mean := sum / float64(len(returns))
+	variance := 0.0
+	for _, dr := range returns {
+		diff := dr.Return - mean
+		variance += diff * diff
+	}
+	variance /= float64(len(returns) - 1)
+	return math.Sqrt(variance)
 }
