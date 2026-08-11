@@ -237,6 +237,221 @@ func TestOrchestrator_ConfigClamps_MaxPositionPct(t *testing.T) {
 	}
 }
 
+func TestOrchestrator_Run_MultiStrategy_NoCorrelationBrake(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 30)
+	for i := range candles {
+		base := 300.0 + float64(i)*0.1
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(base), High: types.PriceFromFloat(base + 0.5),
+			Low: types.PriceFromFloat(base - 0.5), Close: types.PriceFromFloat(base + 0.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: []RegimeLog{{Time: ts, HMMState: 0, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(30 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 10, KellyFraction: 0.25,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+		EnableCorrelationBrake: false,
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.CorrelationBreaches) != 0 {
+		t.Errorf("expected 0 breaches with brake disabled, got %d", len(result.CorrelationBreaches))
+	}
+}
+
+func TestOrchestrator_Run_MultiStrategy_CorrelationBrake(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 30)
+	for i := range candles {
+		base := 300.0 + float64(i)*0.1
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(base), High: types.PriceFromFloat(base + 0.5),
+			Low: types.PriceFromFloat(base - 0.5), Close: types.PriceFromFloat(base + 0.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: []RegimeLog{{Time: ts, HMMState: 0, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(30 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 10, KellyFraction: 0.25,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+		EnableCorrelationBrake: true, CorrelationThreshold: 0.6,
+	})
+	if err := o.AddStrategy("JPN225", "1h", "grid_trading"); err != nil {
+		t.Fatalf("AddStrategy 1: %v", err)
+	}
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.PoolEquity) == 0 {
+		t.Error("expected equity points with correlation brake enabled")
+	}
+}
+
+func TestOrchestrator_Run_RebalanceTriggered(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 25)
+	for i := range candles {
+		base := 300.0 + float64(i)*0.1
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(base), High: types.PriceFromFloat(base + 0.5),
+			Low: types.PriceFromFloat(base - 0.5), Close: types.PriceFromFloat(base + 0.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: []RegimeLog{{Time: ts, HMMState: 0, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(25 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 5, KellyFraction: 0.25,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.AllocationHistory) < 2 {
+		t.Errorf("expected at least 2 allocation entries with T=5 rebalance, got %d", len(result.AllocationHistory))
+	}
+}
+
+func TestOrchestrator_Run_RegimeGateBlocks(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 10)
+	for i := range candles {
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(300), High: types.PriceFromFloat(301), Low: types.PriceFromFloat(299), Close: types.PriceFromFloat(300.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: []RegimeLog{{Time: ts, HMMState: 3, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(10 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 5, KellyFraction: 0.25,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.Trades) > 0 {
+		t.Errorf("expected 0 trades in Crisis regime for grid_trading, got %d", len(result.Trades))
+	}
+}
+
+func TestOrchestrator_Run_MissingRegimeLogs(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 10)
+	for i := range candles {
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(300), High: types.PriceFromFloat(301), Low: types.PriceFromFloat(299), Close: types.PriceFromFloat(300.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: nil, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(10 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 5, KellyFraction: 0.25,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	_, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run should not panic with nil regime logs: %v", err)
+	}
+}
+
+func TestOrchestrator_Run_MissingCandles(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	db := &parityDB{candles: nil, regime: []RegimeLog{{Time: ts, HMMState: 0, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(10 * time.Hour),
+		InitialCapital: 500000, RebalanceBars: 5,
+		MaxPositionPct: 0.05, FrictionModel: "idealized",
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(result.Trades) != 0 {
+		t.Errorf("expected 0 trades with no candle data, got %d", len(result.Trades))
+	}
+}
+
+func TestOrchestrator_Run_AllowFractional(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	candles := make([]Candle, 30)
+	for i := range candles {
+		base := 300.0 + float64(i)*0.1
+		candles[i] = Candle{Time: ts.Add(time.Duration(i) * time.Hour), Symbol: "JPN225",
+			Open: types.PriceFromFloat(base), High: types.PriceFromFloat(base + 0.5),
+			Low: types.PriceFromFloat(base - 0.5), Close: types.PriceFromFloat(base + 0.1), Volume: 1000}
+	}
+	db := &parityDB{candles: candles, regime: []RegimeLog{{Time: ts, HMMState: 0, Confidence: 0.9, Symbol: "JPN225"}}, vix: nil}
+	o, _ := NewOrchestrator(db, OrchestratorConfig{
+		StartDate: ts.Add(-time.Hour), EndDate: ts.Add(30 * time.Hour),
+		InitialCapital: 10000, RebalanceBars: 10, KellyFraction: 0.25,
+		MaxPositionPct: 0.02, AllowFractional: true, FrictionModel: "idealized",
+	})
+	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	result, err := o.Run(context.Background())
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if o.config.AllowFractional != true {
+		t.Error("AllowFractional should be true")
+	}
+	_ = result
+}
+
+func TestOrchestrator_Run_ResultJSONRoundtrip(t *testing.T) {
+	result := &OrchestrationRunResult{
+		PoolSharpe:   1.5,
+		PoolSortino:  2.0,
+		PoolMaxDD:    5.0,
+		PoolReturnPct: 12.5,
+		StrategyPnL:  map[string]float64{"a": 100, "b": -50},
+	}
+	enriched := EnrichResultJSON(result)
+	if enriched.NumTrades != len(result.Trades) {
+		t.Errorf("NumTrades mismatch: %d vs %d", enriched.NumTrades, len(result.Trades))
+	}
+	if enriched.StrategyPnL["a"] != 100 {
+		t.Errorf("StrategyPnL mismatch: %f", enriched.StrategyPnL["a"])
+	}
+}
+
+func TestOrchestrator_EnrichResultJSON_EmptyEquity(t *testing.T) {
+	result := &OrchestrationRunResult{}
+	enriched := EnrichResultJSON(result)
+	if len(enriched.DailyReturns) != 0 {
+		t.Errorf("expected 0 daily returns from empty equity, got %d", len(enriched.DailyReturns))
+	}
+	if enriched.WinRate != 0 {
+		t.Errorf("expected WinRate=0 with no trades, got %f", enriched.WinRate)
+	}
+}
+
+func TestOrchestrator_EnrichResultJSON_NoTrades(t *testing.T) {
+	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
+	equity := []EquityPoint{
+		{Time: ts, Value: 100000},
+		{Time: ts.Add(24 * time.Hour), Value: 100100},
+		{Time: ts.Add(48 * time.Hour), Value: 100200},
+	}
+	result := &OrchestrationRunResult{PoolEquity: equity, Trades: nil}
+	enriched := EnrichResultJSON(result)
+	if enriched.WinRate != 0 {
+		t.Errorf("expected WinRate=0 with no trades, got %f", enriched.WinRate)
+	}
+	if enriched.ProfitFactor != 0 {
+		t.Errorf("expected ProfitFactor=0, got %f", enriched.ProfitFactor)
+	}
+	if len(enriched.DailyReturns) == 0 {
+		t.Error("expected daily returns from equity")
+	}
+}
+
+
 func TestOrchestrator_Run_PoolHaltsOnDrawdown(t *testing.T) {
 	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)
 	n := 5
