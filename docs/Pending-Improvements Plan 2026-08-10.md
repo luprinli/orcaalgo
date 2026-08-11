@@ -15,6 +15,9 @@
 | Sprint 3 — UX & Integration | 4 | 3 (+1 deferred) | ✓ Done |
 | Sprint 4 — Testing & Hardening | 5 | 3 (+2 deferred) | ✓ Done |
 | Sprint 5 — Deep Features | 4 | 2 (+1 documented, +1 deferred) | ✓ Done |
+| Sprint 6 — Deferred Items | 2 | 2 | ✓ Done |
+
+### Completed Items (20 of 20 — 100%)
 
 ### Completed Items (18 of 20)
 
@@ -68,31 +71,24 @@ AllocationPie receives { allocations, history? }
        └── Re-render Chart.js doughnut with new data
 ```
 
-### 2.2 P15 — BatchInferrer Parity (~3h, deferred as known issue)
+### 2.2 P15 — BatchInferrer Parity ✓ Implemented (d2e59c3)
 
-**Root cause**: `ProcessTickForAccount` at `live_engine.go:?` calls `metaLabeler.(*SubprocessPredictor).EvaluateSignal()` directly, bypassing `BatchInferrer`'s caching and threshold-based signal skipping. The backtest path uses `BatchInferrer` which accumulates features across bars and batches inference calls.
+**Root cause**: `ProcessTickForAccount` at `live_engine.go:257` used an unsafe type assertion `e.metaLabeler.(*ml.SubprocessPredictor).EvaluateSignal(features)` which bypassed `BatchInferrer`'s three-layer architecture (threshold skip → cache → inference).
 
-**Why this is deferred**:
-1. `BatchInferrer` operates on accumulated feature vectors across multiple bars — the live engine processes one tick at a time
-2. To wire through: buffer ticks → accumulate features → batch infer → process results. This changes the live engine's core event loop
-3. Already documented as AGENTS.md Known Issue #1: "Live engine bypasses BatchInferrer — full BatchInferrer parity is a future improvement"
-
-**Integration path (when implemented)**:
+**Implementation**:
 ```
-ProcessTickForAccount(tick):
-  feat := featureStore.Compute(tick)
-  batchInferrer.Add(feat)                    // buffer feature
-  if batchInferrer.ShouldFlush():
-    predictions := batchInferrer.Infer()     // batch predict
-    for _, pred := range predictions:
-      signal := evaluateSignal(pred)
-      pipeline.ProcessSignal(signal)
-  else:
-    signal := metaLabeler.EvaluateSignal(feat) // current direct path
-    pipeline.ProcessSignal(signal)
+LiveEngine struct: +batchInferrer *ml.BatchInferrer, +metaCfg ml.MetaLabelerConfig
+SetMetaLabeler(): now creates ml.NewBatchInferrer(predictor, cfg) — parity with backtest
+SetMetaLabelerConfig(cfg): new method for threshold/cache configuration
+ProcessTickForAccount: 18 lines → 5 lines (e.batchInferrer.Evaluate(features, sig.PWin))
 ```
 
-**This requires**: ML pipeline refactoring across `internal/ml/batch_inferrer.go`, `internal/engine/live_engine.go`, and `internal/engine/engine.go` (backtest parity test). Effort: ~3h. Not implemented in this cycle.
+**Benefits**:
+- Three-layer architecture active in both engines
+- No unsafe type assertion — any `ml.Predictor` implementation works
+- Unified accept/reject semantics
+- Safe zero-config fallback (batchInferrer=nil → accept all)
+- Zero regression: all 3 engine tests pass
 
 ---
 
@@ -100,9 +96,9 @@ ProcessTickForAccount(tick):
 
 | Step | Item | Effort | Status |
 |------|------|--------|--------|
-| **6.1** | P6 — Allocation timeline scrubber (3 sub-tasks) | 2h | **In Progress** |
-| **6.2** | P15 — BatchInferrer parity (documented, deferred) | — | Deferred |
+| **6.1** | P6 — Allocation timeline scrubber (3 sub-tasks) | 2h | ✓ Done (f6394d1) |
+| **6.2** | P15 — BatchInferrer parity (ML pipeline refactoring) | 3h | ✓ Done (d2e59c3) |
 
 ---
 
-*End of plan. 18/20 completed. P6 implemented below, P15 documented as known issue.*
+*End of plan. 20/20 completed — all pending improvements resolved.*
