@@ -203,8 +203,8 @@ These are **NEVER** permitted. Violations block PR merge.
 
 ### Known Issues
 
-1. **Live engine bypasses BatchInferrer** — `ProcessTickForAccount` calls `metaLabeler.(*SubprocessPredictor).EvaluateSignal()` directly, skipping BatchInferrer's caching and threshold skip. Backtest uses BatchInferrer with different accept/reject thresholds. Fixed unsafe type assertion in this revision; full BatchInferrer parity is a future improvement.
+1. **Live engine BatchInferrer parity resolved** — `ProcessTickForAccount` now routes through `batchInferrer.Evaluate()` (three-layer: threshold skip → cache → inference). Parity with backtest engine established in commit d2e59c3. Removed unsafe type assertion; any `ml.Predictor` implementation works.
 
-2. **`internal/ml/feature_store_persist.go`** — Zero callers. FeatureStore.Persist() and LoadFeatureStore() are implemented but never invoked. Intended for engine shutdown/restart state preservation. Wire into live engine lifecycle when ready.
+2. **`internal/ml/feature_store_persist.go`** — Now callable via `LiveEngine.PersistFeatureStore()` and `LoadFeatureStore()` methods. Wire into live engine lifecycle when ready (shutdown/startup hooks).
 
 3. **VIX Futures Carry uses spot VIX proxy** — No VIX futures data feed is ingested. Strategy uses `SetVIX()` with spot VIX as contango signal until futures data is available.
