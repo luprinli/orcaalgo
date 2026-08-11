@@ -4,6 +4,7 @@ import type { Strategy } from '../../types/api'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent } from '../../components/ui/card'
 import { Badge } from '../../components/ui/badge'
+import { STRATEGY_DISPLAY } from '../../data/constants'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table'
 
 interface InstancesTabProps {
@@ -13,16 +14,6 @@ interface InstancesTabProps {
   onDelete: (id: string) => void
   onClone: (id: string) => void
   onToggle: (id: string, current: boolean) => void
-}
-
-const STRATEGY_DISPLAY: Record<string, string> = {
-  grid: 'Grid Trading', mean_reversion: 'Mean Reversion', intraday_mr: 'Mean Reversion',
-  trend: 'Trend Following', trend_following: 'Trend Following',
-  breakout: 'ORB Breakout', opening_range_breakout: 'ORB Breakout',
-  scalp: 'Session Scalp', session_scalp: 'Session Scalp',
-  vol_arb: 'Vol Harvesting', stat_arb: 'Stat Arb',
-  ma_crossover: 'MA Crossover', rsi2: 'RSI2 Reversion',
-  donchian: 'Donchian Breakout', keltner: 'Keltner MACD', ichimoku: 'Ichimoku Cloud',
 }
 
 type InstanceRow = Strategy & { isLive: boolean }

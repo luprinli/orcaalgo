@@ -204,7 +204,7 @@ func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if crossDown {
@@ -223,7 +223,7 @@ func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

@@ -52,7 +52,7 @@ func NewGridRunner() *GridRunner {
 		TakeProfitPct:     0.5,
 		StopLossPct:       1.5,
 		openPositions:      make(map[int]*gridPosition),
-		Disabled:           true,
+		Disabled:           false,
 		AdjustByVolatility: false,
 		VolMaxSpacingMult:  2.0,
 		irVersion:          "qst-ir/0.4",
@@ -157,6 +157,7 @@ func (r *GridRunner) ParamDefs() []ParamDef {
 		{Name: "stop_loss_pct", Type: ParamContinuous, Default: 1.5, Min: 0.5, Max: 5.0, Step: 0.1, Group: "Exit", Description: "Stop-loss percentage from entry level"},
 		{Name: "max_open", Type: ParamInteger, Default: 10, Min: 1, Max: 10, Step: 1, Group: "Risk", Description: "Maximum number of simultaneously open grid positions"},
 		{Name: "position_scale", Type: ParamContinuous, Default: 1.0, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Sizing", Description: "Position size scale factor"},
+		{Name: "adjust_by_volatility", Type: ParamInteger, Default: 0, Min: 0, Max: 1, Step: 1, Group: "Grid", Description: "Dynamically scale grid spacing based on ATR/VIX (0=off, 1=on)"},
 	}
 }
 
@@ -292,7 +293,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 				StopPrice:  stopPrice,
 			}
 			r.openCount++
-			signal = &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100 * r.PositionScale}
+			signal = &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 		}
 	}
 
@@ -310,7 +311,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 				StopPrice:  stopPrice,
 			}
 			r.openCount++
-			signal = &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100 * r.PositionScale}
+			signal = &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 		}
 	}
 

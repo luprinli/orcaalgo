@@ -44,7 +44,7 @@ type VolHarvestingRunner struct {
 func NewVolHarvestingRunner() *VolHarvestingRunner {
 	return &VolHarvestingRunner{
 		BaseRunner:       NewBaseRunner(128),
-		VIXThreshold:     25.0,
+		VIXThreshold:       20.0,
 		MaxVega:          0.02,
 		StopATRMult:      2.0,
 		ProfitATRMult:    3.0,
@@ -100,7 +100,7 @@ func (r *VolHarvestingRunner) SetParams(params map[string]float64) {
 
 func (r *VolHarvestingRunner) ParamDefs() []ParamDef {
 	return []ParamDef{
-		{Name: "vix_threshold", Type: ParamContinuous, Default: 25.0, Min: 15, Max: 40, Step: 1.0, Group: "Entry", Description: "Minimum VIX level to enter short-vol positions"},
+		{Name: "vix_threshold", Type: ParamContinuous, Default: 20.0, Min: 15, Max: 40, Step: 1.0, Group: "Entry", Description: "Minimum VIX level to enter short-vol positions"},
 		{Name: "max_vega", Type: ParamContinuous, Default: 0.02, Min: 0.005, Max: 0.05, Step: 0.005, Group: "Sizing", Description: "Max notional exposure per trade as fraction of capital"},
 		{Name: "stop_atr_mult", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 4.0, Step: 0.5, Group: "Risk", Description: "ATR multiplier for stop-loss distance"},
 		{Name: "profit_atr_mult", Type: ParamContinuous, Default: 3.0, Min: 1.5, Max: 5.0, Step: 0.5, Group: "Risk", Description: "ATR multiplier for take-profit distance"},
@@ -171,7 +171,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if zScore >= r.MeanRevEntryZ {
@@ -182,7 +182,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

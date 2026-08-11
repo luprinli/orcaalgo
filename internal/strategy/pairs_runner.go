@@ -273,7 +273,7 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		r.EntryPrice = price
 		r.PositionOpen = true
 		r.CurrentSide = "BUY"
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if zScore >= r.EntryZ {
@@ -282,7 +282,7 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		r.EntryPrice = price
 		r.PositionOpen = true
 		r.CurrentSide = "SELL"
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

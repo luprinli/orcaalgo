@@ -1,6 +1,7 @@
 package db
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ type SeedData struct {
 	Candles          []CandleSeed
 	MarketTicks      []MarketTickSeed
 	RegimeLogs       []RegimeLogSeed
+	VIXLogs          []VIXLogSeed
 	TradeHistory     []TradeHistorySeed
 	BacktestResults  []BacktestResultSeed
 	UniverseConfigs  []UniverseConfigSeed
@@ -80,6 +82,7 @@ type CandleSeed struct {
 	Low      types.Price
 	Close    types.Price
 	Volume   float64
+	Timeframe string
 }
 
 type UniverseConfigSeed struct {
@@ -102,6 +105,12 @@ type RegimeLogSeed struct {
 	Symbol     string
 	HMMState   int8
 	Confidence float64
+}
+
+type VIXLogSeed struct {
+	Time      time.Time
+	VIXValue  float64
+	VIXChange float64
 }
 
 type TradeHistorySeed struct {
@@ -130,6 +139,44 @@ type BacktestResultSeed struct {
 func GenerateSeedData() *SeedData {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	candles := loadCandlesFromDataDir()
+	symbols := []SymbolSeed{
+		{Ticker: "EURUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "GBPUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "USDJPY", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.001, LotSize: 1000},
+		{Ticker: "USDCHF", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "AUDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "USDCAD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "NZDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
+		{Ticker: "US30", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
+		{Ticker: "SPX500", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
+		{Ticker: "NAS100", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
+		{Ticker: "UK100", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
+		{Ticker: "GER40", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
+		{Ticker: "JPN225", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
+		{Ticker: "XAUUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
+		{Ticker: "XAGUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
+		{Ticker: "BTCUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
+		{Ticker: "ETHUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
+		{Ticker: "SPY", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "QQQ", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "AAPL", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "MSFT", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "GOOGL", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "META", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "AMZN", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "NVDA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "TSLA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "VOO", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "DIA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "IWM", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "GLD", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "USO", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+		{Ticker: "CL", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
+		{Ticker: "NQ", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
+		{Ticker: "ES", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
+		{Ticker: "TLT", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
+	}
 
 	return &SeedData{
 		AdminUsers: []AdminUserSeed{
@@ -148,47 +195,30 @@ func GenerateSeedData() *SeedData {
 			{Name: "Anthropic Claude", Provider: "anthropic", Model: "claude-sonnet-4-20250514"},
 		},
 		Strategies: []StrategySeed{
-			{Name: "Intraday Mean Reversion", Type: "mean_reversion", Parameters: map[string]interface{}{"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold": 60}, Enabled: true},
-			{Name: "Grid Trading", Type: "grid", Parameters: map[string]interface{}{"grid_levels": 5, "position_scale": 1.0, "max_open": 10}, Enabled: true},
-			{Name: "Opening Range Breakout", Type: "breakout", Parameters: map[string]interface{}{"range_minutes": 5, "volume_mult": 1.5, "atr_stop": 2.0}, Enabled: true},
-			{Name: "Trend Following", Type: "trend", Parameters: map[string]interface{}{"ema_fast": 20, "ema_slow": 50, "adx_threshold": 25}, Enabled: true},
-			{Name: "Session Scalping", Type: "scalp", Parameters: map[string]interface{}{"range_minutes": 5, "volume_mult": 1.5, "atr_period": 14, "take_profit_atr_mult": 1.5, "stop_loss_atr_mult": 0.75, "time_exit_minutes": 90}, Enabled: true},
-			{Name: "Pairs Trading", Type: "stat_arb", Parameters: map[string]interface{}{"pair": []string{"SPY", "QQQ"}, "z_entry": 2.0, "z_exit": 0.0}, Enabled: true},
-			{Name: "Volatility Harvesting", Type: "vol_arb", Parameters: map[string]interface{}{"vix_threshold": 25, "delta_hedge": true, "max_vega": 500}, Enabled: true},
+			{Name: "Intraday Mean Reversion", Type: "intraday_mr", Parameters: map[string]interface{}{"lookback": 20, "entry_z": 2.0, "exit_z": 0.5, "max_hold": 60}, Enabled: true},
+			{Name: "Grid Trading", Type: "grid_trading", Parameters: map[string]interface{}{"grid_levels": 5, "position_scale": 1.0, "max_open": 10}, Enabled: false},
+			{Name: "Opening Range Breakout (5m)", Type: "opening_range_breakout", Parameters: map[string]interface{}{"range_minutes": 5, "volume_mult": 1.5, "atr_stop": 2.0}, Enabled: true},
+			{Name: "Trend Following", Type: "trend_following", Parameters: map[string]interface{}{"ema_fast": 20, "ema_slow": 50, "adx_threshold": 25}, Enabled: true},
+			{Name: "Session Scalping", Type: "session_scalp", Parameters: map[string]interface{}{"range_minutes": 5, "volume_mult": 1.5, "atr_period": 14}, Enabled: true},
+			{Name: "Pairs Trading", Type: "pairs_trading", Parameters: map[string]interface{}{"pair": []string{"SPY", "QQQ"}, "z_entry": 2.0, "z_exit": 0.0}, Enabled: true},
+			{Name: "Volatility Harvesting", Type: "volatility_harvesting", Parameters: map[string]interface{}{"vix_threshold": 25, "delta_hedge": true, "max_vega": 500}, Enabled: true},
+			{Name: "Dragon Capital Trend", Type: "dragon_trend", Parameters: map[string]interface{}{"ema_periods": []int{8, 21, 50, 200}, "min_aligned": 3, "adx_threshold": 20}, Enabled: true},
+			{Name: "VWAP Mean Reversion", Type: "vwap_mr", Parameters: map[string]interface{}{"lookback": 20, "entry_z": 1.5, "exit_z": 0.5, "mode": "vwap"}, Enabled: true},
+			{Name: "15-Minute ORB", Type: "orb_15m", Parameters: map[string]interface{}{"range_minutes": 15, "volume_mult": 1.5}, Enabled: true},
+			{Name: "Volume-Weighted Scalp", Type: "volume_scalp", Parameters: map[string]interface{}{"range_minutes": 5, "volume_multiplier": 2.0}, Enabled: true},
+			{Name: "VIX Futures Carry", Type: "vix_futures_carry", Parameters: map[string]interface{}{"contango_threshold": 22, "fade_entry_z": 1.5}, Enabled: true},
+			{Name: "Volatility-Adjusted Grid", Type: "vol_grid", Parameters: map[string]interface{}{"grid_levels": 5, "adjust_by_volatility": true}, Enabled: false},
+			{Name: "MA Crossover", Type: "ma_crossover", Parameters: map[string]interface{}{"fast_period": 10, "slow_period": 30}, Enabled: true},
+			{Name: "RSI2 Reversion", Type: "rsi2_reversion", Parameters: map[string]interface{}{"rsi_period": 2, "entry_threshold": 10, "exit_threshold": 50}, Enabled: true},
+			{Name: "Donchian Breakout", Type: "donchian_breakout", Parameters: map[string]interface{}{"channel_length": 20}, Enabled: true},
+			{Name: "Keltner MACD", Type: "keltner_macd", Parameters: map[string]interface{}{"keltner_period": 20, "atr_multiplier": 1.5}, Enabled: true},
+			{Name: "Ichimoku Cloud", Type: "ichimoku_cloud", Parameters: map[string]interface{}{"tenkan_period": 9, "kijun_period": 26, "senkou_b_period": 52}, Enabled: true},
 		},
-		Symbols: []SymbolSeed{
-			{Ticker: "EURUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "GBPUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "USDJPY", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.001, LotSize: 1000},
-			{Ticker: "USDCHF", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "AUDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "USDCAD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "NZDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-			{Ticker: "US30", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-			{Ticker: "SPX500", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-			{Ticker: "NAS100", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-			{Ticker: "UK100", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-			{Ticker: "GER40", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-			{Ticker: "JPN225", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-			{Ticker: "XAUUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
-			{Ticker: "XAGUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
-			{Ticker: "BTCUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
-			{Ticker: "ETHUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
-		},
-		Candles:       loadCandlesFromDataDir(),
+		Symbols:       symbols,
+		Candles:       append(candles, generateSyntheticCandles(today, symbols)...),
 		MarketTicks:   nil,
-		RegimeLogs: []RegimeLogSeed{
-			{Time: today.AddDate(0, 0, -30), Symbol: "EURUSD", HMMState: 0, Confidence: 0.85},
-			{Time: today.AddDate(0, 0, -25), Symbol: "EURUSD", HMMState: 1, Confidence: 0.72},
-			{Time: today.AddDate(0, 0, -20), Symbol: "EURUSD", HMMState: 0, Confidence: 0.91},
-			{Time: today.AddDate(0, 0, -15), Symbol: "EURUSD", HMMState: 1, Confidence: 0.68},
-			{Time: today.AddDate(0, 0, -10), Symbol: "EURUSD", HMMState: 2, Confidence: 0.55},
-			{Time: today.AddDate(0, 0, -8), Symbol: "EURUSD", HMMState: 0, Confidence: 0.88},
-			{Time: today.AddDate(0, 0, -5), Symbol: "EURUSD", HMMState: 1, Confidence: 0.79},
-			{Time: today.AddDate(0, 0, -3), Symbol: "EURUSD", HMMState: 0, Confidence: 0.92},
-			{Time: today.AddDate(0, 0, -1), Symbol: "EURUSD", HMMState: 1, Confidence: 0.64},
-			{Time: today, Symbol: "EURUSD", HMMState: 0, Confidence: 0.87},
-		},
+		RegimeLogs:    generateRegimeLogs(today, symbols),
+		VIXLogs:       generateVIXLogs(today, candles),
 		TradeHistory: nil,
 		BacktestResults: nil,
 		UniverseConfigs: []UniverseConfigSeed{
@@ -226,8 +256,21 @@ func generateRecentTrades(today time.Time) []TradeHistorySeed {
 	return nil
 }
 
+func resolveDataDir() string {
+	if root := os.Getenv("ORCA_PROJECT_ROOT"); root != "" {
+		return filepath.Join(root, "data", "daily", "world", "stooq stocks indices")
+	}
+	wd, _ := os.Getwd()
+	for dir := wd; dir != "" && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "kilo.json")); err == nil {
+			return filepath.Join(dir, "data", "daily", "world", "stooq stocks indices")
+		}
+	}
+	return filepath.Join("data", "daily", "world", "stooq stocks indices")
+}
+
 func loadCandlesFromDataDir() []CandleSeed {
-	dataDir := filepath.Join("data", "daily", "world", "stooq stocks indices")
+	dataDir := resolveDataDir()
 	entries, err := os.ReadDir(dataDir)
 	if err != nil {
 		return nil
@@ -283,7 +326,7 @@ func loadCandlesFromDataDir() []CandleSeed {
 			}
 			allCandles = append(allCandles, CandleSeed{
 				Time:   time.Date(y, time.Month(m), d, 16, 0, 0, 0, time.UTC),
-				Symbol: mappedSym,
+				Symbol: mappedSym, Timeframe: "1d",
 				Open:   types.FromFloat64(open),
 				High:   types.FromFloat64(high),
 				Low:    types.FromFloat64(low),
@@ -293,4 +336,252 @@ func loadCandlesFromDataDir() []CandleSeed {
 		}
 	}
 	return allCandles
+}
+
+func generateVIXLogs(today time.Time, candles []CandleSeed) []VIXLogSeed {
+	type dayRange struct {
+		sum   float64
+		count int
+	}
+	dailyVol := make(map[string]*dayRange)
+	for _, c := range candles {
+		if c.High.IsZero() || c.Low.IsZero() || c.Close.IsZero() {
+			continue
+		}
+		high := c.High.Float64()
+		low := c.Low.Float64()
+		close_ := c.Close.Float64()
+		if close_ == 0 || high <= low {
+			continue
+		}
+		key := c.Time.Format("2006-01-02")
+		if _, ok := dailyVol[key]; !ok {
+			dailyVol[key] = &dayRange{}
+		}
+		dailyVol[key].sum += (high - low) / close_
+		dailyVol[key].count++
+	}
+
+	type dayVIX struct {
+		time time.Time
+		raw  float64
+	}
+	var rawDays []dayVIX
+	start := today.AddDate(0, 0, -400)
+	for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
+		key := d.Format("2006-01-02")
+		v := 12.0
+		if dv, ok := dailyVol[key]; ok && dv.count > 0 {
+			avgRange := (dv.sum / float64(dv.count)) * 100.0
+			v = 10.0 + avgRange*15.0
+		}
+		sawtooth := float64((int(d.Unix()/86400)*7+13)%100-50) / 50.0 * 1.5
+		v += sawtooth
+		if v > 55.0 {
+			v = 55.0
+		}
+		if v < 10.0 {
+			v = 10.0
+		}
+		rawDays = append(rawDays, dayVIX{time: d, raw: v})
+	}
+
+	// VIX spike injection: add 6 synthetic volatility event windows per year.
+	// Each event ramps up over 3-5 days, peaks at VIX 30-45 for 2-3 days,
+	// and ramps down over 3-5 days. This ensures VIX-dependent strategies
+	// have sufficient entry opportunities.
+	spikeEvents := []struct {
+		startDay  int
+		duration  int
+		peakVIX   float64
+	}{
+		{60, 10, 38.0}, {130, 12, 42.0}, {190, 8, 35.0},
+		{250, 14, 45.0}, {310, 10, 32.0}, {360, 11, 40.0},
+	}
+	for _, ev := range spikeEvents {
+		for offset := 0; offset < ev.duration && ev.startDay+offset < len(rawDays); offset++ {
+			mid := float64(ev.duration) / 2.0
+			pos := float64(offset)
+			var spikeMult float64
+			if pos < mid-1.5 {
+				spikeMult = (pos + 1) / (mid - 1.5)
+			} else if pos > mid+1.5 {
+				spikeMult = 1.0 - (pos-mid-1.5)/(float64(ev.duration)-mid-1.5)
+			} else {
+				spikeMult = 1.0
+			}
+			if spikeMult > 1.0 {
+				spikeMult = 1.0
+			}
+			if spikeMult < 0 {
+				spikeMult = 0
+			}
+			extra := (ev.peakVIX - rawDays[ev.startDay+offset].raw) * spikeMult
+			if extra < 0 {
+				extra = 0
+			}
+			rawDays[ev.startDay+offset].raw += extra
+		}
+	}
+
+	logs := make([]VIXLogSeed, 0, len(rawDays))
+	var smoothed []float64
+	window := 5
+	for i := range rawDays {
+		sum := 0.0
+		n := 0
+		for j := i - window; j <= i+window; j++ {
+			if j >= 0 && j < len(rawDays) {
+				sum += rawDays[j].raw
+				n++
+			}
+		}
+		smoothed = append(smoothed, sum/float64(n))
+	}
+
+	prev := smoothed[0]
+	for i, v := range smoothed {
+		change := v - prev
+		logs = append(logs, VIXLogSeed{
+			Time:      rawDays[i].time,
+			VIXValue:  float64(int(v*100)) / 100,
+			VIXChange: float64(int(change*100)) / 100,
+		})
+		prev = v
+	}
+	return logs
+}
+
+func generateRegimeLogs(today time.Time, symbols []SymbolSeed) []RegimeLogSeed {
+	var logs []RegimeLogSeed
+	start := today.AddDate(0, 0, -400)
+	seedByDay := make(map[int64][4]float64)
+	for i := int64(0); i < 400; i++ {
+		day := start.AddDate(0, 0, int(i))
+		key := day.Unix() / 86400
+		r := float64((key*13+int64(len(symbols))*7)%100) / 100.0
+		var state int8
+		var conf float64
+		switch {
+		case r < 0.50:
+			state, conf = 0, 0.75+r*0.2
+		case r < 0.85:
+			state, conf = 1, 0.65+r*0.1
+		case r < 0.95:
+			state, conf = 2, 0.55+r*0.1
+		default:
+			state, conf = 3, 0.40+r*0.2
+		}
+		if conf > 1.0 {
+			conf = 1.0
+		}
+		seedByDay[key] = [4]float64{float64(state), conf, float64(state), conf}
+		_ = seedByDay
+		for _, sym := range symbols {
+			r2 := float64((key*17+int64(len(sym.Ticker))*31+int64(sym.Ticker[0])*7)%100) / 100.0
+			var s int8
+			var c float64
+			switch {
+			case r2 < 0.50:
+				s, c = 0, 0.75+r2*0.2
+			case r2 < 0.85:
+				s, c = 1, 0.65+r2*0.1
+			case r2 < 0.95:
+				s, c = 2, 0.55+r2*0.1
+			default:
+				s, c = 3, 0.40+r2*0.2
+			}
+			if c > 1.0 {
+				c = 1.0
+			}
+			logs = append(logs, RegimeLogSeed{
+				Time: day, Symbol: sym.Ticker, HMMState: s, Confidence: c,
+			})
+		}
+	}
+	return logs
+}
+
+func generateSyntheticCandles(today time.Time, symbols []SymbolSeed) []CandleSeed {
+	basePrices := map[string]float64{
+		"SPY": 580, "QQQ": 480, "AAPL": 220, "MSFT": 440, "GOOGL": 180, "META": 560, "AMZN": 220,
+		"NVDA": 120, "TSLA": 250, "VOO": 530, "DIA": 420, "IWM": 210, "GLD": 220, "USO": 72,
+		"CL": 70, "NQ": 21000, "ES": 6000, "TLT": 88,
+		"EURUSD": 1.08, "GBPUSD": 1.28, "USDJPY": 148, "USDCHF": 0.88, "AUDUSD": 0.66,
+		"USDCAD": 1.36, "NZDUSD": 0.60, "XAUUSD": 2350, "XAGUSD": 28,
+		"BTCUSD": 68000, "ETHUSD": 3400, "US30": 41000, "SPX500": 5900,
+		"NAS100": 21000, "UK100": 8300, "GER40": 21000, "JPN225": 41000,
+	}
+	volMap := map[string]float64{
+		"SPY": 0.008, "QQQ": 0.012, "AAPL": 0.014, "MSFT": 0.011, "GOOGL": 0.013, "META": 0.016,
+		"AMZN": 0.015, "NVDA": 0.025, "TSLA": 0.028, "VOO": 0.008, "DIA": 0.007, "IWM": 0.012,
+		"GLD": 0.009, "USO": 0.015, "CL": 0.018, "NQ": 0.014, "ES": 0.009, "TLT": 0.008,
+		"EURUSD": 0.005, "GBPUSD": 0.006, "USDJPY": 0.007, "USDCHF": 0.005, "AUDUSD": 0.006,
+		"USDCAD": 0.005, "NZDUSD": 0.007, "XAUUSD": 0.010, "XAGUSD": 0.016,
+		"BTCUSD": 0.030, "ETHUSD": 0.035, "US30": 0.007, "SPX500": 0.008,
+		"NAS100": 0.012, "UK100": 0.008, "GER40": 0.010, "JPN225": 0.009,
+	}
+	var out []CandleSeed
+	start := today.AddDate(0, 0, -400)
+	for _, sym := range symbols {
+		base, ok := basePrices[sym.Ticker]
+		if !ok { base = 100 }
+		vol, ok := volMap[sym.Ticker]
+		if !ok { vol = 0.01 }
+		price := base * (0.8 + 0.4*float64(sym.Ticker[0]%97)/97.0)
+		for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
+			if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday { continue }
+			drift := 0.0001
+			noise := (float64(int(d.Unix()/86400*int64(len(sym.Ticker))%200)-100) / 100.0) * vol
+			price *= 1.0 + drift + noise
+			high := price * (1.0 + vol*0.5)
+			low := price * (1.0 - vol*0.5)
+			open := low + (high-low)*(float64(int(d.Unix()/3600)%100)/100.0)
+			closeP := price
+			out = append(out, CandleSeed{
+				Symbol: sym.Ticker, Time: d, Timeframe: "1d",
+				Open: types.PriceFromFloat(float64(int(open*100)) / 100),
+				High: types.PriceFromFloat(float64(int(high*100)) / 100),
+				Low:  types.PriceFromFloat(float64(int(low*100)) / 100),
+				Close: types.PriceFromFloat(float64(int(closeP*100)) / 100),
+				Volume: 1000000 + float64(int(d.Unix()%10000))*100,
+			})
+
+			// Generate intraday sub-bars from the daily OHLC.
+			subBarCounts := map[string]int{"4h": 6, "1h": 24}
+			for tf, n := range subBarCounts {
+				step := closeP - open
+				dailyVol := vol / math.Sqrt(float64(n))
+				prev := open
+				barHi := prev
+				barLo := prev
+				for j := 0; j < n; j++ {
+					t := d.Add(time.Duration(j+1) * (24 * time.Hour / time.Duration(n)))
+					if t.Equal(d) { t = t.Add(time.Second) }
+					noise := (float64(int((d.Unix()+int64(j))*7)%200) - 100) / 100.0 * dailyVol
+					subClose := prev + step/float64(n) + noise*prev
+					if subClose > high { subClose = high*0.995 }
+					if subClose < low { subClose = low*1.005 }
+					subOpen := prev
+					subHigh := math.Max(subOpen, subClose) * (1.0 + dailyVol*0.3)
+					subLow := math.Min(subOpen, subClose) * (1.0 - dailyVol*0.3)
+					if subHigh > high { subHigh = high }
+					if subLow < low { subLow = low }
+					if subHigh < barHi { barHi = subHigh }
+					if subLow > barLo { barLo = subLow }
+					out = append(out, CandleSeed{
+						Symbol: sym.Ticker, Time: t, Timeframe: tf,
+						Open: types.PriceFromFloat(float64(int(subOpen*100)) / 100),
+						High: types.PriceFromFloat(float64(int(subHigh*100)) / 100),
+						Low:  types.PriceFromFloat(float64(int(subLow*100)) / 100),
+						Close: types.PriceFromFloat(float64(int(subClose*100)) / 100),
+						Volume: (1000000 + float64(int(d.Unix()%10000))*100) / float64(n),
+					})
+					prev = subClose
+				}
+				_ = barHi; _ = barLo
+			}
+		}
+	}
+	return out
 }

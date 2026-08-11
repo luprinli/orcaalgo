@@ -172,7 +172,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 			EntryBar:   1,
 		}
 		sr.barsHeld = 1
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if z > sr.EntryZ {
@@ -186,7 +186,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 			EntryBar:   1,
 		}
 		sr.barsHeld = 1
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

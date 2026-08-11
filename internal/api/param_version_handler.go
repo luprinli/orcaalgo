@@ -24,7 +24,7 @@ func NewParamVersionHandler(repo *db.Repository) *ParamVersionHandler {
 // @Success 200 {array} db.ParamVersion
 // @Router /api/v1/strategies/{strategy_id}/params [get]
 func (h *ParamVersionHandler) List(c *gin.Context) {
-	strategyID := c.Param("strategy_id")
+	strategyID := c.Param("id")
 	if strategyID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "strategy_id required"})
 		return
@@ -49,7 +49,7 @@ func (h *ParamVersionHandler) List(c *gin.Context) {
 // @Success 200 {object} db.ParamVersion
 // @Router /api/v1/strategies/{strategy_id}/params/active [get]
 func (h *ParamVersionHandler) GetActive(c *gin.Context) {
-	strategyID := c.Param("strategy_id")
+	strategyID := c.Param("id")
 	if strategyID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "strategy_id required"})
 		return
@@ -77,7 +77,7 @@ func (h *ParamVersionHandler) GetActive(c *gin.Context) {
 // @Success 200 {object} object
 // @Router /api/v1/strategies/{strategy_id}/params/activate [post]
 func (h *ParamVersionHandler) Activate(c *gin.Context) {
-	strategyID := c.Param("strategy_id")
+	strategyID := c.Param("id")
 	var req struct {
 		VersionTag string `json:"version_tag" binding:"required"`
 	}
@@ -100,7 +100,7 @@ func (h *ParamVersionHandler) Activate(c *gin.Context) {
 // @Success 200 {object} object
 // @Router /api/v1/strategies/{strategy_id}/params/deactivate [post]
 func (h *ParamVersionHandler) Deactivate(c *gin.Context) {
-	strategyID := c.Param("strategy_id")
+	strategyID := c.Param("id")
 	if err := h.repo.DeactivateAllParams(c.Request.Context(), strategyID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -109,8 +109,8 @@ func (h *ParamVersionHandler) Deactivate(c *gin.Context) {
 }
 
 func (h *ParamVersionHandler) RegisterRoutes(r *gin.RouterGroup) {
-	r.GET("/strategies/:strategy_id/params", h.List)
-	r.GET("/strategies/:strategy_id/params/active", h.GetActive)
-	r.POST("/strategies/:strategy_id/params/activate", h.Activate)
-	r.POST("/strategies/:strategy_id/params/deactivate", h.Deactivate)
+	r.GET("/strategies/:id/params", h.List)
+	r.GET("/strategies/:id/params/active", h.GetActive)
+	r.POST("/strategies/:id/params/activate", h.Activate)
+	r.POST("/strategies/:id/params/deactivate", h.Deactivate)
 }

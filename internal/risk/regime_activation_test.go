@@ -38,7 +38,7 @@ func TestRegimeActivationMatrix_DefaultMapping(t *testing.T) {
 		{"mean_reversion", 3, false, 0},
 
 		// ORB: Trending, HighVol
-		{"opening_range_breakout", 0, false, 0},
+		{"opening_range_breakout", 0, true, 0.10},
 		{"opening_range_breakout", 1, true, 0.25},
 		{"opening_range_breakout", 2, true, 0.15},
 		{"opening_range_breakout", 3, false, 0},

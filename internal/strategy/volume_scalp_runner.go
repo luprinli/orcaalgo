@@ -49,8 +49,8 @@ func NewVolumeScalpRunner() *VolumeScalpRunner {
 		VolumeMultiplier:  2.0,
 		AtrPeriod:         14,
 		TakeProfitAtrMult: 1.5,
-		StopLossAtrMult:   0.75,
-		TimeExitMinutes:   90,
+		StopLossAtrMult:   1.0,
+		TimeExitMinutes:   60,
 		MaxTradesPerDay:   10,
 		openingLow:        math.MaxFloat64,
 		volumeBuffer:      make([]float64, 128),
@@ -83,7 +83,7 @@ func (r *VolumeScalpRunner) ParamDefs() []ParamDef {
 	return []ParamDef{
 		{Name: "volume_multiplier", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 4.0, Step: 0.5, Group: "Filter", Description: "Volume must exceed avg × this for entry"},
 		{Name: "take_profit_atr_mult", Type: ParamContinuous, Default: 1.5, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Exit", Description: "ATR multiplier for take-profit"},
-		{Name: "stop_loss_atr_mult", Type: ParamContinuous, Default: 0.75, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Exit", Description: "ATR multiplier for stop-loss"},
+		{Name: "stop_loss_atr_mult", Type: ParamContinuous, Default: 1.0, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Exit", Description: "ATR multiplier for stop-loss"},
 		{Name: "max_trades_per_day", Type: ParamInteger, Default: 10, Min: 1, Max: 30, Step: 1, Group: "Risk", Description: "Maximum trades per session"},
 	}
 }
@@ -175,7 +175,7 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	breakoutHigh := r.openingHigh * (1.0 + entryBuf)
 	breakoutLow := r.openingLow * (1.0 - entryBuf)
 
-	qty := 100.0
+	qty := 1.0
 	if candle.Close.Float64() >= breakoutHigh {
 		stopPrice := candle.Close.Float64() - atr*r.StopLossAtrMult
 		profitPrice := candle.Close.Float64() + atr*r.TakeProfitAtrMult

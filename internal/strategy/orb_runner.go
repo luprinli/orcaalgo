@@ -31,7 +31,7 @@ func NewOrbRunner() *OrbRunner {
 		AtrMultiplier:    2.0,
 		TargetMultiplier: 2.0,
 		CloseExitMinutes: 390,
-		MinRangePct:      0.3,
+		MinRangePct:      0.1,
 		openingLow:       math.MaxFloat64,
 	}
 }
@@ -87,7 +87,7 @@ func (r *OrbRunner) ParamDefs() []ParamDef {
 }
 
 func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 0 || regime == 3 {
+	if regime == 3 {
 		return nil
 	}
 
@@ -158,11 +158,11 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if candle.Close.Float64() >= r.openingHigh*(1.0+bufferPct) {
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-stopDist), types.PriceFromFloat(candle.Close.Float64()+profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 	if candle.Close.Float64() <= r.openingLow*(1.0-bufferPct) {
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+stopDist), types.PriceFromFloat(candle.Close.Float64()-profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

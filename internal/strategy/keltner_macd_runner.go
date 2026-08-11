@@ -96,10 +96,9 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 				r.peakPrice = price
 			}
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - stopDist)
-			middleRevert := price.Float64() <= middleKC
 			macdFlip := r.MacdRequirement && !macdBullish
 
-			if sc.IsStopLossHit(price, trailingStop, "BUY") || middleRevert || macdFlip {
+			if sc.IsStopLossHit(price, trailingStop, "BUY") || macdFlip {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
 			}
@@ -108,10 +107,9 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 				r.peakPrice = price
 			}
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + stopDist)
-			middleRevert := price.Float64() >= middleKC
 			macdFlip := r.MacdRequirement && macdBullish
 
-			if sc.IsStopLossHit(price, trailingStop, "SELL") || middleRevert || macdFlip {
+			if sc.IsStopLossHit(price, trailingStop, "SELL") || macdFlip {
 				r.ClosePosition()
 				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
 			}
@@ -127,7 +125,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		}
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if price.Float64() < lowerKC {
@@ -136,7 +134,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		}
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

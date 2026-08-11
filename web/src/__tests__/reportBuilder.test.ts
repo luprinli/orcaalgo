@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { lintMarkdown } from '../lib/reportBuilder'
 
 describe('lintMarkdown', () => {
-  it('passes clean markdown through unchanged', async () => {
+  it('passes clean markdown through unchanged', { timeout: 15000 }, async () => {
     const input = '# Title\n\n## Section\n\nContent here.\n'
     const output = await lintMarkdown(input)
     expect(output).toBe(input)

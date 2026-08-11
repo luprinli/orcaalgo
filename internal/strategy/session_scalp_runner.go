@@ -44,8 +44,8 @@ func NewSessionScalpRunner() *SessionScalpRunner {
 		VolumeMultiplier:  1.5,
 		AtrPeriod:         14,
 		TakeProfitAtrMult: 1.5,
-		StopLossAtrMult:   0.75,
-		TimeExitMinutes:   90,
+		StopLossAtrMult:   1.0,
+		TimeExitMinutes:   60,
 		TimezoneOffset:    0,
 		MaxTradesPerDay:   10,
 		openingLow:        math.MaxFloat64,
@@ -115,8 +115,8 @@ func (r *SessionScalpRunner) ParamDefs() []ParamDef {
 		{Name: "volume_multiplier", Type: ParamContinuous, Default: 1.5, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Filter", Description: "Volume confirmation multiplier (current vol > avg_vol * multiplier)"},
 		{Name: "atr_period", Type: ParamInteger, Default: 14, Min: 7, Max: 28, Step: 7, Group: "Risk", Description: "ATR lookback period for stop/target calculation"},
 		{Name: "take_profit_atr_mult", Type: ParamContinuous, Default: 1.5, Min: 1.0, Max: 4.0, Step: 0.5, Group: "Exit", Description: "Take-profit as multiple of ATR"},
-		{Name: "stop_loss_atr_mult", Type: ParamContinuous, Default: 0.75, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Risk", Description: "Stop-loss as multiple of ATR"},
-		{Name: "time_exit_minutes", Type: ParamInteger, Default: 90, Min: 15, Max: 180, Step: 15, Group: "Exit", Description: "Minutes after entry to force-close position"},
+		{Name: "stop_loss_atr_mult", Type: ParamContinuous, Default: 1.0, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Risk", Description: "Stop-loss as multiple of ATR"},
+		{Name: "time_exit_minutes", Type: ParamInteger, Default: 60, Min: 15, Max: 180, Step: 15, Group: "Exit", Description: "Minutes after entry to force-close position"},
 		{Name: "timezone_offset", Type: ParamInteger, Default: 0, Min: -12, Max: 14, Step: 1, Group: "Session", Description: "UTC offset in hours for session window (ET = -4/-5)"},
 	}
 }
@@ -221,7 +221,7 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	breakoutHigh := r.openingHigh * (1.0 + bufferPct)
 	breakoutLow := r.openingLow * (1.0 - bufferPct)
 
-	qty := 100.0
+	qty := 1.0
 	if regime == 2 {
 		qty *= 0.50
 	}

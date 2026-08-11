@@ -129,8 +129,8 @@ func GlobalRegistry() *Registry {
 			"trend":                  func() Strategy { return NewTrendRunner() },
 			"session_scalp":          func() Strategy { return NewSessionScalpRunner() },
 			"scalp":                  func() Strategy { return NewSessionScalpRunner() },
-			"mean_reversion":         func() Strategy { return NewMeanReversionRunner(20, 2.0, 0.3, 200) },
-			"intraday_mr":            func() Strategy { return NewMeanReversionRunner(20, 2.0, 0.3, 200) },
+			"mean_reversion":         func() Strategy { return NewMeanReversionRunner(20, 1.25, 0.5, 200) },
+			"intraday_mr":            func() Strategy { return NewMeanReversionRunner(20, 1.25, 0.5, 200) },
 			"ma_crossover":           func() Strategy { return NewMACrossoverRunner() },
 			"macd_rsi":               func() Strategy { return NewMACrossoverRunner() },
 			"rsi2_reversion":         func() Strategy { return NewRSI2MeanReversionRunner() },
@@ -150,9 +150,8 @@ func GlobalRegistry() *Registry {
 				Lookback: 20, EntryZ: 1.5, ExitZ: 0.5, MaxHold: 40, TrendPeriod: 100, Mode: "vwap",
 				closeHistory: make([]float64, 220), volumeHistory: make([]float64, 220),
 			}},
-			"volume_scalp":           func() Strategy { return NewVolumeScalpRunner() },
-			"vix_futures_carry":      func() Strategy { return NewVIXFuturesCarryRunner() },
-			"vol_grid":                func() Strategy { r := NewGridRunner(); r.Disabled = false; r.AdjustByVolatility = true; return r },
+			"volume_scalp":      func() Strategy { return NewVolumeScalpRunner() },
+			"vix_futures_carry": func() Strategy { return NewVIXFuturesCarryRunner() },
 		}
 		for name, fn := range factories {
 			globalReg.factories[name] = fn

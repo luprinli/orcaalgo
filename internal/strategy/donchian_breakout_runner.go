@@ -23,7 +23,7 @@ func NewDonchianBreakoutRunner() *DonchianBreakoutRunner {
 		EntryBufferPct: 0.05,
 		AtrPeriod:      14,
 		AtrMultiplier:  2.0,
-		MinRangePct:    0.2,
+		MinRangePct:    0.5,
 	}
 }
 
@@ -139,13 +139,13 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if price.Float64() >= upperDC*(1.0+entryBuffer) {
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if price.Float64() <= lowerDC*(1.0-entryBuffer) {
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

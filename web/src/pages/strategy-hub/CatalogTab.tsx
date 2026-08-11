@@ -5,6 +5,7 @@ import { strategies, backtests } from '../../api/client'
 import { Button } from '../../components/ui/button'
 import { Card, CardContent } from '../../components/ui/card'
 import { Badge } from '../../components/ui/badge'
+import { STRATEGY_DISPLAY } from '../../data/constants'
 
 interface CatalogTabProps {
   dbList: Strategy[]
@@ -22,16 +23,6 @@ const STYLE_COLORS: Record<string, string> = {
   scalp: 'from-purple-500/10 to-purple-950/20 border-purple-500/20',
   grid: 'from-green-500/10 to-green-950/20 border-green-500/20',
   volatility: 'from-cyan-500/10 to-cyan-950/20 border-cyan-500/20',
-}
-
-const STRATEGY_DISPLAY: Record<string, string> = {
-  grid: 'Grid Trading', mean_reversion: 'Mean Reversion', intraday_mr: 'Mean Reversion',
-  trend: 'Trend Following', trend_following: 'Trend Following',
-  breakout: 'ORB Breakout', opening_range_breakout: 'ORB Breakout',
-  scalp: 'Session Scalp', session_scalp: 'Session Scalp',
-  vol_arb: 'Vol Harvesting', stat_arb: 'Stat Arb',
-  ma_crossover: 'MA Crossover', rsi2: 'RSI2 Reversion',
-  donchian: 'Donchian Breakout', keltner: 'Keltner MACD', ichimoku: 'Ichimoku Cloud',
 }
 
 type TypeGroup = {

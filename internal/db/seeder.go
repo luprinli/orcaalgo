@@ -1,10 +1,12 @@
 package db
 
 import (
-"encoding/json"
 	"context"
+	"encoding/json"
 	"fmt"
-"log"
+	"log"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type Seeder struct {
@@ -26,7 +28,23 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 			var candleCount int
 			s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM candles").Scan(&candleCount)
 			if candleCount > 0 {
-				log.Printf("seeder: data already exists (%d providers, %d candles). Use force=true to re-seed.", count, candleCount)
+				shouldReturn := false
+				var vixCount int
+				if err := s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vix_logs").Scan(&vixCount); err == nil && vixCount == 0 {
+					log.Printf("seeder: data exists but vix_logs empty — seeding %d VIX rows", len(seed.VIXLogs))
+					if err := s.seedVIXLogs(ctx, seed.VIXLogs); err != nil {
+						return fmt.Errorf("vix logs: %w", err)
+					}
+				}
+				var regimeCount int
+				if err := s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM regime_logs").Scan(&regimeCount); err == nil && regimeCount < 100 {
+					log.Printf("seeder: regime_logs sparse (%d rows) — seeding %d regime rows", regimeCount, len(seed.RegimeLogs))
+					if err := s.seedRegimeLogs(ctx, seed.RegimeLogs); err != nil {
+						return fmt.Errorf("regime logs: %w", err)
+					}
+				}
+				_ = shouldReturn
+				log.Printf("seeder: data already exists (%d providers, %d candles, %d vix_rows, %d regime_rows). Use force=true to re-seed.", count, candleCount, vixCount, regimeCount)
 				return nil
 			}
 			log.Printf("seeder: data exists but candles table empty (%d candles to seed)", len(seed.Candles))
@@ -63,6 +81,9 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 	}
 	if err := s.seedRegimeLogs(ctx, seed.RegimeLogs); err != nil {
 		return fmt.Errorf("regime logs: %w", err)
+	}
+	if err := s.seedVIXLogs(ctx, seed.VIXLogs); err != nil {
+		return fmt.Errorf("vix logs: %w", err)
 	}
 	if err := s.seedTradeHistory(ctx, seed.TradeHistory); err != nil {
 		return fmt.Errorf("trade history: %w", err)
@@ -126,6 +147,18 @@ func (s *Seeder) seedRegimeLogs(ctx context.Context, logs []RegimeLogSeed) error
 	return nil
 }
 
+func (s *Seeder) seedVIXLogs(ctx context.Context, logs []VIXLogSeed) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	for _, l := range logs {
+		if _, err := s.repo.pool.Exec(ctx,
+			"INSERT INTO vix_logs (timestamp, vix_value, vix_change) VALUES ($1,$2,$3)",
+			l.Time, l.VIXValue, l.VIXChange); err != nil { return fmt.Errorf("vix %s: %w", l.Time.Format("2006-01-02"), err) }
+	}
+	return nil
+}
+
 func (s *Seeder) seedTradeHistory(ctx context.Context, trades []TradeHistorySeed) error {
 	for _, t := range trades {
 		if _, err := s.repo.pool.Exec(ctx,
@@ -139,19 +172,23 @@ func (s *Seeder) seedCandles(ctx context.Context, candles []CandleSeed) error {
 	if len(candles) == 0 {
 		return nil
 	}
-	for _, c := range candles {
-		openRaw := c.Open.Int64()
-		highRaw := c.High.Int64()
-		lowRaw := c.Low.Int64()
-		closeRaw := c.Close.Int64()
-		volume := int64(c.Volume)
-		if _, err := s.repo.pool.Exec(ctx,
-			`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume)
-			 SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), '1d', $3, $4, $5, $6, $7
-			 WHERE EXISTS (SELECT 1 FROM symbols WHERE ticker=$2)`,
-			c.Time, c.Symbol, openRaw, highRaw, lowRaw, closeRaw, volume); err != nil {
-			continue
+	batchSize := 200
+	for i := 0; i < len(candles); i += batchSize {
+		end := i + batchSize
+		if end > len(candles) {
+			end = len(candles)
 		}
+		batch := &pgx.Batch{}
+		for _, c := range candles[i:end] {
+			batch.Queue(
+				`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume)
+				 SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8
+				 WHERE EXISTS (SELECT 1 FROM symbols WHERE ticker=$2)`,
+				c.Time, c.Symbol, c.Timeframe, c.Open.Int64(), c.High.Int64(), c.Low.Int64(), c.Close.Int64(), int64(c.Volume))
+		}
+		br := s.repo.pool.SendBatch(ctx, batch)
+		if _, cerr := br.Exec(); cerr != nil { continue }
+		br.Close()
 	}
 	log.Printf("seeder: seeded %d candles", len(candles))
 	return nil

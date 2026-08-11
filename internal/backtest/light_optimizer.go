@@ -75,8 +75,8 @@ func LightOptTimeout() time.Duration {
 func LightOptPlateauPatience() int { return envInt("ORCA_LIGHT_OPT_PLATEAU_PATIENCE", 5) }
 
 // LightOptTrainFraction is the fraction of the window used for training; the rest
-// is held out for out-of-sample scoring (ORCA_LIGHT_OPT_TRAIN_FRACTION, 0.67).
-func LightOptTrainFraction() float64 { return envFloat64("ORCA_LIGHT_OPT_TRAIN_FRACTION", 0.67) }
+// is held out for out-of-sample scoring (ORCA_LIGHT_OPT_TRAIN_FRACTION, 0.80).
+func LightOptTrainFraction() float64 { return envFloat64("ORCA_LIGHT_OPT_TRAIN_FRACTION", 0.80) }
 
 // LightOptCacheTTL is the result-cache entry lifetime (ORCA_LIGHT_OPT_CACHE_TTL_HOURS, 168).
 func LightOptCacheTTL() time.Duration {
@@ -211,6 +211,11 @@ func RunLightOptimize(ctx context.Context, db Database, cfg LightOptimizeConfig)
 	}
 
 	trainStart, trainEnd, testStart, testEnd := splitWindow(cfg.StartDate, cfg.EndDate, cfg.TrainFraction)
+
+	estimatedBars := estimateBarCount(cfg.Timeframe, trainStart, trainEnd)
+	if estimatedBars < 500 {
+		return nil
+	}
 	weights := weightMap(cfg.ObjectiveWeights)
 
 	var (
@@ -411,4 +416,13 @@ func registryDefaultParams(strategyID string) map[string]float64 {
 		return map[string]float64{}
 	}
 	return runner.Params()
+}
+
+func estimateBarCount(timeframe string, start, end time.Time) int {
+	days := end.Sub(start).Hours() / 24
+	if days <= 0 {
+		return 0
+	}
+	barsPerDay := barsPerDayFromTimeframe(timeframe)
+	return int(days * barsPerDay)
 }

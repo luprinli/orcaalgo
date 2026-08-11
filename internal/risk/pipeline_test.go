@@ -2,6 +2,7 @@ package risk
 
 import (
 	"context"
+	"math"
 	"testing"
 )
 
@@ -262,5 +263,102 @@ func TestRiskPipeline_NullComponentsTolerated(t *testing.T) {
 
 	if !result.Approved {
 		t.Errorf("Expected approved with null components, got rejected: %s", result.Reason)
+	}
+}
+
+func TestSanitizeTradePnL_NormalValue(t *testing.T) {
+	pnl, clamped := SanitizeTradePnL(500, 100, 450, 100000)
+	if clamped {
+		t.Error("Expected normal PnL to not be clamped")
+	}
+	if pnl != 500 {
+		t.Errorf("Expected 500, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_NaN(t *testing.T) {
+	pnl, clamped := SanitizeTradePnL(math.NaN(), 100, 450, 100000)
+	if !clamped {
+		t.Error("Expected NaN PnL to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_Inf(t *testing.T) {
+	pnl, clamped := SanitizeTradePnL(math.Inf(1), 100, 450, 100000)
+	if !clamped {
+		t.Error("Expected Inf PnL to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_NegInf(t *testing.T) {
+	pnl, clamped := SanitizeTradePnL(math.Inf(-1), 100, 450, 100000)
+	if !clamped {
+		t.Error("Expected -Inf PnL to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_ExceedsCapitalClamp(t *testing.T) {
+	// referenceCapital * 2 = 200000. PnL of 300000 exceeds this.
+	pnl, clamped := SanitizeTradePnL(300000, 100, 450, 100000)
+	if !clamped {
+		t.Error("Expected PnL exceeding 2x capital to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_ExceedsNotionalClamp(t *testing.T) {
+	// notional = 100 * 450 = 45000. notional*2 = 90000.
+	// referenceCapital*2 = 20000. max = 90000.
+	// PnL of 100000 exceeds max(90000, 20000) = 90000.
+	pnl, clamped := SanitizeTradePnL(100000, 100, 450, 10000)
+	if !clamped {
+		t.Error("Expected PnL exceeding 2x notional to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_TrillionDollarPnL(t *testing.T) {
+	// Simulates the audit's reported bug: 2.72e15 PnL on XAGUSD
+	pnl, clamped := SanitizeTradePnL(2.72e15, 100, 1800, 100000)
+	if !clamped {
+		t.Error("Expected trillion-dollar PnL to be clamped")
+	}
+	if pnl != 0 {
+		t.Errorf("Expected 0, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_LossWithinBounds(t *testing.T) {
+	// -500 loss on a 100k account should pass
+	pnl, clamped := SanitizeTradePnL(-500, 100, 450, 100000)
+	if clamped {
+		t.Error("Expected normal loss to not be clamped")
+	}
+	if pnl != -500 {
+		t.Errorf("Expected -500, got %f", pnl)
+	}
+}
+
+func TestSanitizeTradePnL_ZeroQuantity(t *testing.T) {
+	// notional = 0. referenceCapital*2 = 200000. PnL = 100, clamped? No, 100 < 200000.
+	pnl, clamped := SanitizeTradePnL(100, 0, 450, 100000)
+	if clamped {
+		t.Error("Expected PnL within capital bounds to not be clamped even with zero quantity")
+	}
+	if pnl != 100 {
+		t.Errorf("Expected 100, got %f", pnl)
 	}
 }

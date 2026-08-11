@@ -178,7 +178,7 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(price.Float64()-atr*r.StopATRMult),
 			types.PriceFromFloat(price.Float64()+atr*r.ProfitATRMult),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if zScore >= r.FadeEntryZ {
@@ -187,7 +187,7 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(price.Float64()+atr*r.StopATRMult),
 			types.PriceFromFloat(price.Float64()-atr*r.ProfitATRMult),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

@@ -190,8 +190,8 @@ func TestApplyLightOptDefaults(t *testing.T) {
 	if cfg.PlateauPatience != 5 {
 		t.Errorf("default plateau patience = %d, want 5", cfg.PlateauPatience)
 	}
-	if cfg.TrainFraction != 0.67 {
-		t.Errorf("default train fraction = %v, want 0.67", cfg.TrainFraction)
+	if cfg.TrainFraction != 0.80 {
+		t.Errorf("default train fraction = %v, want 0.80", cfg.TrainFraction)
 	}
 	if cfg.ObjectiveWeights != [3]float64{0.5, 0.3, 0.2} {
 		t.Errorf("default weights = %v, want [0.5 0.3 0.2]", cfg.ObjectiveWeights)

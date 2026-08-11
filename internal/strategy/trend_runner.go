@@ -27,7 +27,7 @@ func NewTrendRunner() *TrendRunner {
 		FastPeriod:    20,
 		SlowPeriod:    50,
 		AtrPeriod:     14,
-		AtrMultiplier: 2.0,
+		AtrMultiplier: 3.0,
 		AdxPeriod:     14,
 		AdxThreshold:  25.0,
 		ChopThreshold: 61.8,
@@ -181,11 +181,11 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			if r.pendingSide == "BUY" {
 				r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 				r.signalPending = false
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 			}
 			r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 			r.signalPending = false
-			return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+			return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 		}
 
 		r.signalPending = true

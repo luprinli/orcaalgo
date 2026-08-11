@@ -33,9 +33,9 @@ func NewDragonTrendRunner() *DragonTrendRunner {
 		EMAPeriods:    []int{8, 21, 50, 200},
 		MinAligned:    3,
 		ADXPeriod:     14,
-		ADXThreshold:  20.0,
+		ADXThreshold:  25.0,
 		ATRPeriod:     14,
-		ATRMultiplier: 2.0,
+		ATRMultiplier: 3.0,
 		ProfitATRMult: 3.0,
 	}
 	r.emaValues = make([]float64, len(r.EMAPeriods))
@@ -101,6 +101,9 @@ func (r *DragonTrendRunner) ParamDefs() []ParamDef {
 }
 
 func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
+	if regime == 3 {
+		return nil
+	}
 	price := candle.Close
 	if price.IsZero() {
 		return nil
@@ -141,7 +144,7 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	adx := ADX(r.PriceHistory, r.HighHistory, r.LowHistory, r.HistCount, r.ADXPeriod)
-	trendStrength := float64(alignedBull+alignedBear) / float64(len(r.EMAPeriods))
+	_ = float64(alignedBull+alignedBear) / float64(len(r.EMAPeriods))
 
 	if adx < r.ADXThreshold {
 		return nil
@@ -188,7 +191,7 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.ATRMultiplier
 		profitDist := atr * r.ProfitATRMult
 		r.peakPrice = price
-		size := 100.0 * trendStrength
+		size := 1.0
 		r.OpenPosition("BUY", price,
 			types.PriceFromFloat(pf-stopDist),
 			types.PriceFromFloat(pf+profitDist),
@@ -204,7 +207,7 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.ATRMultiplier
 		profitDist := atr * r.ProfitATRMult
 		r.peakPrice = price
-		size := 100.0 * trendStrength
+		size := 1.0
 		r.OpenPosition("SELL", price,
 			types.PriceFromFloat(pf+stopDist),
 			types.PriceFromFloat(pf-profitDist),

@@ -319,8 +319,8 @@ func UniversalParamDefs() []strategy.ParamDef {
 		},
 		{
 			Name: "kelly_fraction", Type: strategy.ParamContinuous,
-			Default: 0.25, Min: 0.10, Max: 1.0, Step: 0.05,
-			Group: "Sizing", Description: "Fractional Kelly multiplier applied to base size",
+			Default: 0.25, Min: 0.10, Max: 0.25, Step: 0.05,
+			Group: "Sizing", Description: "Fractional Kelly multiplier applied to base size (capped at 0.25 per HP #6)",
 		},
 	}
 }
@@ -379,7 +379,7 @@ func defaultStrategySearchSpace(strategyID string) SearchSpace {
 		if space == nil {
 			return nil
 		}
-		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 1.0, Max: 2.5, Step: 0.25,
+		space["entry_z"] = ParamConstraint{Name: "entry_z", Type: ParamContinuous, Min: 0.75, Max: 2.5, Step: 0.25,
 			Condition: &ConditionalRule{LeftParam: "exit_z", Operator: "lt", RightParam: "entry_z"}}
 		return space
 	case "opening_range_breakout":

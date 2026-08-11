@@ -54,15 +54,31 @@ export function buildAttributionReport(slices: { label: string; stats: Record<st
   return buildReport('Attribution Report', sections)
 }
 
+// Lazy-load markdownlint once; cached at module level.
+let _lintPromise: Promise<{
+  lint: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>
+  applyFixes: (md: string, errors: unknown[]) => string
+}> | null = null
+
+function getLinter() {
+  if (!_lintPromise) {
+    _lintPromise = (async () => {
+      const [{ lint }, mdlint] = await Promise.all([
+        import('markdownlint/promise'),
+        import('markdownlint'),
+      ])
+      return { lint: lint as (opts: Record<string, unknown>) => Promise<Record<string, unknown>>, applyFixes: mdlint.applyFixes as (md: string, errors: unknown[]) => string }
+    })()
+  }
+  return _lintPromise
+}
+
 export async function lintMarkdown(markdown: string): Promise<string> {
-  const [{ lint }, { applyFixes }] = await Promise.all([
-    import('markdownlint/promise'),
-    import('markdownlint'),
-  ])
-  const results = await lint({
+  const { lint, applyFixes } = await getLinter()
+  const results = (await lint({
     strings: { report: markdown },
     config: { default: true },
-  })
+  })) as { report: unknown[] }
   const errors = results.report
   if (!errors || errors.length === 0) return markdown
   return applyFixes(markdown, errors)

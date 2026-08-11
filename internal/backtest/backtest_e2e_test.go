@@ -46,7 +46,7 @@ func TestE2E_MidPriceFill(t *testing.T) {
 
 	signals := 0
 	for _, c := range candles {
-		sig := runner.Evaluate(c, 0)
+		sig := runner.Evaluate(c, 1)
 		if sig != nil {
 			signals++
 			if sig.Side != "BUY" && sig.Side != "SELL" {
@@ -145,7 +145,7 @@ func TestE2E_AllStrategiesProduceSignals(t *testing.T) {
 		r.Reset()
 		count := 0
 		for _, c := range candles {
-			sig := r.Evaluate(c, 0)
+			sig := r.Evaluate(c, 1)
 			if sig != nil {
 				count++
 			}
@@ -207,7 +207,7 @@ func TestE2E_EquityCurveValidation(t *testing.T) {
 	capital := 100000.0
 
 	for _, c := range candles {
-		sig := runner.Evaluate(c, 0)
+		sig := runner.Evaluate(c, 1)
 		if sig != nil && sig.Side == "BUY" && sig.Quantity > 0 {
 			entry := c.Close.Float64()
 			capital -= entry * sig.Quantity * 0.001

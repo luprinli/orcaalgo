@@ -238,6 +238,28 @@ func (r *Repository) LoadRegimeLogs(ctx context.Context, start, end time.Time) (
 	return logs, nil
 }
 
+func (r *Repository) LoadVIXLogs(ctx context.Context, start, end time.Time) ([]VIXLog, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT timestamp, vix_value, vix_change
+		 FROM vix_logs WHERE timestamp >= $1 AND timestamp <= $2
+		 ORDER BY timestamp ASC`, start, end,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []VIXLog
+	for rows.Next() {
+		var l VIXLog
+		if err := rows.Scan(&l.Time, &l.VIXValue, &l.VIXChange); err != nil {
+			continue
+		}
+		logs = append(logs, l)
+	}
+	return logs, nil
+}
+
 func (r *Repository) SaveBacktestResult(ctx context.Context, result *BacktestResult) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE backtest_runs SET status='completed',
@@ -529,6 +551,12 @@ type RegimeLog struct {
 	HMMState   int8
 	Confidence float64
 	Symbol     string
+}
+
+type VIXLog struct {
+	Time      time.Time
+	VIXValue  float64
+	VIXChange float64
 }
 
 type BacktestResult struct {

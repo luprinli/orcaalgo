@@ -137,7 +137,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
 		r.barsInTrade = 0
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if rsi2 > r.Overbought {
@@ -145,7 +145,7 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
 		r.barsInTrade = 0
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 100}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

@@ -17,9 +17,22 @@ const STRATEGY_OPTIONS = [
   { value: 'trend_following', label: 'Trend Following' },
   { value: 'session_scalp', label: 'Session Scalp' },
   { value: 'mean_reversion', label: 'Mean Reversion' },
-  { value: 'opening_range_breakout', label: 'Opening Range Breakout' },
+  { value: 'intraday_mr', label: 'Intraday MR' },
+  { value: 'opening_range_breakout', label: 'ORB Breakout (5m)' },
+  { value: 'orb_15m', label: 'ORB Breakout (15m)' },
   { value: 'pairs_trading', label: 'Pairs Trading' },
   { value: 'volatility_harvesting', label: 'Volatility Harvesting' },
+  { value: 'dragon_trend', label: 'Dragon Trend' },
+  { value: 'vwap_mr', label: 'VWAP MR' },
+  { value: 'volume_scalp', label: 'Volume Scalp' },
+  { value: 'vix_futures_carry', label: 'VIX Futures Carry' },
+  { value: 'vol_grid', label: 'Vol-Adjusted Grid' },
+  { value: 'grid_trading', label: 'Grid Trading' },
+  { value: 'donchian_breakout', label: 'Donchian Breakout' },
+  { value: 'keltner_macd', label: 'Keltner MACD' },
+  { value: 'ichimoku_cloud', label: 'Ichimoku Cloud' },
+  { value: 'ma_crossover', label: 'MA Crossover' },
+  { value: 'rsi2_reversion', label: 'RSI2 Reversion' },
 ]
 
 export default function ParamVersionPage() {
