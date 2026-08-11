@@ -39,9 +39,18 @@ interface OrchestrationRunnerProps {
 
 export default function OrchestrationRunner({ onSubmit, initialRows }: OrchestrationRunnerProps) {
   const cacheStore = useCacheStore()
-  const [strategyRows, setStrategyRows] = useState<StrategyRow[]>(() =>
-    initialRows && initialRows.length > 0 ? initialRows : [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }]
-  )
+  const [strategyRows, setStrategyRows] = useState<StrategyRow[]>(() => {
+    if (initialRows && initialRows.length > 0) return initialRows
+    try {
+      const stored = sessionStorage.getItem('orch_batch_promote')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        sessionStorage.removeItem('orch_batch_promote')
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed as StrategyRow[]
+      }
+    } catch { /* ignore */ }
+    return [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }]
+  })
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
   const [startDate, setStartDate] = useState("2024-01-01")
   const [endDate, setEndDate] = useState("2025-12-31")

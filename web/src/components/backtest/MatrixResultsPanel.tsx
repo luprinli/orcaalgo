@@ -36,6 +36,8 @@ export interface MatrixResultsPanelProps {
   onSortToggle: (field: SortField) => void
   sortIndicator: (field: SortField) => string
   onViewDetail?: (runId: string) => void
+  onPromoteToOrch?: (strategyId: string, symbol: string, timeframe: string) => void
+  onBatchPromoteToOrch?: (combos: { strategy_id: string; symbol: string; timeframe: string }[]) => void
 }
 
 export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
@@ -45,6 +47,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
     sortedMatrixResults, filterStrats, filterSyms, filterTfs,
     onFilterStrategyChange, onFilterSymbolChange, onFilterTfChange,
     onClearFilters, onSortToggle, sortIndicator, onViewDetail,
+    onPromoteToOrch, onBatchPromoteToOrch,
   } = props
 
   const [showSensitivity, setShowSensitivity] = useState(false)
@@ -72,11 +75,15 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
   const batchPromoteToOrch = () => {
     const combos = sortedMatrixResults.filter((r, i) => selectedRows.has(rowKey(r, i)))
     if (combos.length === 0) return
-    const orchSets = combos.map(r => ({
-      strategy_id: r.strategy_id, symbol: r.symbol, timeframe: r.timeframe,
-    }))
-    sessionStorage.setItem('orch_batch_promote', JSON.stringify(orchSets))
-    window.location.href = '/backtest?view=runner&mode=orchestrated&batch_promote=true'
+    if (onBatchPromoteToOrch) {
+      onBatchPromoteToOrch(combos.map(r => ({ strategy_id: r.strategy_id, symbol: r.symbol, timeframe: r.timeframe })))
+    } else {
+      const orchSets = combos.map(r => ({
+        strategy_id: r.strategy_id, symbol: r.symbol, timeframe: r.timeframe,
+      }))
+      sessionStorage.setItem('orch_batch_promote', JSON.stringify(orchSets))
+      window.location.href = '/backtest?view=runner&mode=orchestrated&batch_promote=true'
+    }
   }
   const win = useWindowedRows(sortedMatrixResults.length, ROW_HEIGHT, TABLE_VIEWPORT)
   const range = maxS - minS || 1
@@ -261,8 +268,12 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                         <TableCell className="px-2">
                           <div className="flex gap-1">
                             <Button variant="link" size="sm" className="h-5 text-[10px] p-0" onClick={() => onViewDetail(r.run_id || `${r.strategy_id}|${r.symbol}|${r.timeframe}`)}>View</Button>
-                            <a href={`/backtest?view=runner&mode=orchestrated&orch_strategy=${encodeURIComponent(r.strategy_id)}&orch_symbol=${encodeURIComponent(r.symbol)}&orch_tf=${encodeURIComponent(r.timeframe)}`}
-                              className="inline-flex items-center h-5 text-[10px] px-1 no-underline text-blue-600 hover:bg-blue-50 rounded">Orch</a>
+                            {onPromoteToOrch ? (
+                              <Button variant="link" size="sm" className="h-5 text-[10px] p-0 text-blue-600" onClick={() => onPromoteToOrch(r.strategy_id, r.symbol, r.timeframe)}>Orch</Button>
+                            ) : (
+                              <a href={`/backtest?view=runner&mode=orchestrated&orch_strategy=${encodeURIComponent(r.strategy_id)}&orch_symbol=${encodeURIComponent(r.symbol)}&orch_tf=${encodeURIComponent(r.timeframe)}`}
+                                className="inline-flex items-center h-5 text-[10px] px-1 no-underline text-blue-600 hover:bg-blue-50 rounded">Orch</a>
+                            )}
                           </div>
                         </TableCell>
                       )}

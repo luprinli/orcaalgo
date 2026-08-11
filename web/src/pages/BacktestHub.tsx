@@ -467,6 +467,16 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
         onClearFilters={() => { setFilterStrategy(''); setFilterSymbol(''); setFilterTf('') }}
         onSortToggle={onSortToggle} sortIndicator={sortIndicator}
         onViewDetail={(runId) => setView('detail', runId)}
+        onPromoteToOrch={(sid, sym, tf) => {
+          sessionStorage.setItem('orch_batch_promote', JSON.stringify([{ strategy_id: sid, symbol: sym, timeframe: tf }]))
+          setMode('orchestrated')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}
+        onBatchPromoteToOrch={(combos) => {
+          sessionStorage.setItem('orch_batch_promote', JSON.stringify(combos))
+          setMode('orchestrated')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}
       />
     )}
 

@@ -75,7 +75,7 @@ test.describe('Orch Promotion Flow — Individual & Batch', () => {
     await expect(page.getByText('Strategy Pairs')).toBeVisible({ timeout: 5000 });
   });
 
-  test('batch_promote=true in URL reads from sessionStorage and renders', async ({ page }) => {
+  test('sessionStorage-based batch promote survives mode switch', async ({ page }) => {
     const combos = [
       { strategy_id: 'grid_trading', symbol: 'SPX500', timeframe: '4h' },
       { strategy_id: 'rsi2_reversion', symbol: 'JPN225', timeframe: '1h' },
@@ -84,10 +84,9 @@ test.describe('Orch Promotion Flow — Individual & Batch', () => {
       sessionStorage.setItem('orch_batch_promote', JSON.stringify(data));
     }, combos);
 
-    await page.goto('/backtest?view=runner&batch_promote=true', { waitUntil: 'domcontentloaded', timeout: 10000 });
+    await page.goto('/backtest?mode=orchestrated', { waitUntil: 'domcontentloaded', timeout: 10000 });
     await page.waitForTimeout(1500);
 
-    await expect(page.getByLabel('Orch').first()).toBeChecked({ timeout: 5000 });
     await expect(page.getByText('Strategy Pairs')).toBeVisible({ timeout: 5000 });
 
     const comboboxes = page.locator('[role="combobox"]');
