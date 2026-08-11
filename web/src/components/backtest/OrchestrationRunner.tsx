@@ -127,6 +127,43 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
         friction_model: frictionModel,
       })
       setMatrixTelemetry({ total: result.total_sets, completed: 0, best_sharpe: 0, best_set: -1, status: "running" })
+      setMatrixResults([])
+      const batchTime = Date.now()
+      let pollCount = 0
+      const pollInterval = setInterval(async () => {
+        pollCount++
+        try {
+          const runs = await orchestrator.list(result.total_sets + 5, 0)
+          const recent = (runs.runs ?? []).filter((r: any) =>
+            r.created_at && new Date(r.created_at).getTime() > batchTime - 5000)
+          const completed = recent.filter((r: any) => r.status === "completed" || r.status === "failed")
+          if (completed.length > 0 || pollCount >= 60) {
+            const assembled = recent.map((r: any, i: number) => ({
+              set_index: i,
+              strategies: (r.strategy_ids ?? []).map((sid: string, j: number) => ({
+                strategy_id: sid,
+                symbol: (r.symbol_tf_pairs?.[j] ?? "").split(":")[0] || "?",
+                timeframe: (r.symbol_tf_pairs?.[j] ?? "").split(":")[1] || "?",
+              })),
+              pool_sharpe: r.pool_sharpe ?? 0,
+              pool_maxdd: r.pool_maxdd ?? 0,
+              pool_return_pct: r.pool_return_pct ?? 0,
+              num_trades: 0,
+              strategy_pnl: r.result_json?.strategy_pnl ?? {},
+              status: r.status ?? "running",
+              run_id: r.id,
+            }))
+            setMatrixResults(assembled)
+            const best = assembled.filter((r: any) => r.status === "completed" && r.pool_sharpe > 0)
+              .sort((a: any, b: any) => (b.pool_sharpe ?? 0) - (a.pool_sharpe ?? 0))[0]
+            setMatrixTelemetry({
+              total: result.total_sets, completed: completed.length,
+              best_sharpe: best?.pool_sharpe ?? 0, best_set: best?.set_index ?? -1, status: "done",
+            })
+            clearInterval(pollInterval)
+          }
+        } catch { /* polling will retry */ }
+      }, 3000)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Matrix submission failed")
     } finally { setMatrixLoading(false) }
