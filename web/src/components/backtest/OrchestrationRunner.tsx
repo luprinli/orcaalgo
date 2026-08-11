@@ -46,6 +46,7 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
   const [rebalanceBars, setRebalanceBars] = useState("20")
   const [kellyFraction, setKellyFraction] = useState("0.25")
   const [maxPositionPct, setMaxPositionPct] = useState("2")
+  const [allowFractional, setAllowFractional] = useState(false)
   const [enableCorrelationBrake, setEnableCorrelationBrake] = useState(false)
   const [correlationThreshold, setCorrelationThreshold] = useState(0.6)
   const [frictionModel, setFrictionModel] = useState<"realistic" | "idealized">("realistic")
@@ -97,6 +98,7 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
         rebalance_bars: parseInt(rebalanceBars, 10) || 20,
         kelly_fraction: parseFloat(kellyFraction) || 0.25,
         max_position_pct: parseFloat(maxPositionPct) / 100 || 0.02,
+        allow_fractional: allowFractional,
         enable_correlation_brake: enableCorrelationBrake,
         correlation_threshold: correlationThreshold,
         friction_model: frictionModel,
@@ -108,7 +110,7 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
     } finally {
       setLoading(false)
     }
-  }, [strategyRows, startDate, endDate, capital, rebalanceBars, kellyFraction, maxPositionPct, enableCorrelationBrake, correlationThreshold, frictionModel, onSubmit])
+  }, [strategyRows, startDate, endDate, capital, rebalanceBars, kellyFraction, maxPositionPct, allowFractional, enableCorrelationBrake, correlationThreshold, frictionModel, onSubmit])
 
   const handleMatrixSubmit = useCallback(async () => {
     setMatrixLoading(true)
@@ -124,6 +126,7 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
         rebalance_bars: parseInt(rebalanceBars, 10) || 20,
         kelly_fraction: parseFloat(kellyFraction) || 0.25,
         max_position_pct: parseFloat(maxPositionPct) / 100 || 0.02,
+        allow_fractional: allowFractional,
         friction_model: frictionModel,
       })
       setMatrixTelemetry({ total: result.total_sets, completed: 0, best_sharpe: 0, best_set: -1, status: "running" })
@@ -274,6 +277,10 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
           <div className="space-y-1">
             <div className="flex justify-between"><Label className="text-xs">Max Position %</Label><span className="text-xs tabular-nums">{maxPositionPct}%</span></div>
             <Slider min={0.5} max={20} step={0.5} value={[parseFloat(maxPositionPct) || 2]} onValueChange={([v]: number[]) => setMaxPositionPct(String(v ?? 2))} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Checkbox id="allow-frac" checked={allowFractional} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAllowFractional(e.target.checked)} />
+            <Label htmlFor="allow-frac" className="text-xs cursor-pointer" onClick={() => setAllowFractional(!allowFractional)}>Fractional Lots</Label>
           </div>
           <div className="flex items-center gap-2">
             <Checkbox id="corr-brake" checked={enableCorrelationBrake} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEnableCorrelationBrake(e.target.checked)} />

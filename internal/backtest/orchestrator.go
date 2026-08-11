@@ -22,6 +22,7 @@ type OrchestratorConfig struct {
 	RebalanceBars          int
 	KellyFraction          float64
 	MaxPositionPct         float64
+	AllowFractional        bool
 	EnableCorrelationBrake bool
 	CorrelationThreshold   float64
 	FrictionModel          string
@@ -365,7 +366,11 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 			if pipeResult.Approved && pipeResult.Size > 0 {
 				fillQty = pipeResult.Size
 			}
-			if fillQty < 1 {
+			minQty := 1.0
+			if o.config.AllowFractional {
+				minQty = 0.01
+			}
+			if fillQty < minQty {
 				continue
 			}
 

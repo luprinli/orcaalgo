@@ -38,6 +38,7 @@ type submitRunRequest struct {
 	RebalanceBars          int     `json:"rebalance_bars"`
 	KellyFraction          float64 `json:"kelly_fraction"`
 	MaxPositionPct         float64 `json:"max_position_pct"`
+	AllowFractional        bool   `json:"allow_fractional"`
 	EnableCorrelationBrake bool    `json:"enable_correlation_brake"`
 	CorrelationThreshold   float64 `json:"correlation_threshold"`
 	FrictionModel          string  `json:"friction_model"`
@@ -146,6 +147,7 @@ func (h *OrchestratorHandler) SubmitRun(c *gin.Context) {
 		RebalanceBars:          req.RebalanceBars,
 		KellyFraction:          req.KellyFraction,
 		MaxPositionPct:         req.MaxPositionPct,
+		AllowFractional:        req.AllowFractional,
 		EnableCorrelationBrake: req.EnableCorrelationBrake,
 		CorrelationThreshold:   req.CorrelationThreshold,
 		FrictionModel:          req.FrictionModel,

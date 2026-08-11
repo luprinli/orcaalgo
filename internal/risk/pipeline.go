@@ -7,6 +7,9 @@ import (
 	"github.com/lee-econ/orca-core/internal/monitor"
 )
 
+const maxPositionPct = 0.02
+const maxTotalNotionalPct = 0.10
+
 // ProcessSignalRequest is the input to RiskPipeline.ProcessSignal.
 // Both the backtest Engine.generateSignal() and LiveEngine.ProcessTick()
 // construct this from their respective signal representations.
@@ -19,6 +22,8 @@ type ProcessSignalRequest struct {
 	BaseSize         float64 // raw quantity from the strategy runner
 	ExistingPosition float64 // current open quantity for this symbol (0 if none)
 	RunningCapital   float64 // current equity available
+	AllowFractional  bool    // permit sub-1-share positions (orchestrator sizing)
+	IsExit           bool    // exit signal — skips volatility/capital/position checks
 }
 
 // ProcessSignalResult is the output of RiskPipeline.ProcessSignal.
@@ -48,12 +53,20 @@ type RiskPipeline struct {
 	// CurrentRegime is the HMM regime state (0-3) at the time of the signal.
 	// Updated by the caller before each ProcessSignal call.
 	CurrentRegime int8
+
+	// symbolNotional tracks cumulative open notional per symbol across all
+	// positions, for enforcement of the aggregate portfolio notional cap (§E2).
+	symbolNotional map[string]float64
 }
 
 // ProcessSignal runs the full signal → approval/rejection pipeline.
 // Order: volatility halt → sizing → capital gate halt → sizing → exposure →
 // capital authorization.
 func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalRequest) ProcessSignalResult {
+	if req.IsExit {
+		return ProcessSignalResult{Approved: true, Size: req.ExistingPosition, Reason: "exit"}
+	}
+
 	// 1. Signal gate: volatility halt, running-capital positivity, rate limit.
 	if p.SignalGate != nil {
 		if ok, reason := p.SignalGate.ValidateSignal(req.RunningCapital); !ok {
@@ -120,6 +133,36 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 		monitor.RecordSignalReject("size_zero_after_sizing", req.StrategyID)
 		return ProcessSignalResult{Approved: false, Reason: "size_zero_after_sizing"}
 	}
+
+	// 4c. Universal notional cap: prevent any single position from exceeding
+	// a fraction of account equity, regardless of strategy self-sizing. This
+	// is the single authoritative position-size guard — no other code path
+	// independently enforces position limits (drift safeguard).
+	maxNotional := req.RunningCapital * maxPositionPct
+	positionNotional := size * req.Price
+	if positionNotional > maxNotional && maxNotional > 0 {
+		size = maxNotional / req.Price
+	}
+
+	// 4d. Portfolio-level aggregate notional cap: prevent cumulative open
+	// notional per symbol from exceeding maxTotalNotionalPct of equity.
+	// This catches strategies that accumulate multiple simultaneous positions
+	// (grid with up to 10 levels, pairs with hedge ratio, etc.).
+	if p.symbolNotional == nil {
+		p.symbolNotional = make(map[string]float64)
+	}
+	existingNotional := p.symbolNotional[req.Symbol]
+	newNotional := math.Abs(size * req.Price)
+	totalNotional := existingNotional + newNotional
+	maxTotalNotional := req.RunningCapital * maxTotalNotionalPct
+	if totalNotional > maxTotalNotional && maxTotalNotional > 0 {
+		available := maxTotalNotional - existingNotional
+		if available <= 0 {
+			return ProcessSignalResult{Approved: false, Reason: "aggregate_notional_cap:max_reached"}
+		}
+		size = available / req.Price
+	}
+	p.symbolNotional[req.Symbol] = existingNotional + math.Abs(size*req.Price)
 
 	// 5. Exposure check: max leverage, symbol concentration.
 	if p.SignalGate != nil {
@@ -200,18 +243,54 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	return ProcessSignalResult{Approved: true, Size: size, Reason: "ok"}
 }
 
+// SanitizeTradePnL clamps a raw trade PnL to a reasonable bound and guards
+// against NaN/Inf values. It returns the sanitized PnL and a boolean indicating
+// whether clamping occurred. This is the single canonical PnL sanitization point:
+// all trade-exit paths (mid-simulation, end-of-data closeout, live fill, backtest
+// fill) must route through this function to prevent backtest/live drift.
+func SanitizeTradePnL(pnl, quantity, entryPrice, referenceCapital float64) (float64, bool) {
+	if math.IsNaN(pnl) || math.IsInf(pnl, 0) {
+		return 0, true
+	}
+	notional := quantity * entryPrice
+	maxByNotional := notional * 0.50
+	maxByCapital := referenceCapital * 0.10
+	maxPnL := maxByNotional
+	if maxByCapital < maxByNotional {
+		maxPnL = maxByCapital
+	}
+	if maxPnL < referenceCapital*0.02 {
+		maxPnL = referenceCapital * 0.02
+	}
+	if math.Abs(pnl) > maxPnL {
+		return 0, true
+	}
+	return pnl, false
+}
+
 // ReconcileFill is the canonical fill → bookkeeping pipeline. Both the
 // backtest Engine trade-close and LiveEngine.SignalOutcome call this.
 func (p *RiskPipeline) ReconcileFill(strategyID, symbol, side string, pnl, quantity, price float64) {
+	safePnL, _ := SanitizeTradePnL(pnl, quantity, price, p.capitalBalance())
+
 	if p.Capital != nil {
-		p.Capital.RecordFill(strategyID, symbol, side, pnl, quantity)
+		p.Capital.RecordFill(strategyID, symbol, side, safePnL, quantity)
 	}
 
 	if p.PropFirm != nil && p.Capital != nil {
-		p.PropFirm.OnFill(pnl, p.Capital.TotalBalance())
+		p.PropFirm.OnFill(safePnL, p.Capital.TotalBalance())
 		if ok, reason := p.PropFirm.CheckDailyLimits(); !ok {
 			p.PropFirm.MarkViolated(reason)
 		}
+	}
+
+	// Release the aggregate notional cap for this symbol's closed position.
+	if p.symbolNotional == nil {
+		p.symbolNotional = make(map[string]float64)
+	}
+	p.symbolNotional[symbol] -= math.Abs(quantity * price)
+	if p.symbolNotional[symbol] < 0 {
+		p.symbolNotional[symbol] = 0
 	}
 
 	if p.SignalGate != nil {
@@ -223,10 +302,28 @@ func (p *RiskPipeline) ReconcileFill(strategyID, symbol, side string, pnl, quant
 // Used when the caller wants to handle prop-firm bookkeeping separately
 // (e.g., in the backtest Engine which calls ftmo.OnFill directly).
 func (p *RiskPipeline) ReconcileFillWithoutPropFirm(strategyID, symbol, side string, pnl, quantity, price float64) {
+	safePnL, _ := SanitizeTradePnL(pnl, quantity, price, p.capitalBalance())
+
 	if p.Capital != nil {
-		p.Capital.RecordFill(strategyID, symbol, side, pnl, quantity)
+		p.Capital.RecordFill(strategyID, symbol, side, safePnL, quantity)
 	}
+
+	if p.symbolNotional == nil {
+		p.symbolNotional = make(map[string]float64)
+	}
+	p.symbolNotional[symbol] -= math.Abs(quantity * price)
+	if p.symbolNotional[symbol] < 0 {
+		p.symbolNotional[symbol] = 0
+	}
+
 	if p.SignalGate != nil {
 		p.SignalGate.RemoveExposure(symbol, side, math.Abs(quantity*price))
 	}
+}
+
+func (p *RiskPipeline) capitalBalance() float64 {
+	if p.Capital != nil {
+		return p.Capital.TotalBalance()
+	}
+	return 0
 }

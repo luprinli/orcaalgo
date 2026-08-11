@@ -796,6 +796,7 @@ export interface OrchestrationSubmitRequest {
   rebalance_bars?: number
   kelly_fraction?: number
   max_position_pct?: number
+  allow_fractional?: boolean
   enable_correlation_brake?: boolean
   correlation_threshold?: number
   friction_model?: string
