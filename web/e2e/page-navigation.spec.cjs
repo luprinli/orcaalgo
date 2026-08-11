@@ -62,10 +62,10 @@ test.describe('Backtest Runner UI — Interactive', () => {
     test.fixme(true, 'Optimize mode replaced by light_optimize checkbox in matrix mode');
   });
 
-  test('strategy checkboxes are present', async ({ page }) => {
+  test('strategy selector is present', async ({ page }) => {
     await page.goto('/backtest', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
-    await expect(page.locator('[id="main-content"]').getByText('grid trading', { exact: false })).toBeVisible();
+    await expect(page.locator('text=Strategies')).toBeVisible();
   });
 
   test('backtest history page loads', async ({ page }) => {

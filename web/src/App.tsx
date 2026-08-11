@@ -79,6 +79,26 @@ function AuthenticatedApp() {
             <Route path="/orchestration" element={<Navigate to="/backtest?mode=orchestrated" replace />} />
             <Route path="/audit" element={<Navigate to="/admin" replace />} />
             <Route path="/users" element={<Navigate to="/admin" replace />} />
+            <Route path="/brokers" element={<Navigate to="/integrations" replace />} />
+            <Route path="/credentials" element={<Navigate to="/integrations" replace />} />
+            <Route path="/symbols" element={<Navigate to="/integrations" replace />} />
+            <Route path="/market-data" element={<Navigate to="/charting" replace />} />
+            <Route path="/optimize" element={<Navigate to="/backtest" replace />} />
+            <Route path="/status" element={<Navigate to="/admin" replace />} />
+            <Route path="/live" element={<Navigate to="/" replace />} />
+            <Route path="/live/market" element={<Navigate to="/" replace />} />
+            <Route path="/risk" element={<Navigate to="/admin" replace />} />
+            <Route path="/data-sources" element={<Navigate to="/settings" replace />} />
+            <Route path="/indicators" element={<Navigate to="/charting" replace />} />
+            <Route path="/webhooks" element={<Navigate to="/settings" replace />} />
+            <Route path="/notifications" element={<Navigate to="/settings" replace />} />
+            <Route path="/2fa" element={<Navigate to="/settings" replace />} />
+            <Route path="/llm" element={<Navigate to="/settings" replace />} />
+            <Route path="/admin/symbols" element={<Navigate to="/admin" replace />} />
+            <Route path="/admin/universe" element={<Navigate to="/admin" replace />} />
+            <Route path="/admin/propfirm" element={<Navigate to="/admin" replace />} />
+            <Route path="/admin/health" element={<Navigate to="/admin" replace />} />
+            <Route path="/admin/logs" element={<Navigate to="/admin" replace />} />
 
             {/* Accounts & Prop Firms */}
             <Route path="/accounts" element={<AccountsPage />} />

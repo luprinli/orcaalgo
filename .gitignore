@@ -73,4 +73,5 @@ data/
 tmp/
 backup/
 venv/
+.playwright-mcp/
 backups/
