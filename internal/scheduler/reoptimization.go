@@ -312,3 +312,80 @@ func (c *ReoptimizationConfig) saveVersion(ctx context.Context, strategyID strin
 
 	return nil
 }
+
+// OrchestrationWalkForwardResult holds metrics from a walk-forward run
+// on an orchestration set.
+type OrchestrationWalkForwardResult struct {
+	StartDate    time.Time
+	EndDate      time.Time
+	ISSharpe     float64
+	OOSSharpe    float64
+	OOSReturnPct float64
+	OOSMaxDD     float64
+	DegradationPct float64
+}
+
+// RunOrchestrationWalkForward evaluates an orchestration config through
+// walk-forward validation (80/20 IS/OOS split). Rreturns IS and OOS pool
+// metrics to detect degradation. Full parameter re-optimization for
+// orchestration sets requires matrix orchestration (Phase 7).
+func RunOrchestrationWalkForward(
+	dbAdapter backtest.Database,
+	cfg backtest.OrchestratorConfig,
+	startDate, endDate time.Time,
+) (*OrchestrationWalkForwardResult, error) {
+	totalDays := endDate.Sub(startDate).Hours() / 24
+	splitDays := totalDays * 0.80
+	isEndDate := startDate.Add(time.Duration(splitDays * 24) * time.Hour)
+
+	isCfg := cfg
+	isCfg.StartDate = startDate
+	isCfg.EndDate = isEndDate
+
+	isOrch, err := backtest.NewOrchestrator(dbAdapter, isCfg)
+	if err != nil {
+		return nil, fmt.Errorf("IS orchestrator: %w", err)
+	}
+	for _, s := range cfg.Strategies {
+		if err := isOrch.AddStrategy(s.Symbol, s.Timeframe, s.StrategyID); err != nil {
+			return nil, fmt.Errorf("IS add strategy: %w", err)
+		}
+	}
+	isResult, err := isOrch.Run(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("IS run: %w", err)
+	}
+
+	oosCfg := cfg
+	oosCfg.StartDate = isEndDate.Add(time.Hour)
+	oosCfg.EndDate = endDate
+
+	oosOrch, err := backtest.NewOrchestrator(dbAdapter, oosCfg)
+	if err != nil {
+		return nil, fmt.Errorf("OOS orchestrator: %w", err)
+	}
+	for _, s := range cfg.Strategies {
+		if err := oosOrch.AddStrategy(s.Symbol, s.Timeframe, s.StrategyID); err != nil {
+			return nil, fmt.Errorf("OOS add strategy: %w", err)
+		}
+	}
+	oosResult, err := oosOrch.Run(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("OOS run: %w", err)
+	}
+
+	dropPct := 0.0
+	if isResult.PoolSharpe > 0 {
+		dropPct = (isResult.PoolSharpe - oosResult.PoolSharpe) / isResult.PoolSharpe * 100
+	}
+
+	return &OrchestrationWalkForwardResult{
+		StartDate:      startDate,
+		EndDate:        endDate,
+		ISSharpe:        isResult.PoolSharpe,
+		OOSSharpe:       oosResult.PoolSharpe,
+		OOSReturnPct:    oosResult.PoolReturnPct,
+		OOSMaxDD:        oosResult.PoolMaxDD,
+		DegradationPct: dropPct,
+	}, nil
+}

@@ -3,10 +3,12 @@ package engine
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lee-econ/orca-core/internal/backtest"
 	"github.com/lee-econ/orca-core/internal/hash"
 	"github.com/lee-econ/orca-core/internal/market"
@@ -525,6 +527,29 @@ func (e *LiveEngine) RecordSlippageObservation(symbol string, expectedPrice, act
 	}
 	e.slippageSampleCount++
 	e.slippageModel = backtest.CalibrateSlippageModel(e.slippageModel, observedBps, e.slippageSampleCount)
+}
+
+// PersistFeatureStore persists the ML feature store to the database for
+// state preservation across engine restarts. Call during graceful shutdown.
+func (e *LiveEngine) PersistFeatureStore(ctx context.Context, pool *pgxpool.Pool) {
+	if e.featureStore == nil || pool == nil {
+		return
+	}
+	e.featureStore.Persist(ctx, pool, "global", "latest")
+}
+
+// LoadFeatureStore restores the ML feature store from the database on
+// engine startup. Call after NewLiveEngine() and before starting processing.
+func (e *LiveEngine) LoadFeatureStore(ctx context.Context, pool *pgxpool.Pool) {
+	if pool == nil {
+		return
+	}
+	restored, _, err := ml.LoadFeatureStore(ctx, pool, "global")
+	if err != nil {
+		log.Printf("[live] feature store load: %v — starting fresh", err)
+		return
+	}
+	e.featureStore = restored
 }
 
 func NanoToTime(ns int64) time.Time {
