@@ -63,7 +63,7 @@ export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerPro
     cacheStore.fetchStrategies(() => strategiesApi.list().then((r: { strategies: Strategy[] }) => r.strategies ?? []))
       .then((list: Strategy[]) => setAvailableStrategies(list))
       .catch(() => {})
-  }, [cacheStore])
+  }, [])
 
   const addRow = useCallback(() => {
     setStrategyRows((prev) => [...prev, { strategy_id: "", symbol: "SPX500", timeframe: "4h" }])
