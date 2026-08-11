@@ -58,14 +58,21 @@ test.describe('Backtest Runner UI — Interactive', () => {
     await expect(page.getByLabel('Orch')).toBeVisible();
   });
 
-  test('switch to optimize mode shows optimize fields', async ({ page }) => {
-    test.fixme(true, 'Optimize mode replaced by light_optimize checkbox in matrix mode');
-  });
-
-  test('strategy selector is present', async ({ page }) => {
+  test('Matrix mode shows Auto-Optimize checkbox and Run Matrix button', async ({ page }) => {
     await page.goto('/backtest', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
-    await expect(page.locator('text=Strategies')).toBeVisible();
+
+    await expect(page.getByLabel('Auto-Optimize')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByLabel('Auto-Optimize')).toBeChecked();
+
+    const runBtn = page.getByRole('button', { name: /Run Matrix/i });
+    await expect(runBtn).toBeVisible({ timeout: 5000 });
+  });
+
+  test('strategy selector section visible', async ({ page }) => {
+    await page.goto('/backtest', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await expect(page.getByText('Strategies')).toBeVisible();
   });
 
   test('backtest history page loads', async ({ page }) => {
