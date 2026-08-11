@@ -487,7 +487,10 @@ func (e *LiveEngine) ReconcileLiveFill(strategyID, symbol, side string, pnl, qua
 	}
 	e.pipeline.ReconcileFill(strategyID, symbol, side, pnl, quantity, price)
 
-	// Also update the per-account capital pool if configured.
+	if expectedPrice, ok := e.openPositions[symbol]; ok {
+		e.RecordSlippageObservation(symbol, expectedPrice.EntryPrice.Float64(), price)
+	}
+
 	if e.multiPool != nil {
 		// The multiPool records fills by account; for single-engine deployments
 		// we use the pool associated with the running engine's first account.
