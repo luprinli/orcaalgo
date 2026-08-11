@@ -184,6 +184,12 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 	if err != nil {
 		regimeLogs = nil
 	}
+	regimeTimeIndex := make(map[int64]int8)
+	if regimeLogs != nil {
+		for _, r := range regimeLogs {
+			regimeTimeIndex[r.Time.Unix()] = r.HMMState
+		}
+	}
 
 	vixLogs, err := o.db.LoadVIXLogs(ctx, o.config.StartDate, o.config.EndDate)
 	if err != nil {
@@ -249,7 +255,10 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 			lastDay = currentDay
 		}
 
-		regime := getRegimeAt(candle.Time, regimeLogs)
+		regime := int8(0)
+		if st, ok := regimeTimeIndex[candle.Time.Unix()]; ok {
+			regime = st
+		}
 
 		var currentVIX float64
 		for _, vl := range vixLogs {
@@ -258,6 +267,8 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 				break
 			}
 		}
+
+		effectiveVIX := o.vixDetector.Feed(currentVIX, currentVIX)
 
 		if o.pool.Halted() {
 			continue
@@ -296,6 +307,11 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 		}
 
 		for _, eng := range o.engines {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
 			eid := o.engineID(eng.symbol, eng.timeframe, eng.strategyID)
 			if candle.Symbol != eng.symbol {
 				continue
@@ -315,7 +331,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 			}
 
 			if vixReceiver, ok := eng.runner.(strategy.VIXReceiver); ok {
-				vixReceiver.SetVIX(currentVIX)
+				vixReceiver.SetVIX(effectiveVIX)
 			}
 
 			raw := eng.runner.Evaluate(candle, regime)
@@ -387,6 +403,11 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 		}
 
 		for eid, op := range openPositions {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
 			eng := o.enginesByID[eid]
 			if eng == nil {
 				delete(openPositions, eid)

@@ -53,8 +53,8 @@ type BacktestResultRecord struct {
 }
 
 func (r *Repository) CreateBacktestRun(ctx context.Context, br *BacktestRunRecord) error {
-	sids, _ := json.Marshal(br.StrategyIDs)
-	syms, _ := json.Marshal(br.Symbols)
+	sids := stringsToPgArray(br.StrategyIDs)
+	syms := stringsToPgArray(br.Symbols)
 	gatePassed := false
 	if br.GatePassed != nil {
 		gatePassed = *br.GatePassed
@@ -91,13 +91,13 @@ func (r *Repository) UpdateBacktestRunMetrics(ctx context.Context, id string, sh
 
 func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRunRecord, error) {
 	br := &BacktestRunRecord{}
-	var sIDs, syms json.RawMessage
+	var sIDs, syms string
 	var sd, ed *time.Time
 	var config, results []byte
 	var errMsg *string
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at
+		`SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at
 		 FROM backtest_runs WHERE id=$1`, id,
 	).Scan(&br.ID, &br.StrategyID, &br.RunType, &br.Status, &sIDs, &syms, &sd, &ed, &br.InitialCapital,
 		&config, &br.SharpeRatio, &br.MaxDrawdown, &br.TotalReturn, &br.WinRate, &br.NumTrades, &results, &errMsg,
@@ -105,8 +105,8 @@ func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRu
 	if err != nil {
 		return nil, err
 	}
-	json.Unmarshal(sIDs, &br.StrategyIDs)
-	json.Unmarshal(syms, &br.Symbols)
+	br.StrategyIDs = pgArrayToStrings(sIDs)
+	br.Symbols = pgArrayToStrings(syms)
 	br.StartDate = sd
 	br.EndDate = ed
 	if config != nil { br.Config = config }
@@ -117,7 +117,7 @@ func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRu
 
 func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType string) ([]*BacktestRunRecord, error) {
 	if limit <= 0 { limit = 50 }
-	query := `SELECT id, strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at FROM backtest_runs`
+	query := `SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at FROM backtest_runs`
 	args := []interface{}{limit}
 	if runType != "" {
 		query += ` WHERE run_type=$1 ORDER BY created_at DESC LIMIT $2`
@@ -132,15 +132,15 @@ func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType st
 	var runs []*BacktestRunRecord
 	for rows.Next() {
 		br := &BacktestRunRecord{}
-		var sIDs, syms json.RawMessage
+		var sIDs, syms string
 		var sd, ed *time.Time
 		var config, results []byte
 		var errMsg *string
 		if err := rows.Scan(&br.ID, &br.StrategyID, &br.RunType, &br.Status, &sIDs, &syms, &sd, &ed, &br.InitialCapital, &config, &br.SharpeRatio, &br.MaxDrawdown, &br.TotalReturn, &br.WinRate, &br.NumTrades, &results, &errMsg, &br.CreatedAt, &br.UpdatedAt, &br.CompletedAt); err != nil {
 			return nil, err
 		}
-		json.Unmarshal(sIDs, &br.StrategyIDs)
-		json.Unmarshal(syms, &br.Symbols)
+		br.StrategyIDs = pgArrayToStrings(sIDs)
+		br.Symbols = pgArrayToStrings(syms)
 		br.StartDate = sd; br.EndDate = ed
 		if config != nil { br.Config = config }
 		if results != nil { br.ResultsJSON = results }
