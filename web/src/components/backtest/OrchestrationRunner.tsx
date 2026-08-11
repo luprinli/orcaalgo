@@ -65,8 +65,20 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
 
   useEffect(() => {
     cacheStore.fetchStrategies(() => strategiesApi.list().then((r: { strategies: Strategy[] }) => r.strategies ?? []))
-      .then((list: Strategy[]) => setAvailableStrategies(list))
-      .catch(() => {})
+      .then((list: Strategy[]) => {
+        const seen = new Set(list.map(s => s.id))
+        for (const row of strategyRows) {
+          if (row.strategy_id && !seen.has(row.strategy_id)) {
+            list.push({ id: row.strategy_id, name: row.strategy_id, type: 'strategy' } as Strategy)
+            seen.add(row.strategy_id)
+          }
+        }
+        setAvailableStrategies(list)
+      })
+      .catch(() => {
+        const fallback = strategyRows.filter(r => r.strategy_id).map(r => ({ id: r.strategy_id, name: r.strategy_id, type: 'strategy' } as Strategy))
+        if (fallback.length > 0) setAvailableStrategies(fallback)
+      })
   }, [])
 
   const addRow = useCallback(() => {
