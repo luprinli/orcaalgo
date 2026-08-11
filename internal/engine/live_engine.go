@@ -34,6 +34,8 @@ type LiveEngine struct {
 	SignalCount uint64
 
 	metaLabeler    ml.Predictor      // H1–H3: meta-labeler for signal gating + priority
+	batchInferrer  *ml.BatchInferrer // H1–H3: threshold skip + cache wrapper around predictor
+	metaCfg        ml.MetaLabelerConfig
 	featureStore   *ml.FeatureStore  // H1: feature computation for ML inference
 	exitOrch       *ml.ExitOrchestrator // H5: ML dynamic stop adjustment
 	regimeEnhancer *ml.RegimeEnhancer   // H4: regime-adaptive sizing
@@ -58,7 +60,16 @@ type LiveEngine struct {
 	slippageSampleCount int
 }
 
-func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) { e.metaLabeler = p }
+func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) {
+	e.metaLabeler = p
+	e.batchInferrer = ml.NewBatchInferrer(p, e.metaCfg)
+}
+func (e *LiveEngine) SetMetaLabelerConfig(cfg ml.MetaLabelerConfig) {
+	e.metaCfg = cfg
+	if e.metaLabeler != nil {
+		e.batchInferrer = ml.NewBatchInferrer(e.metaLabeler, cfg)
+	}
+}
 func (e *LiveEngine) SetFeatureStore(fs *ml.FeatureStore) { e.featureStore = fs }
 func (e *LiveEngine) SetExitOrchestrator(orch *ml.ExitOrchestrator) { e.exitOrch = orch }
 func (e *LiveEngine) SetRegimeEnhancer(re *ml.RegimeEnhancer) { e.regimeEnhancer = re }
@@ -217,7 +228,7 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 	signals := e.getRegistryForAccount(accountID).EvaluateAll(goCandle, regimeInt8)
 
 	var approvedSignals []*strategy.Signal
-	hasML := e.metaLabeler != nil && e.metaLabeler.IsHealthy()
+	hasML := e.batchInferrer != nil || (e.metaLabeler != nil && e.metaLabeler.IsHealthy())
 
 	for _, sig := range signals {
 		if sig == nil {
@@ -243,17 +254,10 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 		if hasML {
 			features := e.computeFeatures(symbolID)
 			var result ml.MetaLabelingResult
-			if sp, ok := e.metaLabeler.(*ml.SubprocessPredictor); ok {
-				result = sp.EvaluateSignal(features)
+			if e.batchInferrer != nil {
+				result = e.batchInferrer.Evaluate(features, sig.PWin)
 			} else {
-				pWin, err := e.metaLabeler.Predict(features)
-				if err != nil || pWin <= 0 {
-					continue
-				}
-				result = ml.MetaLabelingResult{
-					PWin:     pWin,
-					Accepted: pWin >= 0.55,
-				}
+				result = ml.MetaLabelingResult{Accepted: true, PWin: sig.PWin, Reason: "no_batch_inferrer"}
 			}
 			if !result.Accepted {
 				continue
