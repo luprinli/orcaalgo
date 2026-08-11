@@ -310,6 +310,9 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string, op
           <label className="flex items-center gap-1.5 cursor-pointer text-xs">
             <input type="radio" name="run_mode" checked={mode === 'matrix'} onChange={() => setMode('matrix')} /> {tFn('backtest:matrix', 'Matrix')}
           </label>
+          <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+            <input type="radio" name="run_mode" checked={(mode as string) === 'orchestrated'} onChange={() => setMode('orchestrated')} /> Orch
+          </label>
           <div className="flex items-center gap-2 ml-2">
             <Label className="text-xs whitespace-nowrap">{tFn('backtest:startDate', 'Start')}</Label>
             <Input className="h-7 w-28 text-xs" type="date" value={start} onChange={e => setStart(e.target.value)} />
