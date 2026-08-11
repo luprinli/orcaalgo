@@ -20,6 +20,7 @@ type OrchestrationRun struct {
 	InitialCapital float64   `json:"initial_capital"`
 	StrategyIDs   []string   `json:"strategy_ids"`
 	SymbolTFPairs []string   `json:"symbol_tf_pairs"`
+	BatchID       *string    `json:"batch_id,omitempty"`
 	PoolSharpe    *float64   `json:"pool_sharpe,omitempty"`
 	PoolSortino   *float64   `json:"pool_sortino,omitempty"`
 	PoolMaxDD     *float64   `json:"pool_maxdd,omitempty"`
@@ -60,10 +61,10 @@ func (r *Repository) SaveOrchestrationRun(ctx context.Context, run *Orchestratio
 	tfs := stringsToPgArray(run.SymbolTFPairs)
 
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO orchestration_runs (start_date, end_date, initial_capital, strategy_ids, symbol_tf_pairs)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO orchestration_runs (start_date, end_date, initial_capital, strategy_ids, symbol_tf_pairs, batch_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 RETURNING id, created_at`,
-		run.StartDate, run.EndDate, run.InitialCapital, sIDs, tfs,
+		run.StartDate, run.EndDate, run.InitialCapital, sIDs, tfs, run.BatchID,
 	).Scan(&run.ID, &run.CreatedAt)
 }
 
@@ -114,12 +115,12 @@ func (r *Repository) LoadOrchestrationRun(ctx context.Context, id string) (*Orch
 
 	err := r.pool.QueryRow(ctx,
 		`SELECT id, created_at, completed_at, status, start_date, end_date, initial_capital,
-		        strategy_ids::text, symbol_tf_pairs::text, pool_sharpe, pool_sortino, pool_maxdd,
+		        strategy_ids::text, symbol_tf_pairs::text, batch_id, pool_sharpe, pool_sortino, pool_maxdd,
 		        pool_return_pct, rebalance_costs, result_json
 		 FROM orchestration_runs WHERE id=$1`, id,
 	).Scan(&run.ID, &run.CreatedAt, &completedAt, &run.Status,
 		&run.StartDate, &run.EndDate, &run.InitialCapital,
-		&sIDs, &tfs, &run.PoolSharpe, &run.PoolSortino, &run.PoolMaxDD,
+		&sIDs, &tfs, &run.BatchID, &run.PoolSharpe, &run.PoolSortino, &run.PoolMaxDD,
 		&run.PoolReturnPct, &run.RebalanceCosts, &run.ResultJSON)
 	if err != nil {
 		return nil, err
@@ -138,7 +139,7 @@ func (r *Repository) ListOrchestrationRuns(ctx context.Context, limit, offset in
 
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, created_at, completed_at, status, start_date, end_date, initial_capital,
-		        strategy_ids::text, symbol_tf_pairs::text, pool_sharpe, pool_sortino, pool_maxdd,
+		        strategy_ids::text, symbol_tf_pairs::text, batch_id, pool_sharpe, pool_sortino, pool_maxdd,
 		        pool_return_pct, rebalance_costs, result_json
 		 FROM orchestration_runs ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset,
 	)
@@ -154,7 +155,7 @@ func (r *Repository) ListOrchestrationRuns(ctx context.Context, limit, offset in
 		var completedAt *time.Time
 		if err := rows.Scan(&run.ID, &run.CreatedAt, &completedAt, &run.Status,
 			&run.StartDate, &run.EndDate, &run.InitialCapital,
-			&sIDs, &tfs, &run.PoolSharpe, &run.PoolSortino, &run.PoolMaxDD,
+			&sIDs, &tfs, &run.BatchID, &run.PoolSharpe, &run.PoolSortino, &run.PoolMaxDD,
 			&run.PoolReturnPct, &run.RebalanceCosts, &run.ResultJSON); err != nil {
 			continue
 		}
@@ -164,6 +165,37 @@ func (r *Repository) ListOrchestrationRuns(ctx context.Context, limit, offset in
 		runs = append(runs, run)
 	}
 	return runs, total, nil
+}
+
+func (r *Repository) ListOrchestrationRunsByBatch(ctx context.Context, batchID string, limit int) ([]OrchestrationRun, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, created_at, completed_at, status, start_date, end_date, initial_capital,
+		        strategy_ids::text, symbol_tf_pairs::text, batch_id, pool_sharpe, pool_sortino, pool_maxdd,
+		        pool_return_pct, rebalance_costs, result_json
+		 FROM orchestration_runs WHERE batch_id=$1 ORDER BY created_at DESC LIMIT $2`, batchID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var runs []OrchestrationRun
+	for rows.Next() {
+		var run OrchestrationRun
+		var sIDs, tfs string
+		var completedAt *time.Time
+		if err := rows.Scan(&run.ID, &run.CreatedAt, &completedAt, &run.Status,
+			&run.StartDate, &run.EndDate, &run.InitialCapital,
+			&sIDs, &tfs, &run.BatchID, &run.PoolSharpe, &run.PoolSortino, &run.PoolMaxDD,
+			&run.PoolReturnPct, &run.RebalanceCosts, &run.ResultJSON); err != nil {
+			continue
+		}
+		run.CompletedAt = completedAt
+		run.StrategyIDs = pgArrayToStrings(sIDs)
+		run.SymbolTFPairs = pgArrayToStrings(tfs)
+		runs = append(runs, run)
+	}
+	return runs, nil
 }
 
 func (r *Repository) SaveAllocationHistory(ctx context.Context, runID string, entries []AllocationEntry) error {

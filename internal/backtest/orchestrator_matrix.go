@@ -149,6 +149,7 @@ func RunOrchestratorMatrix(dbAdapter Database, repo *db.Repository, cfg OrchMatr
 					EndDate:       cfg.EndDate,
 					InitialCapital: cfg.InitialCapital,
 					Status:        "completed",
+					BatchID:       &batchID,
 				}
 				for _, s := range j.set {
 					run.StrategyIDs = append(run.StrategyIDs, s.StrategyID)

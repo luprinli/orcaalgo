@@ -32,13 +32,14 @@ interface StrategyRow {
 
 interface OrchestrationRunnerProps {
   onSubmit: (runId: string) => void
+  initialRows?: StrategyRow[]
 }
 
-export default function OrchestrationRunner({ onSubmit }: OrchestrationRunnerProps) {
+export default function OrchestrationRunner({ onSubmit, initialRows }: OrchestrationRunnerProps) {
   const cacheStore = useCacheStore()
-  const [strategyRows, setStrategyRows] = useState<StrategyRow[]>([
-    { strategy_id: "", symbol: "SPX500", timeframe: "4h" },
-  ])
+  const [strategyRows, setStrategyRows] = useState<StrategyRow[]>(() =>
+    initialRows && initialRows.length > 0 ? initialRows : [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }]
+  )
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
   const [startDate, setStartDate] = useState("2024-01-01")
   const [endDate, setEndDate] = useState("2025-12-31")

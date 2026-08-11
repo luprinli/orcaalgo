@@ -8,41 +8,13 @@ import { Card, CardContent } from '../ui/card'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/select'
 import { Button } from '../ui/button'
-
-const STRATEGY_DISPLAY: Record<string, string> = {
-  grid: 'Grid Trading',
-  grid_trading: 'Grid Trading',
-  mean_reversion: 'Mean Reversion',
-  intraday_mr: 'Mean Reversion (Intraday)',
-  trend: 'Trend Following',
-  trend_following: 'Trend Following',
-  breakout: 'ORB Breakout',
-  opening_range_breakout: 'ORB Breakout',
-  scalp: 'Session Scalp',
-  session_scalp: 'Session Scalp',
-  vol_arb: 'Vol Harvesting',
-  volatility_harvesting: 'Vol Harvesting',
-  stat_arb: 'Stat Arb',
-  pairs_trading: 'Stat Arb',
-  ma_crossover: 'MA Crossover',
-  macd_rsi: 'MACD RSI',
-  rsi2: 'RSI2 Reversion',
-  rsi2_reversion: 'RSI2 Reversion',
-  donchian: 'Donchian Breakout',
-  donchian_breakout: 'Donchian Breakout',
-  keltner: 'Keltner MACD',
-  keltner_macd: 'Keltner MACD',
-  ichimoku: 'Ichimoku Cloud',
-  ichimoku_cloud: 'Ichimoku Cloud',
-}
+import { Badge } from '../ui/badge'
+import { type SortField, STRATEGY_DISPLAY } from '../../data/constants'
 
 function strategyLabel(id: string) { return STRATEGY_DISPLAY[id] ?? id }
-import { Badge } from '../ui/badge'
 
 const ROW_HEIGHT = 26
 const TABLE_VIEWPORT = 420
-
-type SortField = 'sharpe' | 'sortino' | 'max_dd' | 'return' | 'win_rate' | 'profit_factor' | 'trades'
 
 export interface MatrixResultsPanelProps {
   matrixResult: MatrixResultsResponse
@@ -239,7 +211,11 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       <TableCell className="px-2">{r.optimized ? <Badge variant="outline" className="text-[10px] h-4 px-1" title={JSON.stringify(r.strategy_params || r.best_params || {})}>Y</Badge> : '\u2014'}</TableCell>
                       {onViewDetail && (
                         <TableCell className="px-2">
-                          <Button variant="link" size="sm" className="h-5 text-[10px] p-0" onClick={() => onViewDetail(r.run_id || `${r.strategy_id}|${r.symbol}|${r.timeframe}`)}>View</Button>
+                          <div className="flex gap-1">
+                            <Button variant="link" size="sm" className="h-5 text-[10px] p-0" onClick={() => onViewDetail(r.run_id || `${r.strategy_id}|${r.symbol}|${r.timeframe}`)}>View</Button>
+                            <a href={`/backtest?view=runner&mode=orchestrated&orch_strategy=${encodeURIComponent(r.strategy_id)}&orch_symbol=${encodeURIComponent(r.symbol)}&orch_tf=${encodeURIComponent(r.timeframe)}`}
+                              className="inline-flex items-center h-5 text-[10px] px-1 no-underline text-blue-600 hover:bg-blue-50 rounded">Orch</a>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>

@@ -80,10 +80,10 @@ export default function BacktestHub() {
     if (detailType === 'orchestration') return <div><OrchestrationDetail runId={detailId} /></div>
     return <DetailView id={detailId} setView={setView} t={t} />
   }
-  return <RunnerView setView={setView} t={t} />
+  return <RunnerView setView={setView} t={t} searchParams={searchParams} />
 }
 
-function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => void; t: ReturnType<typeof useTranslation>['t'] }) {
+function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, id?: string, opts?: { type?: 'backtest' | 'orchestration' }) => void; t: ReturnType<typeof useTranslation>['t']; searchParams: URLSearchParams }) {
   const preselectedStrategy = new URLSearchParams(window.location.search).get('strategy')
   const cacheStore = useCacheStore()
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
@@ -292,7 +292,15 @@ function RunnerView({ setView, t: tFn }: { setView: (v: HubView, id?: string, op
         <OrchestrationProgressBar status={orchPollState.status} startTime={orchStartTime} />
       )}
     </div>
-    <OrchestrationRunner onSubmit={(id) => { setOrchRunId(id); setOrchStartTime(Date.now()) }} />
+    <OrchestrationRunner onSubmit={(id) => { setOrchRunId(id); setOrchStartTime(Date.now()) }}
+      initialRows={(() => {
+        const s = searchParams.get('orch_strategy')
+        const sym = searchParams.get('orch_symbol')
+        const tf = searchParams.get('orch_tf')
+        if (s) return [{ strategy_id: s, symbol: sym || "SPX500", timeframe: tf || "4h" }]
+        return undefined
+      })()}
+    />
   </div>
 
   return <div>

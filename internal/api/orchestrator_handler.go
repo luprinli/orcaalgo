@@ -275,6 +275,17 @@ func (h *OrchestratorHandler) SubmitRun(c *gin.Context) {
 }
 
 func (h *OrchestratorHandler) ListRuns(c *gin.Context) {
+	batchID := c.Query("batch_id")
+	if batchID != "" {
+		runs, err := h.repo.ListOrchestrationRunsByBatch(c.Request.Context(), batchID, 100)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if runs == nil { runs = []db.OrchestrationRun{} }
+		c.JSON(http.StatusOK, gin.H{"runs": runs, "total": len(runs)})
+		return
+	}
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
