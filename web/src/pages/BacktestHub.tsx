@@ -89,7 +89,13 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
   const cacheStore = useCacheStore()
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
   const [availableSymbols, setAvailableSymbols] = useState<string[]>([])
-  const [mode, setMode] = useState<'matrix' | 'single' | 'orchestrated'>('matrix')
+  const [mode, setMode] = useState<'matrix' | 'single' | 'orchestrated'>(() => {
+    const urlMode = searchParams.get('mode')
+    if (urlMode === 'orchestrated' || urlMode === 'orch') return 'orchestrated'
+    if (urlMode === 'single') return 'single'
+    if (searchParams.has('orch_strategy') || searchParams.get('batch_promote') === 'true') return 'orchestrated'
+    return 'matrix'
+  })
   const [strategies, setStrategies] = useState<string[]>(() => {
     if (preselectedStrategy && FALLBACK_STRATEGIES.includes(preselectedStrategy)) return [preselectedStrategy]
     return FALLBACK_STRATEGIES.slice(0, 1)
