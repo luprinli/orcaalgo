@@ -10,6 +10,7 @@ import MatrixProgressBar from '../components/backtest/MatrixProgressBar'
 import CancelButton from '../components/backtest/CancelButton'
 import MatrixResultsPanel from '../components/backtest/MatrixResultsPanel'
 import OrchestrationRunner from '../components/backtest/OrchestrationRunner'
+import type { StrategyRow } from '../components/backtest/OrchestrationRunner'
 import OrchestrationProgressBar from '../components/backtest/OrchestrationProgressBar'
 import OrchestrationDetail from '../components/backtest/OrchestrationDetail'
 import OrchestrationHistoryTab from '../components/backtest/OrchestrationHistoryTab'
@@ -294,6 +295,16 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
     </div>
     <OrchestrationRunner onSubmit={(id) => { setOrchRunId(id); setOrchStartTime(Date.now()) }}
       initialRows={(() => {
+        if (searchParams.get('batch_promote') === 'true') {
+          try {
+            const stored = sessionStorage.getItem('orch_batch_promote')
+            if (stored) {
+              const parsed = JSON.parse(stored)
+              sessionStorage.removeItem('orch_batch_promote')
+              if (Array.isArray(parsed) && parsed.length > 0) return parsed as StrategyRow[]
+            }
+          } catch { /* ignore parse errors */ }
+        }
         const s = searchParams.get('orch_strategy')
         const sym = searchParams.get('orch_symbol')
         const tf = searchParams.get('orch_tf')

@@ -30,6 +30,8 @@ interface StrategyRow {
   timeframe: string
 }
 
+export { type StrategyRow }
+
 interface OrchestrationRunnerProps {
   onSubmit: (runId: string) => void
   initialRows?: StrategyRow[]

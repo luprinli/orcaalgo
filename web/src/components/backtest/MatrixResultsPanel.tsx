@@ -9,7 +9,9 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/select'
 import { Button } from '../ui/button'
 import { Badge } from '../ui/badge'
+import { Checkbox } from '../ui/checkbox'
 import { type SortField, STRATEGY_DISPLAY } from '../../data/constants'
+import { Layers } from 'lucide-react'
 
 function strategyLabel(id: string) { return STRATEGY_DISPLAY[id] ?? id }
 
@@ -46,8 +48,36 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
   } = props
 
   const [showSensitivity, setShowSensitivity] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
   const sensitivity = useParameterSensitivity(matrixResult)
   const { entries, colorFor, minS, maxS } = sensitivity
+
+  const rowKey = (r: ComboResult, i: number) => `${r.strategy_id}|${r.symbol}|${r.timeframe}|${i}`
+  const allSelected = sortedMatrixResults.length > 0 && selectedRows.size === sortedMatrixResults.length
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedRows(new Set())
+    } else {
+      setSelectedRows(new Set(sortedMatrixResults.map((r, i) => rowKey(r, i))))
+    }
+  }
+
+  const toggleRow = (key: string) => {
+    const next = new Set(selectedRows)
+    if (next.has(key)) { next.delete(key) } else { next.add(key) }
+    setSelectedRows(next)
+  }
+
+  const batchPromoteToOrch = () => {
+    const combos = sortedMatrixResults.filter((r, i) => selectedRows.has(rowKey(r, i)))
+    if (combos.length === 0) return
+    const orchSets = combos.map(r => ({
+      strategy_id: r.strategy_id, symbol: r.symbol, timeframe: r.timeframe,
+    }))
+    sessionStorage.setItem('orch_batch_promote', JSON.stringify(orchSets))
+    window.location.href = '/backtest?view=runner&mode=orchestrated&batch_promote=true'
+  }
   const win = useWindowedRows(sortedMatrixResults.length, ROW_HEIGHT, TABLE_VIEWPORT)
   const range = maxS - minS || 1
 
@@ -166,11 +196,25 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
               </span>
             </div>
 
+            {selectedRows.size > 0 && (
+              <div className="flex items-center gap-2 py-1.5 px-2 rounded bg-blue-500/10 mb-2">
+                <span className="text-[11px] font-medium text-blue-600">{selectedRows.size} selected</span>
+                <Button size="sm" className="h-6 text-[10px] gap-1 bg-blue-600 hover:bg-blue-700" onClick={batchPromoteToOrch}>
+                  <Layers className="h-3 w-3" /> Promote to Orch
+                </Button>
+                <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setSelectedRows(new Set())}>
+                  Clear
+                </Button>
+              </div>
+            )}
+
             <div className="overflow-x-auto border rounded-md" style={{ maxHeight: TABLE_VIEWPORT, overflowY: 'auto' }} onScroll={win.onScroll}>
               <Table noWrapper className="text-xs">
                 <TableHeader className="sticky top-0 z-10 bg-card [&_tr]:!border-b">
                   <TableRow className="!border-b-2 bg-card">
-                    <TableHead className="h-7 px-2">Strategy</TableHead>
+                    <TableHead className="h-7 px-2 w-8">
+                      <Checkbox checked={allSelected} onChange={() => toggleAll()} />
+                    </TableHead>
                     <TableHead className="h-7 px-2">Symbol</TableHead>
                     <TableHead className="h-7 px-2">TF</TableHead>
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('trades')}>Trades{sortIndicator('trades')}</TableHead>
@@ -190,10 +234,12 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={onViewDetail ? 17 : 16} /></TableRow>}
+                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={onViewDetail ? 18 : 17} /></TableRow>}
                   {sortedMatrixResults.slice(win.start, win.end).map((r, i) => (
-                    <TableRow key={win.start + i} className="h-[26px]" style={{ background: r.sharpe_ratio >= 1.0 ? 'rgba(63,185,80,.06)' : undefined }}>
-                      <TableCell className="px-2 text-[11px]">{strategyLabel(r.strategy_id)}</TableCell>
+                    <TableRow key={win.start + i} className={`h-[26px] ${r.sharpe_ratio >= 1.0 ? 'bg-emerald-500/5' : ''}`}>
+                      <TableCell className="px-2">
+                        <Checkbox checked={selectedRows.has(rowKey(r, win.start + i))} onChange={() => toggleRow(rowKey(r, win.start + i))} />
+                      </TableCell>
                       <TableCell className="px-2 text-[11px]">{r.symbol}</TableCell>
                       <TableCell className="px-2 text-[11px]">{r.timeframe}</TableCell>
                       <TableCell className="px-2 text-[11px] tabular-nums">{r.num_trades}</TableCell>
@@ -220,7 +266,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       )}
                     </TableRow>
                   ))}
-                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={onViewDetail ? 17 : 16} /></TableRow>}
+                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={onViewDetail ? 18 : 17} /></TableRow>}
                 </TableBody>
               </Table>
             </div>
