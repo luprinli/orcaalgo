@@ -215,6 +215,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                     <TableHead className="h-7 px-2 w-8">
                       <Checkbox checked={allSelected} onChange={() => toggleAll()} />
                     </TableHead>
+                    <TableHead className="h-7 px-2">Strategy</TableHead>
                     <TableHead className="h-7 px-2">Symbol</TableHead>
                     <TableHead className="h-7 px-2">TF</TableHead>
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('trades')}>Trades{sortIndicator('trades')}</TableHead>
@@ -222,14 +223,14 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('sortino')}>Sortino{sortIndicator('sortino')}</TableHead>
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('max_dd')}>Max DD{sortIndicator('max_dd')}</TableHead>
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('return')}>Return{sortIndicator('return')}</TableHead>
-                    <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('win_rate')}>Win{sortIndicator('win_rate')}</TableHead>
+                    <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('win_rate')}>Win%{sortIndicator('win_rate')}</TableHead>
                     <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('profit_factor')}>PF{sortIndicator('profit_factor')}</TableHead>
-                    <TableHead className="h-7 px-2">L</TableHead>
-                    <TableHead className="h-7 px-2">S</TableHead>
-                    <TableHead className="h-7 px-2">L-PF</TableHead>
-                    <TableHead className="h-7 px-2">S-PF</TableHead>
+                    <TableHead className="h-7 px-2" title="Long Gross PnL">Long PnL</TableHead>
+                    <TableHead className="h-7 px-2" title="Short Gross PnL">Short PnL</TableHead>
+                    <TableHead className="h-7 px-2" title="Long Profit Factor">L-PF</TableHead>
+                    <TableHead className="h-7 px-2" title="Short Profit Factor">S-PF</TableHead>
                     <TableHead className="h-7 px-2">Gate</TableHead>
-                    <TableHead className="h-7 px-2">Opt</TableHead>
+                    <TableHead className="h-7 px-2" title="Parameters optimized">Opt</TableHead>
                     {onViewDetail && <TableHead className="h-7 px-2 w-12" />}
                   </TableRow>
                 </TableHeader>
