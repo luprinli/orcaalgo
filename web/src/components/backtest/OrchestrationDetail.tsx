@@ -210,7 +210,7 @@ export default function OrchestrationDetail({ runId }: { runId: string }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><PieChart className="h-4 w-4" /> Final Allocation</CardTitle></CardHeader>
-          <CardContent><AllocationPie allocations={finalAllocations} title="Strategy Weights" /></CardContent>
+          <CardContent><AllocationPie allocations={finalAllocations} history={allocation} title="Strategy Weights" /></CardContent>
         </Card>
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 text-sm"><Grid3X3 className="h-4 w-4" /> Correlation Matrix</CardTitle></CardHeader>

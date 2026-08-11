@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect, useMemo } from "react"
+import { useRef, useEffect, useMemo, useState } from "react"
 import {
   Chart,
   DoughnutController,
@@ -8,119 +8,79 @@ import {
   Tooltip,
   Legend,
 } from "chart.js"
-import { EmptyState } from "../EmptyState"
-import { PieChart as PieChartIcon } from "lucide-react"
+import { CardContent } from "../ui/card"
+import { Slider } from "../ui/slider"
+import type { AllocationEntry } from "../../types/api"
 
 Chart.register(DoughnutController, ArcElement, Tooltip, Legend)
 
-interface AllocationSlice {
-  strategyId: string
-  weight: number
-  color?: string
-}
+const COLORS = ["#60a5fa", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#fb923c", "#4ade80", "#f472b6"]
 
 interface AllocationPieProps {
-  allocations: AllocationSlice[]
+  allocations: { strategyId: string; weight: number }[]
   title?: string
+  history?: AllocationEntry[]
 }
 
-const DEFAULT_COLORS = [
-  "#2962FF",
-  "#3fb950",
-  "#d29922",
-  "#f85149",
-  "#a371f7",
-  "#79c0ff",
-  "#56d4dd",
-  "#ffa28b",
-  "#8b949e",
-  "#e3b341",
-  "#f778ba",
-  "#7ee787",
-]
-
-export function AllocationPie({ allocations, title }: AllocationPieProps) {
+export function AllocationPie({ allocations, title, history }: AllocationPieProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const chartRef = useRef<Chart<"doughnut"> | null>(null)
+  const chartRef = useRef<Chart | null>(null)
+  const [timelineIndex, setTimelineIndex] = useState(0)
 
-  const sorted = useMemo(
-    () => [...allocations].sort((a, b) => b.weight - a.weight),
-    [allocations]
-  )
+  const hasHistory = history && history.length > 0
+  const timelineSteps = hasHistory
+    ? Array.from(new Set(history!.map(h => h.bar_time))).sort()
+    : []
+
+  const currentAllocations = useMemo(() => {
+    if (!hasHistory || timelineSteps.length === 0) return allocations
+    const selectedTime = timelineSteps[Math.min(timelineIndex, timelineSteps.length - 1)]
+    const entries = history!.filter(h => h.bar_time === selectedTime)
+    const byStrategy: Record<string, number> = {}
+    let total = 0
+    for (const e of entries) {
+      byStrategy[e.strategy_id] = (byStrategy[e.strategy_id] || 0) + e.allocated_capital
+      total += e.allocated_capital
+    }
+    if (total <= 0) return allocations
+    return Object.entries(byStrategy).map(([id, capital]) => ({
+      strategyId: id,
+      weight: capital / total,
+    }))
+  }, [history, hasHistory, timelineIndex, timelineSteps, allocations])
 
   useEffect(() => {
-    if (!canvasRef.current) return
-    const ctx = canvasRef.current.getContext("2d")
-    if (!ctx) return
-
     if (chartRef.current) {
       chartRef.current.destroy()
       chartRef.current = null
     }
+    if (!canvasRef.current || currentAllocations.length === 0) return
 
-    if (sorted.length === 0) return
-
-    const labels = sorted.map((s) => s.strategyId)
-    const data = sorted.map((s) => s.weight)
-    const colors = sorted.map((s, i) => s.color ?? DEFAULT_COLORS[i % DEFAULT_COLORS.length])
-
-    const totalWeight = data.reduce((sum, v) => sum + v, 0)
+    const ctx = canvasRef.current.getContext("2d")
+    if (!ctx) return
 
     chartRef.current = new Chart(ctx, {
       type: "doughnut",
       data: {
-        labels,
-        datasets: [
-          {
-            data,
-            backgroundColor: colors,
-            borderColor: "hsl(var(--background))",
-            borderWidth: 2,
-          },
-        ],
+        labels: currentAllocations.map(a => a.strategyId),
+        datasets: [{
+          data: currentAllocations.map(a => a.weight),
+          backgroundColor: currentAllocations.map((_, i) => COLORS[i % COLORS.length]),
+          borderWidth: 1,
+          borderColor: "var(--background)",
+        }],
       },
       options: {
         responsive: true,
         maintainAspectRatio: true,
-        cutout: "55%",
         plugins: {
           legend: {
-            position: "bottom" as const,
-            labels: {
-              boxWidth: 10,
-              boxHeight: 10,
-              padding: 12,
-              font: { size: 11 },
-              color: "hsl(var(--muted-foreground))",
-              generateLabels(chart) {
-                const ds = chart.data.datasets[0]
-                const lbls = chart.data.labels as string[]
-                return lbls.map((label, i) => ({
-                  text: `${label} (${((ds.data[i] as number) / totalWeight * 100).toFixed(1)}%)`,
-                  fillStyle: (ds.backgroundColor as string[])[i],
-                  strokeStyle: (ds.backgroundColor as string[])[i],
-                  lineWidth: 0,
-                  hidden: false,
-                  index: i,
-                  fontColor: "hsl(var(--muted-foreground))",
-                  borderRadius: 0,
-                  pointStyle: undefined,
-                  rotation: undefined,
-                  textAlign: "left" as const,
-                }))
-              },
-            },
+            position: "bottom",
+            labels: { boxWidth: 10, padding: 8, font: { size: 10 } },
           },
           tooltip: {
             callbacks: {
-              title(tooltipItems) {
-                return tooltipItems[0].label
-              },
-              label(tooltipItem) {
-                const val = tooltipItem.raw as number
-                const pct = totalWeight > 0 ? ((val / totalWeight) * 100).toFixed(2) : "0.00"
-                return `Weight: ${val.toFixed(4)} (${pct}%)`
-              },
+              label: (ctx) => `${ctx.label}: ${(ctx.raw as number * 100).toFixed(1)}%`,
             },
           },
         },
@@ -133,35 +93,36 @@ export function AllocationPie({ allocations, title }: AllocationPieProps) {
         chartRef.current = null
       }
     }
-  }, [sorted])
+  }, [currentAllocations])
 
-  if (allocations.length === 0) {
+  if (currentAllocations.length === 0) {
     return (
-      <div className="rounded-xl bg-card ring-1 ring-foreground/10 p-6">
-        {title && (
-          <div className="mb-2">
-            <h3 className="font-heading text-base font-medium leading-none">{title}</h3>
-          </div>
-        )}
-        <EmptyState
-          icon={<PieChartIcon className="h-8 w-8" />}
-          title="No active strategies"
-          description="Allocated capital will appear here once strategies are activated."
-        />
-      </div>
+      <CardContent className="p-6 text-center">
+        <p className="text-sm text-muted-foreground">No active strategies</p>
+      </CardContent>
     )
   }
 
   return (
-    <div className="rounded-xl bg-card ring-1 ring-foreground/10 p-4">
-      {title && (
-        <h3 className="font-heading text-base font-medium leading-none mb-3">{title}</h3>
+    <CardContent>
+      <canvas ref={canvasRef} />
+      {title && <p className="text-center text-xs text-muted-foreground mt-2">{title}</p>}
+      {hasHistory && timelineSteps.length > 0 && (
+        <div className="mt-3 px-2">
+          <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+            <span>{new Date(timelineSteps[0]).toLocaleDateString()}</span>
+            <span>{new Date(timelineSteps[timelineIndex] || timelineSteps[0]).toLocaleDateString()}</span>
+            <span>{new Date(timelineSteps[timelineSteps.length - 1]).toLocaleDateString()}</span>
+          </div>
+          <Slider
+            min={0}
+            max={Math.max(0, timelineSteps.length - 1)}
+            step={1}
+            value={[Math.min(timelineIndex, Math.max(0, timelineSteps.length - 1))]}
+            onValueChange={([v]) => setTimelineIndex(v ?? 0)}
+          />
+        </div>
       )}
-      <div className="w-full max-w-[300px] mx-auto">
-        <canvas ref={canvasRef} aria-label="Strategy allocation doughnut chart" />
-      </div>
-    </div>
+    </CardContent>
   )
 }
-
-export default AllocationPie
