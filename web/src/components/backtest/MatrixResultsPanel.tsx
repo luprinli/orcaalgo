@@ -240,6 +240,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       <TableCell className="px-2">
                         <Checkbox checked={selectedRows.has(rowKey(r, win.start + i))} onChange={() => toggleRow(rowKey(r, win.start + i))} />
                       </TableCell>
+                      <TableCell className="px-2 text-[11px]">{strategyLabel(r.strategy_id)}</TableCell>
                       <TableCell className="px-2 text-[11px]">{r.symbol}</TableCell>
                       <TableCell className="px-2 text-[11px]">{r.timeframe}</TableCell>
                       <TableCell className="px-2 text-[11px] tabular-nums">{r.num_trades}</TableCell>
