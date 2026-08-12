@@ -1,6 +1,6 @@
 ﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
-**Version**: 1.2.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 16 registered (14 active)
+**Version**: 1.3.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 16 registered (14 active) · **Migrations**: 39
 
 A high-performance algorithmic trading platform purpose-built for **prop firm challenge compliance** (FTMO, TopStep, E8, TFT). Uses a multi-language architecture: **Go** for orchestration and execution, **Python** for strategy IR and canonical mathematics, and **React + TypeScript** for real-time dashboards.
 
@@ -250,13 +250,17 @@ orca attribute --since 90d
 ## CLI Commands
 
 ```bash
-orca validate <path>              # Validate .gkr.yaml strategy configs
-orca calibrate --since 90d        # Run calibration audit (quarterly)
-orca preflight [--strict]         # Pre-deployment checklist (12 checks)
-orca attribute --since 90d        # PnL attribution with Wilson CI
-orca simulate calibrate --help    # Simulation subcommands
-orca data-validate [--universe]   # Data quality validation
-orca hmm-train --since 3650d      # Train HMM on historical data
+orca validate <path>                  # Validate .gkr.yaml strategy configs
+orca calibrate --since 90d            # Run calibration audit (quarterly)
+orca preflight [--strict]             # Pre-deployment checklist (12 checks)
+orca attribute --since 90d            # PnL attribution with Wilson CI
+orca seed-all [--symbols ...] [--reset] # Reset and regenerate all data from Yahoo Finance
+orca build-candles [--symbols ...]     # Build higher-timeframe candles from 5m source
+orca build-regime-logs [--symbols ...] # Infer market regimes from candle data
+orca ingest-vix                       # Fetch historical VIX from Yahoo ^VIX
+orca validate-data-integrity          # Cross-pipeline data integrity validation
+orca backfill-sentiment [--limit N]   # Backfill sentiment from Alternative.me Fear & Greed Index
+orca hmm-train --since 3650d          # Train HMM on historical data
 ```
 
 ## CI/CD Pipeline
@@ -274,11 +278,12 @@ orca hmm-train --since 3650d      # Train HMM on historical data
 
 ## Documentation
 
-- [Senior Quantitative Audit Report 2026-08-02](docs/Senior%20Quantitative%20Audit%20Report%202026-08-02.md) — Full implementation audit: 8 phases, 16 strategies, backtest-live parity, regime activation matrix, risk hardening, walk-forward automation
+- [Senior Quantitative Audit Report 2026-08-02](docs/archive/Senior%20Quantitative%20Audit%20Report%202026-08-02.md) — Full implementation audit: 8 phases, 16 strategies, backtest-live parity, regime activation matrix, risk hardening, walk-forward automation
 - [Tech Stack Constitution](AGENTS.md) — Language boundaries, 18 hard prohibitions, cross-language integration rules
+- [Synthetic Data Best Practices](docs/Synthetic%20Data%20Generation%20Best%20Practices%202026-08-11.md) — Data generation methodology and validation
 - [Grafana Setup](docs/grafana/README.md) — Monitoring dashboard setup and CI validation
+- [Runbooks](docs/runbooks/README.md) — Operational runbooks (startup/shutdown, kill-switch, migrations, incident response)
 - [Strategy Configs](configs/strategies/) — GKR IR strategy definitions
-- [Tutorials](docs/tutorials/) — Getting started guides
 
 ## License
 
@@ -286,4 +291,4 @@ Proprietary. All rights reserved.
 
 ---
 
-*OrcaAlgo v1.2.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware synthetic data, ML-enhanced signal gating, and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*
+*OrcaAlgo v1.3.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware data pipelines, ML-enhanced signal gating, VIX BIGINT storage, block bootstrap Monte Carlo, multiple testing correction, and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*

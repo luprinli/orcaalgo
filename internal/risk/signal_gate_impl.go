@@ -27,13 +27,6 @@ type SignalGateImpl struct {
 	// milliseconds of real time, so a wall-clock limiter would reject nearly
 	// all valid signals. Set to true when running in a backtest context.
 	backtestSkipRateLimit bool
-
-	// PWin formula: backtest uses min(pWin*1.5, 1.0) while live uses
-	// pWin/0.5. This flag selects the backtest variant.
-	//
-	// TODO(parity): unify to a single formula once backtest/live comparison
-	// confirms no regressions.
-	useBacktestPWin bool
 }
 
 // NewSignalGateImpl creates a SignalGateImpl wired to the provided components.
@@ -59,27 +52,15 @@ func (g *SignalGateImpl) SetBacktestMode(v bool) {
 	g.backtestSkipRateLimit = v
 }
 
-func (g *SignalGateImpl) SetUseBacktestPWin(v bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.useBacktestPWin = v
-}
-
 func (g *SignalGateImpl) SetVIX(vix float64) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.sizer.UpdateMarketState(vix, 50, g.sizer.regime)
 }
 
 func (g *SignalGateImpl) SetRegime(regime int8) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.sizer.UpdateMarketState(g.sizer.vix, g.sizer.sentiment, regime)
 }
 
 func (g *SignalGateImpl) SetEquity(equity float64) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.exposure.SetEquity(equity)
 }
 
@@ -186,20 +167,12 @@ func (g *SignalGateImpl) ExposureTracker() *ExposureTracker {
 }
 
 // ApplyPWin applies the confidence-based sizing adjustment from meta-labeling.
-// The formula is:
-//   - live path:    size *= pWin / 0.5       (linear scaling)
-//   - backtest path: size *= min(pWin*1.5, 1.0)  (capped)
-//
-// When useBacktestPWin is false (live), pWin below 0.5 reduces size, above 0.5
-// increases it. When true (backtest), pWin above 0.667 caps at 1.0x.
+// Formula: baseSize * clamp(pWin*1.5, 0, 1.0)
 func (g *SignalGateImpl) ApplyPWin(baseSize, pWin float64) float64 {
 	if pWin <= 0 {
 		return 0
 	}
-	if g.useBacktestPWin {
-		return baseSize * clamp(pWin*1.5, 0, 1.0)
-	}
-	return baseSize * (pWin / 0.5)
+	return baseSize * clamp(pWin*1.5, 0, 1.0)
 }
 
 func clamp(v, lo, hi float64) float64 {

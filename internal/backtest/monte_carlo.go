@@ -69,34 +69,33 @@ func computeMCSummary(iterations []MCIterationResult, cfg MCConfig) MCSummary {
 		return s
 	}
 
-	sortedPnl := make([]float64, len(iterations))
 	sortedDD := make([]float64, 0, len(iterations))
-
-	for i, it := range iterations {
-		sortedPnl[i] = it.PnlPct
+	for _, it := range iterations {
 		if it.MaxDDPct < 100 {
 			sortedDD = append(sortedDD, it.MaxDDPct)
 		}
 	}
 
-	sort.Float64s(sortedPnl)
+	sortedIterations := make([]MCIterationResult, len(iterations))
+	copy(sortedIterations, iterations)
+	sort.Slice(sortedIterations, func(i, j int) bool {
+		return sortedIterations[i].PnlPct < sortedIterations[j].PnlPct
+	})
 
 	var sumPnl float64
 	bustCount := 0
-	for i, p := range sortedPnl {
-		sumPnl += p
-		dd := iterations[i].MaxDDPct
-		busted := p < 0 || dd > 20.0
-		if busted {
+	for _, it := range sortedIterations {
+		sumPnl += it.PnlPct
+		if it.PnlPct < 0 || it.MaxDDPct > 20.0 {
 			bustCount++
 		}
 	}
 
-	n := len(sortedPnl)
+	n := len(sortedIterations)
 	s.AvgPnlPct = sumPnl / float64(n)
-	s.MedianPnlPct = sortedPnl[n/2]
-	s.P5PnlPct = sortedPnl[max(0, n*5/100)]
-	s.P10PnlPct = sortedPnl[max(0, n*10/100)]
+	s.MedianPnlPct = sortedIterations[n/2].PnlPct
+	s.P5PnlPct = sortedIterations[max(0, n*5/100)].PnlPct
+	s.P10PnlPct = sortedIterations[max(0, n*10/100)].PnlPct
 	s.BustProbability = float64(bustCount) / float64(n)
 
 	if len(sortedDD) > 0 {
@@ -186,6 +185,7 @@ func bootstrapBlockPath(returns []float64, bars int, rng *rand.Rand, blockLen in
 	}
 	path := make([]float64, bars)
 	equity := 1.0
+	busted := false
 
 	n := len(returns)
 	for i := 0; i < bars; {
@@ -194,6 +194,12 @@ func bootstrapBlockPath(returns []float64, bars int, rng *rand.Rand, blockLen in
 			idx := (start + j) % n
 			equity *= (1.0 + returns[idx])
 			if equity <= 0 {
+				equity = 0.0001
+				if !busted {
+					busted = true
+				}
+			}
+			if busted {
 				equity = 0.0001
 			}
 			path[i] = equity
@@ -206,6 +212,17 @@ func bootstrapBlockPath(returns []float64, bars int, rng *rand.Rand, blockLen in
 func computePathMetrics(path []float64) (pnlPct float64, maxDDPct float64) {
 	if len(path) == 0 {
 		return 0, 0
+	}
+
+	busted := false
+	for _, e := range path {
+		if e == 0.0001 {
+			busted = true
+			break
+		}
+	}
+	if busted {
+		return -100.0, 100.0
 	}
 
 	startEquity := 1.0

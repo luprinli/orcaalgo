@@ -44,9 +44,11 @@ type WindowResult struct {
 	OutSampleSortino float64
 	OOSWinRate   float64
 	OOSReturnPct float64
+	OOSMaxDD     float64
 	OOSProfitFactor float64
-	OOSTrades    int
-	PassedCompliance   bool
+	OOSTrades            int
+	PassedCompliance     bool
+	MultiplicityWarning  bool
 }
 
 func GenerateWalkForwardWindows(config WalkForwardConfig) []WalkForwardWindow {
@@ -101,10 +103,13 @@ func (e *Engine) RunWalkForward(ctx context.Context, config WalkForwardConfig) (
 		testCfg.EndDate = w.TestEnd
 
 		trainResult, err := e.Run(ctx, trainCfg)
-		if err != nil {
+		if err != nil || trainResult == nil {
 			continue
 		}
 
+		if len(trainResult.StrategyParams) > 0 {
+			testCfg.StrategyParams = trainResult.StrategyParams
+		}
 		testResult, err := e.Run(ctx, testCfg)
 		if err != nil {
 			continue
@@ -120,6 +125,7 @@ func (e *Engine) RunWalkForward(ctx context.Context, config WalkForwardConfig) (
 			OutSampleSortino: testResult.SortinoRatio,
 			OOSWinRate:     testResult.WinRate,
 			OOSReturnPct:   testResult.TotalReturnPct,
+			OOSMaxDD:       testResult.MaxDrawdown,
 			OOSTrades:      testResult.NumTrades,
 			PassedCompliance:     testResult.ComplianceReport != nil && testResult.ComplianceReport.Passed,
 		}

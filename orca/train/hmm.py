@@ -13,6 +13,8 @@ from pathlib import Path
 
 import numpy as np
 
+from orca.simulation.regime import DEFAULT_TRANSITION_MATRIX
+
 __all__ = [
     "HMMParams",
     "export_params_json",
@@ -115,12 +117,7 @@ def _generate_synthetic_returns(
     rng = np.random.default_rng(seed)
     states = np.zeros(n_samples, dtype=int)
     current = 0
-    trans = np.array([
-        [0.85, 0.10, 0.04, 0.01],
-        [0.08, 0.80, 0.10, 0.02],
-        [0.03, 0.10, 0.80, 0.07],
-        [0.01, 0.02, 0.10, 0.87],
-    ])
+    trans = DEFAULT_TRANSITION_MATRIX.copy()
     means = _hmm_emission_means()
     sds = _hmm_emission_sds()
 

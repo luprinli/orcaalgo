@@ -3,7 +3,7 @@ package broker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -164,7 +164,7 @@ func (r *BrokerDriverRegistry) ResolveWithFallback(
 				e.healthy = false
 				e.lastErr = err
 				r.mu.Unlock()
-				log.Printf("broker %s: operation failed, marking unhealthy: %v", e.manifest.ID, err)
+				slog.Error("operation failed, marking unhealthy", "broker_id", e.manifest.ID, "error", err, "component", "broker")
 				break // try next adapter (or re-resolve if health changed)
 			} else {
 				return nil
@@ -252,7 +252,7 @@ func (r *BrokerDriverRegistry) CancelAllOrders(ctx context.Context) {
 	defer r.mu.RUnlock()
 	for _, e := range r.entries {
 		if err := e.adapter.CancelAllOrders(ctx); err != nil {
-			log.Printf("broker %s: CancelAllOrders failed: %v", e.manifest.ID, err)
+			slog.Error("CancelAllOrders failed", "broker_id", e.manifest.ID, "error", err, "component", "broker")
 		}
 	}
 }
@@ -263,7 +263,7 @@ func (r *BrokerDriverRegistry) CloseAllPositions(ctx context.Context) {
 	defer r.mu.RUnlock()
 	for _, e := range r.entries {
 		if err := e.adapter.CloseAllPositions(ctx); err != nil {
-			log.Printf("broker %s: CloseAllPositions failed: %v", e.manifest.ID, err)
+			slog.Error("CloseAllPositions failed", "broker_id", e.manifest.ID, "error", err, "component", "broker")
 		}
 	}
 }

@@ -65,9 +65,10 @@ def calibrate(
 
     try:
         from orca.calibration.audit import run_calibration_audit
-        from orca.calibration.cli import _load_trades_for_calibration, _resolve_since
+        from orca.calibration.cli import _load_trades_for_calibration
+        from orca.common.time import resolve_since
 
-        parsed_since = _resolve_since(since)
+        parsed_since = resolve_since(since, default_days=30)
         trades = _load_trades_for_calibration(parsed_since)
         report = run_calibration_audit(trades)
 
@@ -206,10 +207,11 @@ def attribute(
     import json as _json
 
     try:
-        from orca.attribution.cli import _load_trades_for_attribution, _resolve_since
+        from orca.attribution.cli import _load_trades_for_attribution
         from orca.attribution.slicer import attribute_pnl
+        from orca.common.time import resolve_since
 
-        parsed_since = _resolve_since(since)
+        parsed_since = resolve_since(since, default_days=90)
         trades = _load_trades_for_attribution(parsed_since)
         report = attribute_pnl(trades)
 
@@ -710,6 +712,7 @@ def validate_regime(
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
     coverage: bool = typer.Option(False, "--coverage", help="Also run strategy coverage validation"),
     min_sharpe: float = typer.Option(0.3, "--min-sharpe", help="Minimum Sharpe ratio for strategy coverage"),
+    generate_first: bool = typer.Option(False, "--generate-first", help="Generate data before running backtests to avoid circular dependency"),
 ) -> None:
     """Validate regime-aware synthetic data: regime persistence, strategy coverage."""
     import json as _json
@@ -761,6 +764,7 @@ def validate_regime(
                 generation_id=generation_id,
                 min_sharpe=min_sharpe,
                 symbol=symbol,
+                generate_first=generate_first,
             )
             report["coverage"] = cov_report
             if not cov_report.get("passed", False):
@@ -883,6 +887,318 @@ def _print_progress(progress: dict, compact: bool = False) -> None:
         if extra:
             for k, v in extra.items():
                 typer.echo(f"  {k}: {v}")
+
+
+# ============================================================================
+# Data pipeline commands (orca/data/)
+# ============================================================================
+
+
+@app.command("build-regime-logs")
+def build_regime_logs(
+    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to infer regimes for (default: all with candle data)"),
+    lookback: int = typer.Option(20, "--lookback", help="Rolling window for volatility/trend computation"),
+) -> None:
+    """Infer market regimes from candle data and insert into regime_logs table.
+
+    Classifies each trading day into one of 4 regimes (Calm/Trending/HighVol/Crisis)
+    using return-based features: volatility, trend strength, and drawdown.
+    Results are inserted into the regime_logs table for use by the RiskPipeline.
+    """
+    from orca.data.regime_inference import build_regime_logs
+    from orca.data.db_integration import get_connection, insert_regime_logs
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            if symbols:
+                placeholders = ",".join(["%s"] * len(symbols))
+                cur.execute(
+                    f"SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id WHERE s.ticker IN ({placeholders})",
+                    symbols,
+                )
+            else:
+                cur.execute(
+                    "SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id"
+                )
+            available = [r[0] for r in cur.fetchall()]
+
+        if not available:
+            typer.echo("No symbols with candle data found. Run seed or ingest first.")
+            raise typer.Exit(1)
+
+        typer.echo(f"Inferring regimes for {len(available)} symbols (lookback={lookback})...")
+
+        all_logs = []
+        for symbol in available:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT s.ticker, c.time, c.close_raw
+                    FROM candles c JOIN symbols s ON c.symbol_id = s.id
+                    WHERE s.ticker = %s AND c.timeframe = '1d'
+                    ORDER BY c.time ASC
+                """, (symbol,))
+                rows = cur.fetchall()
+
+            if len(rows) < lookback + 1:
+                typer.echo(f"  {symbol}: {len(rows)} bars — insufficient (need >{lookback})")
+                continue
+
+            import numpy as np
+            times = np.array([r[1] for r in rows])
+            closes = np.array([r[2] for r in rows], dtype=np.float64) / 100000.0
+
+            from orca.data.regime_inference import infer_regimes
+            labels, confs = infer_regimes(closes, times.astype("datetime64[us]"), lookback)
+            for i, (t, state, conf) in enumerate(zip(times, labels, confs)):
+                if conf > 0:
+                    all_logs.append({
+                        "timestamp": t,
+                        "symbol": symbol,
+                        "hmm_state": int(state),
+                        "confidence": float(conf),
+                    })
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    if all_logs:
+        inserted = insert_regime_logs(all_logs)
+        typer.echo(f"Inserted {inserted} regime log rows across {len(available)} symbols.")
+    else:
+        typer.echo("No regime logs generated.")
+
+
+@app.command("build-candles")
+def build_candles(
+    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to resample (default: all with 5m data)"),
+    source_timeframe: str = typer.Option("5m", "--source-timeframe", help="Source timeframe resolution"),
+    targets: list[str] = typer.Option(["15m", "30m", "1h", "4h", "1d"], "--targets", help="Target timeframes to generate"),
+    validate: bool = typer.Option(True, "--validate/--no-validate", help="Run OHLCV invariant validation after resampling"),
+) -> None:
+    """Build higher-timeframe candles from a fine-resolution source.
+
+    Reads 5-minute OHLCV bars from the candles table, resamples to 15m/30m/1h/4h/1d
+    using standard OHLC aggregation (Open=first, High=max, Low=min, Close=last, Volume=sum),
+    validates invariants, and upserts results into the candles hypertable.
+    """
+    from orca.data.resample import resample_ohlc, TIMEFRAME_HIERARCHY
+    from orca.data.validate_resample import validate_resampling, compute_effective_bpd
+    from orca.data.db_integration import get_connection, upsert_candles
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            if symbols:
+                placeholders = ",".join(["%s"] * len(symbols))
+                cur.execute(
+                    f"SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id WHERE s.ticker IN ({placeholders}) AND c.timeframe = %s",
+                    [*symbols, source_timeframe],
+                )
+            else:
+                cur.execute(
+                    "SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id WHERE c.timeframe = %s",
+                    (source_timeframe,),
+                )
+            available = [r[0] for r in cur.fetchall()]
+
+        if not available:
+            typer.echo(f"No symbols found with {source_timeframe} data. Run seed or ingest first.")
+            raise typer.Exit(1)
+
+        typer.echo(f"Resampling {len(available)} symbols from {source_timeframe} → {', '.join(targets)}...")
+
+        total_inserted = 0
+        for symbol in available:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume
+                    FROM candles c JOIN symbols s ON c.symbol_id = s.id
+                    WHERE s.ticker = %s AND c.timeframe = %s
+                    ORDER BY c.time ASC
+                """, (symbol, source_timeframe))
+                rows = cur.fetchall()
+
+            if not rows:
+                typer.echo(f"  {symbol}: no {source_timeframe} data")
+                continue
+
+            import pandas as pd
+            df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
+            for col in ["open", "high", "low", "close"]:
+                df[col] = df[col].astype(float) / 100000.0
+            df["volume"] = df["volume"].astype(float)
+            df["time"] = pd.to_datetime(df["time"])
+
+            for tf in targets:
+                derived = resample_ohlc(df.copy(), tf)
+                if derived.empty:
+                    typer.echo(f"  {symbol} {tf}: no bars generated")
+                    continue
+
+                if validate:
+                    tf_key = TIMEFRAME_HIERARCHY.get(tf, tf)
+                    errors = validate_resampling(df.set_index("time"), derived, tf_key)
+                    if errors:
+                        typer.echo(f"  WARNING: {symbol} {tf}: {len(errors)} validation errors")
+                        for e in errors[:3]:
+                            typer.echo(f"    {e}")
+
+                eff_bpd = compute_effective_bpd(derived)
+                inserted = upsert_candles(symbol, tf, derived)
+                total_inserted += inserted
+                typer.echo(f"  {symbol} {tf}: {inserted} bars upserted (eff BPD={eff_bpd:.1f})")
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    typer.echo(f"\nDone: {total_inserted} total bars upserted across {len(available)} symbols × {len(targets)} timeframes.")
+
+
+@app.command("seed-all")
+def seed_all_cmd(
+    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to fetch (default: 30 major instruments)"),
+    start: str = typer.Option("2026-06-12", "--start", help="Start date (YYYY-MM-DD, default: 60 days ago for 5m)"),
+    end: str = typer.Option("2026-08-12", "--end", help="End date (YYYY-MM-DD)"),
+    reset: bool = typer.Option(False, "--reset", help="Truncate existing data for the target period before seeding"),
+) -> None:
+    """Reset and regenerate all data from Yahoo Finance.
+
+    Fetches real 5m and 1d market data, resamples to 15m/30m/1h/4h,
+    fetches VIX from ^VIX, infers regimes, generates sentiment, and
+    upserts everything into TimescaleDB with a shared generation_id.
+    This is a complete data reset for a fresh backtest environment.
+    """
+    from datetime import date as _date
+    from orca.data.seed_all import seed_all
+
+    start_date = _date.fromisoformat(start)
+    end_date = _date.fromisoformat(end)
+
+    if symbols:
+        sym_list = []
+        for s in symbols:
+            sym_list.extend([x.strip() for x in s.split(",") if x.strip()])
+    else:
+        sym_list = None
+
+    typer.echo(f"Seed-All: {start} -> {end}, {len(sym_list) if sym_list else 'default (30)'} symbols")
+    if reset:
+        typer.echo("  --reset: truncating existing data for target period")
+
+    stats = seed_all(
+        symbols=sym_list or None,
+        start=start_date,
+        end=end_date,
+        reset=reset,
+        verbose=True,
+    )
+
+    typer.echo(f"\n{'='*60}")
+    typer.echo(f"Seed-All Complete:  generation_id={stats['generation_id']}")
+    typer.echo(f"  Candles:    {stats['rows_candles']} bars")
+    typer.echo(f"  VIX:        {stats['rows_vix']} rows")
+    typer.echo(f"  Regime:     {stats['rows_regime']} rows")
+    typer.echo(f"  Sentiment:  {stats['rows_sentiment']} rows")
+    typer.echo(f"  Elapsed:    {stats['elapsed_seconds']:.1f}s")
+    if stats["errors"]:
+        typer.echo(f"  Errors:     {len(stats['errors'])}")
+        for e in stats["errors"][:5]:
+            typer.echo(f"    {e}")
+
+
+@app.command("ingest-vix")
+def ingest_vix_cmd(
+    start: str = typer.Option("2025-08-12", "--start", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option("2026-08-12", "--end", help="End date (YYYY-MM-DD)"),
+) -> None:
+    """Fetch historical VIX data from Yahoo Finance and insert into vix_logs."""
+    from datetime import date as _date
+    from orca.data.vix_ingestion import fetch_vix_historical
+
+    start_date = _date.fromisoformat(start)
+    end_date = _date.fromisoformat(end)
+
+    logs = fetch_vix_historical(start_date, end_date)
+    if not logs:
+        typer.echo("No VIX data fetched.")
+        raise typer.Exit(1)
+
+    import psycopg2
+    import hashlib, json
+    gen_id = hashlib.sha256(json.dumps({"_": str(start_date)}).encode()).hexdigest()[:16]
+
+    conn = psycopg2.connect(
+        __import__("os").environ.get("ORCA_DB_URL", "postgresql://orca:orca@localhost:5432/orca_core")
+    )
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(cur, """
+                INSERT INTO vix_logs (timestamp, vix_value, vix_change, source)
+                VALUES %s
+                ON CONFLICT DO NOTHING
+            """, [(l["timestamp"], int(l["vix_value"] * 10000), int(l["vix_change"] * 10000), l["source"]) for l in logs], page_size=500)
+            inserted = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    typer.echo(f"Inserted {inserted} VIX log rows ({start_date} → {end_date})")
+
+
+@app.command("validate-data-integrity")
+def validate_data_integrity_cmd(
+    start: str = typer.Option(None, "--start", help="Start date (YYYY-MM-DD, default: 60 days ago)"),
+    end: str = typer.Option(None, "--end", help="End date (YYYY-MM-DD, default: today)"),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
+) -> None:
+    """Validate cross-pipeline data integrity.
+
+    Checks VIX vs. realized volatility, regime transition frequency,
+    candles-per-day vs. timeframe expectation, and cross-table timestamp alignment.
+    Outputs a pass/fail report.
+    """
+    import json as _json
+    from datetime import date as _date
+    from orca.data.validate_integrity import validate_data_integrity
+
+    start_date = _date.fromisoformat(start) if start else None
+    end_date = _date.fromisoformat(end) if end else None
+
+    report = validate_data_integrity(
+        start=start_date,
+        end=end_date,
+        verbose=not json_output,
+    )
+
+    if json_output:
+        typer.echo(_json.dumps(report, indent=2, default=str))
+    elif not report["passed"]:
+        raise typer.Exit(code=1)
+
+
+@app.command("backfill-sentiment")
+def backfill_sentiment_cmd(
+    limit: int = typer.Option(0, "--limit", help="Number of records to fetch (0 = full history)"),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
+) -> None:
+    """Backfill sentiment data from Alternative.me Fear & Greed Index.
+
+    Fetches historical Fear & Greed Index values and upserts into the
+    sentiment_logs table. Scores are validated to range [0, 100].
+    """
+    import json as _json
+    from orca.data.sentiment_backfill import backfill_sentiment
+
+    stats = backfill_sentiment(limit=limit, verbose=not json_output)
+
+    if json_output:
+        typer.echo(_json.dumps(stats, indent=2, default=str))
+    elif stats["errors"]:
+        typer.echo(f"Completed with errors: {stats['errors']}")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

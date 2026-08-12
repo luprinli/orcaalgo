@@ -27,14 +27,14 @@ def monte_carlo_pass_probability(
         return {"error": f"Too few trades: {len(trades)}, need at least 10"}
 
     trades = np.array(trades, dtype=np.float64)
-    np.random.seed(42)
+    rng = np.random.default_rng(42)
 
     passes = 0
     worst_drawdowns = []
     final_returns = []
 
     for _ in range(n_simulations):
-        shuffled = np.random.permutation(trades)
+        shuffled = rng.permutation(trades)
         equity = initial_capital
         peak = initial_capital
         daily_pnl = 0.0
@@ -63,9 +63,12 @@ def monte_carlo_pass_probability(
 
         final_returns.append((equity - initial_capital) / initial_capital * 100)
         daily_peak = initial_capital
+        running_equity = initial_capital
         for ret in shuffled:
-            daily_peak = max(daily_peak, initial_capital * np.prod(1 + np.array([ret])))
-        worst_drawdowns.append(min(0.0, (equity - daily_peak) / daily_peak * 100))
+            running_equity *= (1 + ret)
+            if running_equity > daily_peak:
+                daily_peak = running_equity
+        worst_drawdowns.append(min(0.0, (running_equity - daily_peak) / daily_peak * 100))
 
     final_returns = np.array(final_returns)
     worst_drawdowns = np.array(worst_drawdowns)

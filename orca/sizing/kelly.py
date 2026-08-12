@@ -53,6 +53,8 @@ def kelly_with_attenuators(
         p_discounted = max(p - edge_discount, 0.0)
     elif side_str == "no":
         p_discounted = min(p + edge_discount, 1.0)
+    else:
+        raise ValueError(f"Side must be 'yes' or 'no', got '{side}'")
 
     raw = kelly_fraction_binary(p_discounted, price, side)
     fractional = raw * multiplier

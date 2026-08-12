@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -35,9 +36,31 @@ var (
 
 func main() {
 	loadDotEnv()
+	validateCriticalConfig()
+
+	env := os.Getenv("ORCA_ENVIRONMENT")
+	if env == "" {
+		env = "development"
+	}
+	if env != "development" && env != "staging" && env != "production" {
+		log.Printf("WARNING: unknown ORCA_ENVIRONMENT value %q, defaulting to development", env)
+		env = "development"
+	}
+
+	var logLevel slog.Level
+	if env == "production" {
+		logLevel = slog.LevelWarn
+	} else {
+		logLevel = slog.LevelInfo
+	}
+
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
+
+	if env == "production" {
+		slog.Warn("running in production mode — seed/sample endpoints disabled, log verbosity reduced")
+	}
 
 	vault := &risk.EnvVault{}
 	_ = vault.ValidateScope("alpaca")
@@ -123,7 +146,7 @@ func main() {
 	// Wire WS auth — validate JWT tokens on WebSocket upgrade
 	jwtSecret := os.Getenv("ORCA_JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "dev-jwt-secret-do-not-use-in-production-32chars"
+		log.Fatalf("FATAL: ORCA_JWT_SECRET environment variable is required but not set")
 	}
 	wsHub.SetAuthValidator(func(token string) bool {
 		if token == "" {
@@ -152,12 +175,30 @@ func main() {
 	sched.Start()
 
 	server := api.NewServer(vault, adapter, ks, wsHub, repo, brokerReg)
+	server.SetEnvironment(env)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) { monitor.MetricsHandler().ServeHTTP(w, r) })
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); w.Write([]byte(`{"status":"ok"}`)) })
+	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+		dbOk := repo.Ping(context.Background()) == nil
+		brokerOk := false
+		for id, status := range brokerReg.List() {
+			if status.Healthy {
+				brokerOk = true
+				slog.Debug("broker ready", "id", id, "type", status.BrokerType)
+			}
+		}
+		if dbOk && brokerOk {
+			w.WriteHeader(200)
+			w.Write([]byte(fmt.Sprintf(`{"status":"ready","db":%t,"broker":%t}`, dbOk, brokerOk)))
+		} else {
+			w.WriteHeader(503)
+			w.Write([]byte(fmt.Sprintf(`{"status":"not_ready","db":%t,"broker":%t}`, dbOk, brokerOk)))
+		}
+	})
 
 	metricsPort := os.Getenv("ORCA_METRICS_PORT")
 	if metricsPort == "" {
@@ -262,14 +303,59 @@ func main() {
 		}
 	}()
 
-	slog.Info("Orca Core v0.5.0 starting", "api", "http://localhost:8080", "metrics", "http://localhost"+metricsPort+"/metrics", "health", "http://localhost"+metricsPort+"/healthz", "ws", "ws://localhost:8080/ws", "paper", usePaper, "db", true, "data_mode", dataMode)
+	slog.Info("Orca Core v0.5.0 starting", "api", "http://localhost:8080", "metrics", "http://localhost"+metricsPort+"/metrics", "health", "http://localhost"+metricsPort+"/healthz", "ws", "ws://localhost:8080/ws", "paper", usePaper, "db", true, "data_mode", dataMode, "environment", env)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
-	slog.Info("shutting down...")
+	slog.Info("shutting down, draining in-flight operations...")
 	cancel()
-	sched.Stop()
+
+	drainDone := make(chan struct{})
+	go func() {
+		sched.Stop()
+		positions, _ := adapter.GetPositions(context.Background())
+		if positions != nil {
+			slog.Info("open positions at shutdown", "count", len(positions))
+		}
+		close(drainDone)
+	}()
+
+	select {
+	case <-drainDone:
+	case <-time.After(30 * time.Second):
+		slog.Warn("drain timeout reached, forcing shutdown")
+	}
+
+	slog.Info("shutdown complete")
+}
+
+func validateCriticalConfig() {
+	jwtSecret := os.Getenv("ORCA_JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Fatalf("FATAL: ORCA_JWT_SECRET must be set and at least 32 characters")
+	}
+
+	adminPass := os.Getenv("ORCA_ADMIN_PASSWORD")
+	if adminPass == "" {
+		log.Fatalf("FATAL: ORCA_ADMIN_PASSWORD must be set")
+	}
+
+	dbHost := os.Getenv("ORCA_DB_HOST")
+	if dbHost == "" {
+		log.Fatalf("FATAL: ORCA_DB_HOST must be set")
+	}
+
+	if os.Getenv("PAPER_TRADING") != "true" {
+		apiKey := os.Getenv("ALPACA_API_KEY")
+		if apiKey == "" {
+			log.Fatalf("FATAL: ALPACA_API_KEY must be set when PAPER_TRADING is not 'true'")
+		}
+		apiSecret := os.Getenv("ALPACA_API_SECRET")
+		if apiSecret == "" {
+			log.Fatalf("FATAL: ALPACA_API_SECRET must be set when PAPER_TRADING is not 'true'")
+		}
+	}
 }
 
 func wsClientConnect(ctx context.Context, ringBuf *ingest.RingBuffer, metrics *monitor.Metrics) error {

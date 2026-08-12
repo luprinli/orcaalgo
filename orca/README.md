@@ -56,7 +56,7 @@ from orca.math.platt import platt_scale
 from orca.math.wilson import wilson_ci
 ```
 
-### `orca/sizing/` — Position Sizing
+### `orca/sizing/` — Position Sizing & Performance Estimation
 
 Kelly criterion with all three attenuators per spec §3.1.3. **Fractional Kelly (k=0.25) is mandatory in production** (Hard Prohibition #6).
 
@@ -64,10 +64,14 @@ Kelly criterion with all three attenuators per spec §3.1.3. **Fractional Kelly 
 |--------|-----------|---------|
 | `kelly.py` | `kelly_with_attenuators()`, `kelly_fraction_binary()`, `kelly_fraction_continuous()` | Kelly sizing with edge discount, fractional multiplier, per-trade cap, exposure headroom |
 | `volatility.py` | `ewma_volatility()`, `vol_adjusted_size()`, `diversification_scaling()`, `diversification_weights()` | EWMA volatility estimation, volatility-adjusted sizing, multi-asset diversification |
+| `block_bootstrap.py` | `block_bootstrap_monte_carlo()` | Block bootstrap MC with temporal dependency preservation, Sharpe/DD/return CIs |
+| `multiple_testing.py` | `bonferroni_correction()`, `benjamini_hochberg_correction()` | Bonferroni (FWER) + Benjamini-Hochberg (FDR) multiple testing correction |
 
 ```python
 from orca.sizing.kelly import kelly_with_attenuators
 from orca.sizing.volatility import ewma_volatility, vol_adjusted_size, diversification_weights
+from orca.sizing.block_bootstrap import block_bootstrap_monte_carlo
+from orca.sizing.multiple_testing import benjamini_hochberg_correction
 
 result = kelly_with_attenuators(p=0.60, price=0.50, side="yes")
 print(f"Allocation: {result.final_allocation:.2%}")  # 0.50%
@@ -153,13 +157,41 @@ Three-layer deterministic hashing for strategy graph, parameters, and instances.
 | `graph.py` | `graph_hash_v2()`, `param_hash_v2()`, `instance_hash_v2()` | Three-layer strategy hashing |
 | `verify.py` | `verify_graph_hash()`, `verify_instance_hash()` | Hash verification |
 
+## Data Pipeline (`orca/data/`)
+
+| Module | Key Functions | Purpose |
+|--------|---------------|---------|
+| `seed_all.py` | `seed_all()` | Unified data seeding: Yahoo fetch → resample → VIX → regime → sentiment → DB + manifest |
+| `resample.py` | `resample_ohlc()` | OHLCV resampling (pandas) for higher timeframes |
+| `validate_resample.py` | `validate_resampling()`, `compute_effective_bpd()` | OHLCV invariant validation |
+| `validate_integrity.py` | `validate_data_integrity()` | Cross-pipeline checks: VIX/vol correlation, regime transitions, BPD, table alignment |
+| `regime_inference.py` | `infer_regimes()`, `build_regime_logs()` | HMM regime classification from candle data |
+| `vix_ingestion.py` | `fetch_vix_historical()` | Yahoo ^VIX historical data ingestion |
+| `sentiment_backfill.py` | `backfill_sentiment()` | Alternative.me Fear & Greed Index backfill |
+| `nyse_calendar.py` | `is_trading_day()`, `get_trading_days()` | NYSE holiday calendar (Gauss algorithm, observed holidays) |
+| `db_integration.py` | `upsert_candles()`, `insert_regime_logs()` | TimescaleDB upsert + bulk insert |
+
+## Simulation (`orca/simulation/`)
+
+| Module | Key Functions | Purpose |
+|--------|---------------|---------|
+| `validate.py` | `validate_strategy_coverage()` | Strategy coverage validation with `--generate-first` dependency fix |
+| `tick_disaggregator.py` | `disaggregate_1m_to_ticks()`, `get_symbol_ticks_per_minute()` | Per-symbol liquidity-configured tick generation |
+| `generate_1m.py` | `_get_us_trading_days()` | Synthetic data generation with NYSE holiday calendar integration |
+
 ## CLI
 
 ```bash
-orca validate <path>       # Validate .gkr.yaml against production_guarded profile
-orca calibrate --since 90d # Run calibration audit
-orca preflight             # Pre-deployment checklist
-orca attribute --since 90d # PnL attribution
+orca validate <path>                # Validate .gkr.yaml against production_guarded profile
+orca calibrate --since 90d          # Run calibration audit
+orca preflight                      # Pre-deployment checklist
+orca attribute --since 90d          # PnL attribution
+orca seed-all [--symbols ...] [--reset]       # Reset and regenerate all data
+orca build-candles [--symbols ...]            # Build higher-timeframe candles
+orca build-regime-logs [--symbols ...]        # Infer regimes from candle data
+orca ingest-vix                                # Fetch historical VIX
+orca validate-data-integrity                   # Cross-pipeline data integrity
+orca backfill-sentiment [--limit N]            # Historical sentiment backfill
 ```
 
 ## Dependencies

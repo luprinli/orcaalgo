@@ -20,7 +20,7 @@ func TestCalculateFee_Disabled(t *testing.T) {
 }
 
 func TestCalculateFee_MinFeeClamp(t *testing.T) {
-	f := BrokerageFeeConfig{PerTradeFixed: 0.1, PerContract: 0.01, MinFee: 1.0, TakerFeeBps: 0.1, Enabled: true}
+	f := BrokerageFeeConfig{PerTradeFixed: 0.1, PerShare: 0.01, MinFee: 1.0, TakerFeeBps: 0.1, Enabled: true}
 	fee := f.CalculateFee(1, 10.0)
 	if fee < f.MinFee {
 		t.Errorf("Should clamp to min fee: got %f, min %f", fee, f.MinFee)
@@ -41,7 +41,7 @@ func TestCalculateFee_LargeOrder(t *testing.T) {
 
 func TestCalculateMakerFee_CheaperThanTaker(t *testing.T) {
 	f := BrokerageFeeConfig{
-		PerTradeFixed: 0.35, PerContract: 0.65, MinFee: 0.5,
+		PerTradeFixed: 0.35, PerShare: 0.0035, MinFee: 0.5,
 		MakerFeeBps: 0.01, TakerFeeBps: 0.5, Enabled: true,
 	}
 	makerFee := f.CalculateMakerFee(100, 500.0)

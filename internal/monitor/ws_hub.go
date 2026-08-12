@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -42,7 +42,7 @@ var upgrader = websocket.Upgrader{
 				return true
 			}
 		}
-		log.Printf("ws: rejected origin %q", origin)
+		slog.Warn("rejected WebSocket origin", "origin", origin, "component", "ws")
 		return false
 	},
 }
@@ -78,7 +78,7 @@ func (h *WSHub) SetAuthFailCallback(fn func()) {
 func NewWSHub() *WSHub {
 	hub := &WSHub{
 		clients:    make(map[*WSClient]bool),
-		broadcast:  make(chan []byte, 256),
+		broadcast:  make(chan []byte, 1024),
 		register:   make(chan *WSClient),
 		unregister: make(chan *WSClient),
 		channels:   make(map[string][]*WSClient),
@@ -139,7 +139,7 @@ func (h *WSHub) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("ws upgrade error: %v", err)
+		slog.Error("WebSocket upgrade error", "error", err, "component", "ws")
 		return
 	}
 	client := &WSClient{
@@ -191,7 +191,7 @@ func (h *WSHub) Broadcast(channel string, data interface{}) {
 	case h.broadcast <- payload:
 	default:
 		RecordWSBroadcastDropped(channel)
-		log.Printf("ws broadcast buffer full, dropping message for channel %s", channel)
+		slog.Warn("broadcast buffer full, dropping message", "channel", channel, "component", "ws")
 	}
 }
 

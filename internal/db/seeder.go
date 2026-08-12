@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -19,8 +19,7 @@ func NewSeeder(repo *Repository) *Seeder {
 
 func (s *Seeder) Run(ctx context.Context, force bool) error {
 	seed := GenerateSeedData()
-	log.Printf("seeder: starting with 2 users, %d providers, %d strategies, %d candles, %d ticks, %d trades, %d backtests",
-		len(seed.BrokerProviders), len(seed.Strategies), len(seed.Candles), len(seed.MarketTicks), len(seed.TradeHistory), len(seed.BacktestResults))
+	slog.Info("starting seed", "providers", len(seed.BrokerProviders), "strategies", len(seed.Strategies), "candles", len(seed.Candles), "ticks", len(seed.MarketTicks), "trades", len(seed.TradeHistory), "backtests", len(seed.BacktestResults), "component", "seeder")
 
 	if !force {
 		var count int
@@ -31,23 +30,30 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 				shouldReturn := false
 				var vixCount int
 				if err := s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM vix_logs").Scan(&vixCount); err == nil && vixCount == 0 {
-					log.Printf("seeder: data exists but vix_logs empty — seeding %d VIX rows", len(seed.VIXLogs))
+					slog.Info("seeding VIX logs", "rows", len(seed.VIXLogs), "component", "seeder")
 					if err := s.seedVIXLogs(ctx, seed.VIXLogs); err != nil {
 						return fmt.Errorf("vix logs: %w", err)
 					}
 				}
 				var regimeCount int
 				if err := s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM regime_logs").Scan(&regimeCount); err == nil && regimeCount < 100 {
-					log.Printf("seeder: regime_logs sparse (%d rows) — seeding %d regime rows", regimeCount, len(seed.RegimeLogs))
+					slog.Info("seeding regime logs", "existing_rows", regimeCount, "new_rows", len(seed.RegimeLogs), "component", "seeder")
 					if err := s.seedRegimeLogs(ctx, seed.RegimeLogs); err != nil {
 						return fmt.Errorf("regime logs: %w", err)
 					}
 				}
+				var sentimentCount int
+				if err := s.repo.pool.QueryRow(ctx, "SELECT COUNT(*) FROM sentiment_logs").Scan(&sentimentCount); err == nil && sentimentCount == 0 {
+					slog.Info("seeding sentiment logs", "rows", len(seed.SentimentLogs), "component", "seeder")
+					if err := s.seedSentimentLogs(ctx, seed.SentimentLogs); err != nil {
+						return fmt.Errorf("sentiment logs: %w", err)
+					}
+				}
 				_ = shouldReturn
-				log.Printf("seeder: data already exists (%d providers, %d candles, %d vix_rows, %d regime_rows). Use force=true to re-seed.", count, candleCount, vixCount, regimeCount)
+				slog.Info("data already exists, use force=true to re-seed", "providers", count, "candles", candleCount, "vix_rows", vixCount, "regime_rows", regimeCount, "component", "seeder")
 				return nil
 			}
-			log.Printf("seeder: data exists but candles table empty (%d candles to seed)", len(seed.Candles))
+			slog.Info("data exists but candles table empty", "candles_to_seed", len(seed.Candles), "component", "seeder")
 			if len(seed.Candles) > 0 {
 				if err := s.seedCandles(ctx, seed.Candles); err != nil {
 					return fmt.Errorf("candles: %w", err)
@@ -85,6 +91,9 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 	if err := s.seedVIXLogs(ctx, seed.VIXLogs); err != nil {
 		return fmt.Errorf("vix logs: %w", err)
 	}
+	if err := s.seedSentimentLogs(ctx, seed.SentimentLogs); err != nil {
+		return fmt.Errorf("sentiment logs: %w", err)
+	}
 	if err := s.seedTradeHistory(ctx, seed.TradeHistory); err != nil {
 		return fmt.Errorf("trade history: %w", err)
 	}
@@ -98,7 +107,7 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 		return fmt.Errorf("universe snapshots: %w", err)
 	}
 
-	log.Printf("seeder: successfully seeded all data")
+	slog.Info("successfully seeded all data", "component", "seeder")
 	return nil
 }
 
@@ -154,7 +163,21 @@ func (s *Seeder) seedVIXLogs(ctx context.Context, logs []VIXLogSeed) error {
 	for _, l := range logs {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO vix_logs (timestamp, vix_value, vix_change) VALUES ($1,$2,$3)",
-			l.Time, l.VIXValue, l.VIXChange); err != nil { return fmt.Errorf("vix %s: %w", l.Time.Format("2006-01-02"), err) }
+			l.Time, int64(l.VIXValue*VIXBigintScale), int64(l.VIXChange*VIXBigintScale)); err != nil { return fmt.Errorf("vix %s: %w", l.Time.Format("2006-01-02"), err) }
+	}
+	return nil
+}
+
+func (s *Seeder) seedSentimentLogs(ctx context.Context, logs []SentimentLogSeed) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	for _, l := range logs {
+		if _, err := s.repo.pool.Exec(ctx,
+			"INSERT INTO sentiment_logs (timestamp, score, label) VALUES ($1,$2,$3)",
+			l.Time, l.Score, l.Label); err != nil {
+			return fmt.Errorf("sentiment %s: %w", l.Time.Format("2006-01-02"), err)
+		}
 	}
 	return nil
 }
@@ -190,7 +213,7 @@ func (s *Seeder) seedCandles(ctx context.Context, candles []CandleSeed) error {
 		if _, cerr := br.Exec(); cerr != nil { continue }
 		br.Close()
 	}
-	log.Printf("seeder: seeded %d candles", len(candles))
+	slog.Info("seeded candles", "count", len(candles), "component", "seeder")
 	return nil
 }
 
@@ -243,7 +266,7 @@ func (s *Seeder) truncateAll(ctx context.Context) error {
 	tables := []string{"trade_executions", "regime_logs", "backtest_results", "backtest_runs", "market_ticks", "candles", "provider_symbols", "credentials", "providers", "strategies", "symbols", "universe_state", "universe_config"}
 	for _, t := range tables {
 		if _, err := s.repo.pool.Exec(ctx, "DELETE FROM "+t); err != nil {
-			log.Printf("seeder: truncate %s: %v (continuing)", t, err)
+			slog.Warn("truncate error", "table", t, "error", err, "component", "seeder")
 		}
 	}
 	return nil

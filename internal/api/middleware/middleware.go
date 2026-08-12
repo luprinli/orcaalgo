@@ -1,23 +1,45 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/security"
 )
 
 var jwtSecret []byte
 var jwtSecretOnce sync.Once
 
+var authRepo *db.Repository
+var authRepoMu sync.RWMutex
+
+// SetAuthRepo sets the database repository used by AuthMiddleware to
+// check token revocation status. Safe for concurrent use.
+func SetAuthRepo(repo *db.Repository) {
+	authRepoMu.Lock()
+	defer authRepoMu.Unlock()
+	authRepo = repo
+}
+
+func getAuthRepo() *db.Repository {
+	authRepoMu.RLock()
+	defer authRepoMu.RUnlock()
+	return authRepo
+}
+
 func loadJWTSecret() {
 	jwtSecretOnce.Do(func() {
+		if jwtSecret != nil {
+			return
+		}
 		s := os.Getenv("ORCA_JWT_SECRET")
 		if s == "" {
-			s = "dev-jwt-secret-do-not-use-in-production-32chars"
+			panic("ORCA_JWT_SECRET environment variable is required but not set")
 		}
 		jwtSecret = []byte(s)
 	})
@@ -64,6 +86,14 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
+
+		if repo := getAuthRepo(); repo != nil {
+			if revoked, err := repo.IsTokenRevoked(context.Background(), claims.ID); err == nil && revoked {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Token has been revoked"})
+				return
+			}
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("roles", claims.Roles)

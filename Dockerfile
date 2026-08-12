@@ -1,3 +1,4 @@
+# NOTE: Base image digests should be pinned in CI (e.g. golang:1.25-alpine@sha256:...).
 FROM golang:1.25-alpine AS go-builder
 
 RUN apk add --no-cache git gcc musl-dev
@@ -27,6 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libc6 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN groupadd -r orca && useradd -r -g orca -d /app -s /sbin/nologin orca
+
 WORKDIR /app
 
 COPY --from=go-builder /orca-server .
@@ -44,5 +47,7 @@ EXPOSE 8080 9091
 
 HEALTHCHECK --interval=15s --timeout=5s --retries=3 --start-period=10s \
     CMD /app/orca-cli health 2>/dev/null || exit 1
+
+USER orca
 
 ENTRYPOINT ["/app/orca-server"]

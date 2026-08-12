@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -47,7 +47,7 @@ func NewHealthMonitor(pool *pgxpool.Pool, accountMgr *broker.AccountManager, not
 
 func (h *HealthMonitor) Start() {
 	go h.run()
-	log.Println("health_monitor: started")
+	slog.Info("health monitor started", "component", "health_monitor")
 }
 
 func (h *HealthMonitor) Stop() {

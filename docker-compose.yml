@@ -17,20 +17,6 @@ services:
     networks:
       - orca-net
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - orca-net
-
   # Optional: Docker-based API server. For production, use the native binary
   # started by scripts/orchestrate.py --production instead.
   # Start manually: docker compose --profile prod up app
@@ -51,8 +37,6 @@ services:
       - ORCA_DB_PASSWORD=${DB_PASSWORD:-change_me}
       - ORCA_DB_NAME=${DB_NAME:-orca_core}
       - ORCA_DB_SSLMODE=disable
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - PAPER_TRADING=${PAPER_TRADING:-true}
       - ORCA_JWT_SECRET=${ORCA_JWT_SECRET:-dev-secret-change-in-production}
       - ORCA_ADMIN_PASSWORD=${ORCA_ADMIN_PASSWORD:-admin123}
@@ -62,8 +46,6 @@ services:
       - ORCA_METRICS_PORT=:9090
     depends_on:
       postgres:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     restart: unless-stopped
     networks:
@@ -82,7 +64,6 @@ services:
       - '--storage.tsdb.path=/prometheus'
     depends_on:
       - postgres
-      - redis
     networks:
       - orca-net
 
@@ -108,7 +89,6 @@ services:
 
 volumes:
   pgdata:
-  redis_data:
   prometheus_data:
   grafana_data:
 

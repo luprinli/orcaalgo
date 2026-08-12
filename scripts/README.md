@@ -145,7 +145,7 @@ Detects changed files vs main branch and runs only the relevant tests (Python + 
 python scripts/anti_pattern_scan.py
 ```
 
-Scans the codebase for violations of the 10 hard prohibitions defined in `AGENTS.md`.
+Scans the codebase for violations of the 18 hard prohibitions defined in `AGENTS.md`. Enforces HP #17 (Rule 11: RiskPipeline bypass detection) via CI.
 
 ### `migrate.ps1` — Database Migration Runner
 

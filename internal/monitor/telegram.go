@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/breaker"
 )
 
 type AlertLevel string
@@ -25,20 +27,22 @@ type Alert struct {
 }
 
 type TelegramBot struct {
-	token   string
-	chatID  string
-	baseURL string
-	enabled bool
+	token          string
+	chatID         string
+	baseURL        string
+	enabled        bool
+	circuitBreaker *breaker.CircuitBreaker
 }
 
 func NewTelegramBot() *TelegramBot {
 	token := os.Getenv("TELEGRAM_BOT_TOKEN")
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")
 	return &TelegramBot{
-		token:   token,
-		chatID:  chatID,
-		baseURL: "https://api.telegram.org",
-		enabled: token != "" && chatID != "",
+		token:          token,
+		chatID:         chatID,
+		baseURL:        "https://api.telegram.org",
+		enabled:        token != "" && chatID != "",
+		circuitBreaker: breaker.NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
@@ -62,7 +66,7 @@ func (tb *TelegramBot) SendAlert(level AlertLevel, message string) {
 		tb.sendMessage(message)
 	}
 
-	log.Printf("telegram alert [%s]: %s", level, message)
+	slog.Info("telegram alert", "level", string(level), "message", message, "component", "telegram")
 	_ = alert
 }
 
@@ -86,6 +90,11 @@ func (tb *TelegramBot) Send(level AlertLevel, msgType string, args ...interface{
 }
 
 func (tb *TelegramBot) sendMessage(text string) {
+	if !tb.circuitBreaker.Allow() {
+		slog.Warn("circuit breaker open, dropping message", "component", "telegram")
+		return
+	}
+
 	url := fmt.Sprintf("%s/bot%s/sendMessage", tb.baseURL, tb.token)
 	payload := map[string]string{
 		"chat_id":    tb.chatID,
@@ -96,8 +105,15 @@ func (tb *TelegramBot) sendMessage(text string) {
 
 	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
-		log.Printf("telegram send error: %v\n", err)
+		tb.circuitBreaker.RecordFailure()
+		slog.Error("telegram send error", "error", err, "component", "telegram")
 		return
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 500 {
+		tb.circuitBreaker.RecordFailure()
+	} else {
+		tb.circuitBreaker.RecordSuccess()
+	}
 }

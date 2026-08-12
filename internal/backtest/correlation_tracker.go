@@ -15,6 +15,7 @@ type CorrelationTracker struct {
 	velocityThreshold float64
 	cooldown        int
 	velocityCooldown map[string]int
+	rhoHistory      map[string]float64
 }
 
 func NewCorrelationTracker(window int, threshold float64) *CorrelationTracker {
@@ -27,6 +28,7 @@ func NewCorrelationTracker(window int, threshold float64) *CorrelationTracker {
 		velocityThreshold: 0.3,
 		cooldown:         3,
 		velocityCooldown: make(map[string]int),
+		rhoHistory:       make(map[string]float64),
 	}
 }
 
@@ -230,8 +232,6 @@ func returnsFromEquity(equity []float64) []float64 {
 	return returns
 }
 
-var rhoHistory = make(map[string]float64)
-
 func pairKey(a, b string) string {
 	if a < b {
 		return a + ":" + b
@@ -240,11 +240,11 @@ func pairKey(a, b string) string {
 }
 
 func (ct *CorrelationTracker) previousRho(key string) float64 {
-	return rhoHistory[key]
+	return ct.rhoHistory[key]
 }
 
 func (ct *CorrelationTracker) storeRho(key string, rho float64) {
-	rhoHistory[key] = rho
+	ct.rhoHistory[key] = rho
 }
 
 func intMin(a, b int) int {

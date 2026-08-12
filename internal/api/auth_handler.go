@@ -5,9 +5,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,9 +21,12 @@ import (
 )
 
 type AuthHandler struct {
-	repo         *db.Repository
-	emailService email.EmailService
-	frontendURL  string
+	repo              *db.Repository
+	emailService      email.EmailService
+	frontendURL       string
+	loginAttempts     map[string]int
+	loginBlockedUntil map[string]time.Time
+	loginMu           sync.Mutex
 }
 
 type loginReq struct {
@@ -53,23 +57,35 @@ type totpSetupResp struct {
 
 func NewAuthHandlerWithRepo(repo *db.Repository, emailSvc email.EmailService, frontendURL string) *AuthHandler {
 	h := &AuthHandler{
-		repo:         repo,
-		emailService: emailSvc,
-		frontendURL:  frontendURL,
+		repo:              repo,
+		emailService:      emailSvc,
+		frontendURL:       frontendURL,
+		loginAttempts:     make(map[string]int),
+		loginBlockedUntil: make(map[string]time.Time),
 	}
 	h.migrateAdminUser()
+	go h.loginCleanupLoop()
 	return h
 }
 
 func NewAuthHandler() *AuthHandler {
-	h := &AuthHandler{}
+	h := &AuthHandler{
+		loginAttempts:     make(map[string]int),
+		loginBlockedUntil: make(map[string]time.Time),
+	}
 	h.ensureAdminUser()
+	go h.loginCleanupLoop()
 	return h
 }
 
 func NewAuthHandlerLegacy(repo *db.Repository) *AuthHandler {
-	h := &AuthHandler{repo: repo}
+	h := &AuthHandler{
+		repo:              repo,
+		loginAttempts:     make(map[string]int),
+		loginBlockedUntil: make(map[string]time.Time),
+	}
 	h.migrateAdminUser()
+	go h.loginCleanupLoop()
 	return h
 }
 
@@ -98,7 +114,7 @@ func (h *AuthHandler) migrateAdminUser() {
 
 	count, err := h.repo.UserCount(ctx)
 	if err != nil {
-		log.Printf("auth: failed to check user count: %v", err)
+		slog.Error("failed to check user count", "error", err, "component", "auth")
 		return
 	}
 	if count > 0 {
@@ -107,7 +123,7 @@ func (h *AuthHandler) migrateAdminUser() {
 
 	adminHash, err := hashPassword(adminPass)
 	if err != nil {
-		log.Printf("auth: failed to hash admin password: %v", err)
+		slog.Error("failed to hash admin password", "error", err, "component", "auth")
 		return
 	}
 	adminUser := &db.DBUser{
@@ -121,16 +137,25 @@ func (h *AuthHandler) migrateAdminUser() {
 	}
 
 	if err := h.repo.CreateUser(ctx, adminUser); err != nil {
-		log.Printf("auth: failed to migrate admin user: %v", err)
+		slog.Error("failed to migrate admin user", "error", err, "component", "auth")
 		return
 	}
-	log.Println("auth: admin user migrated to database")
+	slog.Info("admin user migrated to database", "component", "auth")
 }
 
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if h.isLoginBlocked(req.Username) {
+		h.loginMu.Lock()
+		until := h.loginBlockedUntil[req.Username]
+		h.loginMu.Unlock()
+		remain := time.Until(until).Minutes()
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": fmt.Sprintf("Too many login attempts. Try again in %.0f minutes.", remain)})
 		return
 	}
 
@@ -145,6 +170,7 @@ func (h *AuthHandler) loginFromDB(c *gin.Context, req loginReq) {
 	ctx := c.Request.Context()
 	user, err := h.repo.GetUserByUsername(ctx, req.Username)
 	if err != nil || !checkPasswordHash(req.Password, user.PasswordHash) {
+		h.recordFailedLogin(req.Username)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
@@ -164,6 +190,8 @@ func (h *AuthHandler) loginFromDB(c *gin.Context, req loginReq) {
 			return
 		}
 	}
+
+	h.clearFailedLogins(req.Username)
 
 	pair, err := security.GenerateTokenPair(user.ID, user.Username, user.Roles, jwtSecret(), 24*time.Hour)
 	if err != nil {
@@ -232,7 +260,7 @@ func (h *AuthHandler) registerInDB(c *gin.Context, req registerReq, emailAddr st
 		return
 	}
 
-	log.Printf("auth: user %s registered", user.Username)
+	slog.Info("user registered", "username", user.Username, "component", "auth")
 	c.JSON(http.StatusCreated, gin.H{"username": req.Username, "message": "Registration successful"})
 }
 
@@ -266,7 +294,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 	}
 	if err := h.repo.CreatePasswordResetToken(ctx, resetToken); err != nil {
-		log.Printf("auth: failed to create reset token: %v", err)
+		slog.Error("failed to create reset token", "error", err, "component", "auth")
 		c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a reset link has been sent"})
 		return
 	}
@@ -278,10 +306,10 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 			"ResetLink": resetLink,
 			"ExpiresIn": "1 hour",
 		}); err != nil {
-			log.Printf("auth: failed to send password reset email: %v", err)
+			slog.Error("failed to send password reset email", "error", err, "component", "auth")
 		}
 	} else {
-		log.Printf("auth: password reset token for %s: %s", req.Email, tokenStr)
+		slog.Info("password reset token created", "email", req.Email, "token", tokenStr, "component", "auth")
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "If the email exists, a reset link has been sent"})
@@ -318,7 +346,7 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 
 	h.repo.MarkResetTokenUsed(ctx, token.ID)
 
-	log.Printf("auth: password reset for user %s", token.UserID)
+	slog.Info("password reset completed", "user_id", token.UserID, "component", "auth")
 	c.JSON(http.StatusOK, gin.H{"message": "Password has been reset successfully"})
 }
 
@@ -397,7 +425,7 @@ func (h *AuthHandler) ResendVerification(c *gin.Context) {
 			"VerifyLink": verifyLink,
 			"ExpiresIn":  "24 hours",
 		}); err != nil {
-			log.Printf("auth: failed to send verification email: %v", err)
+			slog.Error("failed to send verification email", "error", err, "component", "auth")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to send verification email"})
 			return
 		}
@@ -462,6 +490,53 @@ func (h *AuthHandler) ValidateTOTP(username, code string) bool {
 	}
 	valid, _ := security.ValidateTOTP(user.TOTPSecret, code)
 	return valid
+}
+
+func (h *AuthHandler) isLoginBlocked(username string) bool {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	blockedUntil, ok := h.loginBlockedUntil[username]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(blockedUntil) {
+		return true
+	}
+	delete(h.loginBlockedUntil, username)
+	delete(h.loginAttempts, username)
+	return false
+}
+
+func (h *AuthHandler) recordFailedLogin(username string) {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	h.loginAttempts[username]++
+	if h.loginAttempts[username] >= 5 {
+		h.loginBlockedUntil[username] = time.Now().Add(15 * time.Minute)
+	}
+}
+
+func (h *AuthHandler) clearFailedLogins(username string) {
+	h.loginMu.Lock()
+	defer h.loginMu.Unlock()
+	delete(h.loginAttempts, username)
+	delete(h.loginBlockedUntil, username)
+}
+
+func (h *AuthHandler) loginCleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		h.loginMu.Lock()
+		now := time.Now()
+		for username, until := range h.loginBlockedUntil {
+			if now.After(until) {
+				delete(h.loginBlockedUntil, username)
+				delete(h.loginAttempts, username)
+			}
+		}
+		h.loginMu.Unlock()
+	}
 }
 
 func hashPassword(password string) (string, error) {

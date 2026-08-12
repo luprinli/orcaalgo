@@ -118,11 +118,12 @@ def apply_jump_diffusion(
     prices: np.ndarray,
     params: JumpParams,
     rng: np.random.Generator,
+    dt: float = 1.0 / 252,
 ) -> np.ndarray:
     result = prices.copy()
 
     for t in range(len(prices)):
-        n_jumps = rng.poisson(params.jump_intensity)
+        n_jumps = rng.poisson(params.jump_intensity * dt)
         if n_jumps > 0:
             for _ in range(n_jumps):
                 jump_size = rng.normal(params.jump_mean, params.jump_std)
@@ -190,7 +191,7 @@ def generate_synthetic_data(config: SyntheticConfig) -> pd.DataFrame:
     )
 
     if config.jumps is not None:
-        prices = apply_jump_diffusion(prices, config.jumps, rng)
+        prices = apply_jump_diffusion(prices, config.jumps, rng, dt=config.dt)
 
     df = prices_to_ohlcv(
         prices=prices,

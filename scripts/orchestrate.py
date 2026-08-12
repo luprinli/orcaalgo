@@ -314,7 +314,6 @@ def _build_services(local_mode: bool = False,
                     db_host: str = "localhost", db_port: int = 5432,
                     db_user: str = "postgres", db_password: str = "",
                     db_name: str = "orca_core", db_sslmode: str = "disable",
-                    skip_redis: bool = False,
                     skip_metrics: bool = False,
                     production: bool = False) -> list[Service]:
     """Build service list, adapting for local DB mode when requested."""
@@ -343,9 +342,6 @@ def _build_services(local_mode: bool = False,
                 "ORCA_DB_SSLMODE": db_sslmode,
             },
         )
-        redis_deps: list[str] = []
-        if not skip_redis:
-            postgres_svc.depends_on = []
     else:
         postgres_svc = Service(
             name="PostgreSQL",
@@ -353,18 +349,8 @@ def _build_services(local_mode: bool = False,
             docker_service="postgres",
             health_url="",
         )
-        redis_deps = ["PostgreSQL"]
 
     services: list[Service] = [postgres_svc]
-
-    services.append(Service(
-        name="Redis",
-        port=6379,
-        docker_service="redis" if not local_mode else None,
-        health_url="",
-        depends_on=redis_deps,
-        optional=local_mode or skip_redis,
-    ))
 
     go_env: dict[str, str] = {}
     if local_mode:
@@ -384,7 +370,7 @@ def _build_services(local_mode: bool = False,
         health_url="/api/v1/system/health",
         health_max_retries=30,
         health_retry_delay=3.0,
-        depends_on=["PostgreSQL", "Redis"],
+        depends_on=["PostgreSQL"],
         startup_cmd=go_cmd,
         startup_cwd=str(PROJECT_ROOT),
         env=go_env,
@@ -907,12 +893,20 @@ def build_cli() -> argparse.ArgumentParser:
                         help="Production mode: use pre-built binary, skip React dev, run preflight + migration checks")
     parser.add_argument("--seed", action="store_true",
                         help="Seed database with initial data before starting API")
+    parser.add_argument("--reset-reseed", action="store_true",
+                        help="Reset and regenerate all data: fetch real market data from Yahoo, "
+                             "resample to all timeframes, infer regimes, and generate sentiment. "
+                             "Requires yfinance and psycopg2-binary installed.")
+    parser.add_argument("--reseed-symbols", type=str, nargs="*",
+                        help="Symbols to reseed (default: SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,GLD,BTC-USD,ETH-USD and major FX pairs)")
+    parser.add_argument("--reseed-start", type=str, default="2026-06-12",
+                        help="Start date for reseed (YYYY-MM-DD, default: 60d ago for Yahoo 5m)")
+    parser.add_argument("--reseed-end", type=str, default="2026-08-12",
+                        help="End date for reseed (YYYY-MM-DD, default: 2026-08-12)")
     parser.add_argument("--no-react", action="store_true",
                         help="Skip React frontend dev server")
     parser.add_argument("--no-monitoring", action="store_true",
                         help="Skip Prometheus and Grafana")
-    parser.add_argument("--skip-redis", action="store_true",
-                        help="Skip Redis service (useful with --local when Redis is unavailable)")
     parser.add_argument("--force", action="store_true",
                         help="Force-kill stale processes on ports (use only for orphaned processes)")
     parser.add_argument("--skip-port-cleanup", action="store_true",
@@ -1048,6 +1042,89 @@ def detect_local_postgresql() -> dict[str, Any]:
     return result
 
 
+def run_reseed(
+    venv_python: str | None,
+    symbols: list[str] | None,
+    start: str,
+    end: str,
+    db_host: str,
+    db_port: int,
+    db_user: str,
+    db_password: str,
+    db_name: str,
+    db_sslmode: str,
+) -> bool:
+    """Reset and regenerate all market data from Yahoo Finance.
+
+    Pipeline: seed-all (reset) -> build-regime-logs -> build-candles.
+    All commands run via subprocess in the project's venv or system Python.
+
+    Returns True if all steps succeed.
+    """
+    python_cmd = venv_python or "python"
+    from urllib.parse import quote
+    db_url = f"postgresql://{db_user}:{quote(db_password, safe='')}@{db_host}:{db_port}/{db_name}?sslmode={db_sslmode}"
+
+    env = os.environ.copy()
+    env["ORCA_DB_URL"] = db_url
+
+    sym_args: list[str] = []
+    if symbols:
+        flat: list[str] = []
+        for s in symbols:
+            flat.extend([x.strip() for x in s.replace(",", " ").split() if x.strip()])
+        for s in flat:
+            sym_args.extend(["--symbols", s])
+
+    step = 0
+    log("STEP", "Reseed", "=== Reset & Regenerate Data Pipeline ===")
+
+    # Step 1: seed-all --reset
+    step += 1
+    log("STEP", f"Reseed/{step}", f"Fetching real market data from Yahoo Finance ({start} -> {end})...")
+    log("INFO", f"Reseed/{step}", f"Symbols: {', '.join(symbols) if symbols else 'default (30 major instruments)'}")
+    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "seed-all",
+           "--start", start, "--end", end, "--reset"] + sym_args
+    result = subprocess.run(
+        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=600
+    )
+    if result.returncode != 0:
+        log("ERROR", f"Reseed/{step}", f"seed-all failed: {result.stderr.strip()[-500:]}")
+        log("ERROR", f"Reseed/{step}", result.stdout.strip()[-500:] if result.stdout else "")
+        return False
+    log("OK", f"Reseed/{step}", "seed-all complete")
+    log("INFO", f"Reseed/{step}", result.stdout.strip()[-200:] if result.stdout else "")
+
+    # Step 2: build-regime-logs
+    step += 1
+    log("STEP", f"Reseed/{step}", "Inferring regimes from fresh candle data...")
+    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "build-regime-logs"] + sym_args
+    result = subprocess.run(
+        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=120
+    )
+    if result.returncode != 0:
+        log("WARN", f"Reseed/{step}", f"regime inference had issues: {result.stderr.strip()[-200:]}")
+    else:
+        log("OK", f"Reseed/{step}", "Regime logs generated")
+
+    # Step 3: build-candles (resample 5m -> higher timeframes)
+    step += 1
+    log("STEP", f"Reseed/{step}", "Resampling 5m candles to higher timeframes...")
+    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "build-candles",
+           "--validate"] + sym_args
+    result = subprocess.run(
+        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=300
+    )
+    if result.returncode != 0:
+        log("WARN", f"Reseed/{step}", f"candle resampling had issues: {result.stderr.strip()[-200:]}")
+    else:
+        log("OK", f"Reseed/{step}", "Candle resampling complete")
+        log("INFO", f"Reseed/{step}", result.stdout.strip()[-300:] if result.stdout else "")
+
+    log("OK", "Reseed", "Data regeneration pipeline complete")
+    return True
+
+
 def main() -> None:
     parser = build_cli()
     args = parser.parse_args()
@@ -1110,7 +1187,6 @@ def main() -> None:
         db_host=db_host, db_port=db_port,
         db_user=db_user, db_password=db_password,
         db_name=db_name, db_sslmode=db_sslmode,
-        skip_redis=args.skip_redis,
         skip_metrics=args.no_monitoring,
         production=args.production,
     )
@@ -1133,6 +1209,23 @@ def main() -> None:
         log("INFO", "Orchestrator", f"Database: {db_user}@{db_host}:{db_port}/{db_name} (source: {db_info.get('source', 'cli')})")
     print()
 
+    if args.reset_reseed:
+        print()
+        print(f"{COLORS['magenta']}{COLORS['bold']}{'='*56}{COLORS['reset']}")
+        print(f"{COLORS['magenta']}{COLORS['bold']}  DATA REGENERATION — Reset & Reseed{COLORS['reset']}")
+        print(f"{COLORS['magenta']}{COLORS['bold']}{'='*56}{COLORS['reset']}")
+        print()
+        if args.dry_run:
+            log("OK", "Reseed", "DRY-RUN: Would reset and regenerate all market data")
+        else:
+            if not run_reseed(
+                venv_python, args.reseed_symbols, args.reseed_start, args.reseed_end,
+                db_host, db_port, db_user, db_password, db_name, db_sslmode,
+            ):
+                log("ERROR", "Orchestrator", "Data regeneration failed. Aborting.")
+                sys.exit(1)
+        print()
+
 
     skip_names: set[str] = set()
     if args.no_react or args.production:
@@ -1145,12 +1238,9 @@ def main() -> None:
         for svc in active_services:
             if svc.docker_service and svc.name not in skip_names:
                 docker_services.append(svc.docker_service)
-        # Remove orca-server from docker services when running native Go API
-        docker_services = [s for s in docker_services if s != "orca-server"]
     else:
         for svc in active_services:
-            if svc.docker_service and svc.name in ("PostgreSQL", "Redis",
-                                                     "Prometheus", "Grafana"):
+            if svc.docker_service and svc.name in ("PostgreSQL", "Prometheus", "Grafana"):
                 if svc.name not in skip_names and not svc.optional:
                     docker_services.append(svc.docker_service)
 

@@ -103,6 +103,14 @@ func computeSharpe(equity []EquityPoint) float64 {
 	return mean / std * math.Sqrt(252)
 }
 
+func CalculateMtmSharpe(equity []EquityPoint, barsPerDay float64) float64 {
+	return calculateMtmSharpe(equity, barsPerDay)
+}
+
+func calculateMtmSharpe(equity []EquityPoint, barsPerDay float64) float64 {
+	return computeSharpe(equity)
+}
+
 func computeSortino(equity []EquityPoint) float64 {
 	returns := equityToDailyReturns(equity)
 	if len(returns) < 2 {
@@ -121,7 +129,15 @@ func computeSortino(equity []EquityPoint) float64 {
 		return 0
 	}
 	downside := math.Sqrt(sumSq / float64(count))
-	return mean / downside * math.Sqrt(252)
+	downsideFloor := math.Abs(mean) * 0.10
+	if downside < downsideFloor {
+		return 0
+	}
+	sortino := mean / downside * math.Sqrt(252)
+	if sortino > 20 {
+		return 0
+	}
+	return sortino
 }
 
 func computeMaxDrawdown(equity []EquityPoint) float64 {
@@ -166,11 +182,15 @@ func computeProfitFactor(trades []Trade) float64 {
 	}
 	if grossLoss == 0 {
 		if grossProfit > 0 {
-			return 999
+			return math.Inf(1)
 		}
 		return 0
 	}
-	return grossProfit / grossLoss
+	pf := grossProfit / grossLoss
+	if pf > 100 {
+		return math.Inf(1)
+	}
+	return pf
 }
 
 func computeTotalReturn(equity []EquityPoint) float64 {

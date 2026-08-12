@@ -29,7 +29,9 @@ func (a *repoAdapter) LoadAllCandles(ctx context.Context, symbols []string, star
 }
 func (a *repoAdapter) LoadRegimeLogs(ctx context.Context, start, end time.Time) ([]backtest.RegimeLog, error) {
 	logs, err := a.repo.LoadRegimeLogs(ctx, start, end)
-	if err != nil { return nil, nil }
+	if err != nil {
+		return nil, nil
+	}
 	out := make([]backtest.RegimeLog, len(logs))
 	for i, l := range logs {
 		out[i] = backtest.RegimeLog{Time: l.Time, HMMState: l.HMMState, Confidence: l.Confidence, Symbol: l.Symbol}
@@ -38,7 +40,9 @@ func (a *repoAdapter) LoadRegimeLogs(ctx context.Context, start, end time.Time) 
 }
 func (a *repoAdapter) LoadVIXLogs(ctx context.Context, start, end time.Time) ([]backtest.VIXLog, error) {
 	logs, err := a.repo.LoadVIXLogs(ctx, start, end)
-	if err != nil { return nil, nil }
+	if err != nil {
+		return nil, nil
+	}
 	out := make([]backtest.VIXLog, len(logs))
 	for i, l := range logs {
 		out[i] = backtest.VIXLog{Time: l.Time, VIXValue: l.VIXValue, VIXChange: l.VIXChange}
@@ -46,9 +50,17 @@ func (a *repoAdapter) LoadVIXLogs(ctx context.Context, start, end time.Time) ([]
 	return out, nil
 }
 func (a *repoAdapter) LoadSentimentLogs(ctx context.Context, start, end time.Time) ([]backtest.SentimentLog, error) {
-	return nil, nil
+	logs, err := a.repo.LoadSentimentLogs(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]backtest.SentimentLog, len(logs))
+	for i, l := range logs {
+		result[i] = backtest.SentimentLog{Time: l.Time, Score: l.Score, Label: l.Label}
+	}
+	return result, nil
 }
-func (a *repoAdapter) CountCandles(context.Context) (int64, error)         { return 0, nil }
+func (a *repoAdapter) CountCandles(context.Context) (int64, error)          { return 0, nil }
 func (a *repoAdapter) CountSyntheticCandles(context.Context) (int64, error) { return 0, nil }
 func (a *repoAdapter) CountRegimeLogs(context.Context) (int64, error)       { return 0, nil }
 func (a *repoAdapter) LoadUniverseSnapshots(ctx context.Context, start, end time.Time) ([]backtest.UniverseSnapshot, error) {
@@ -63,7 +75,7 @@ func convertCandles(c [][]db.Candle) [][]backtest.Candle {
 			r[j] = backtest.Candle{
 				Symbol: candle.Symbol, Time: candle.Time,
 				Open: candle.Open, High: candle.High, Low: candle.Low, Close: candle.Close,
-				Volume: candle.Volume,
+				Volume: candle.Volume, AdjustmentFactor: candle.AdjustmentFactor,
 			}
 		}
 		out[i] = r

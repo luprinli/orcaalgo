@@ -100,12 +100,11 @@ class TestCompilerOutput:
         assert "Context_ORB" in code
         assert "range_minutes = 7" in code
 
-    def test_unknown_token_returns_stub(self):
+    def test_unknown_token_raises_error(self):
         node = make_node("signal.unknown_token")
         ir = make_ir(node)
-        code = compile_strategy(ir, 99)
-
-        assert "_ = 99" in code
+        with pytest.raises(ValueError, match="Unrecognized token type"):
+            compile_strategy(ir, 99)
 
     def test_compile_all_loads_real_files(self, tmp_path):
         out = tmp_path / "gen.odin"
@@ -131,9 +130,9 @@ class TestCompilerEdgeCases:
         assert "slow_period = 50" in code
         assert "atr_period = 14" in code
 
-    def test_strategy_with_no_signal_nodes(self):
+    def test_strategy_with_no_signal_nodes_returns_empty(self):
         node = make_node("data.bar_aggregator", {"period_seconds": 60})
         ir = make_ir(node)
         code = compile_strategy(ir, 10)
 
-        assert code != ""
+        assert code == ""

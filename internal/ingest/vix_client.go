@@ -7,14 +7,17 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/breaker"
 )
 
 type VIXClient struct {
-	baseURL    string
-	httpClient *http.Client
-	lastVIX    float64
-	lastChange float64
-	lastFetch  time.Time
+	baseURL        string
+	httpClient     *http.Client
+	lastVIX        float64
+	lastChange     float64
+	lastFetch      time.Time
+	circuitBreaker *breaker.CircuitBreaker
 }
 
 type polygonVIXResponse struct {
@@ -33,6 +36,7 @@ func NewVIXClient() *VIXClient {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		circuitBreaker: breaker.NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
@@ -44,6 +48,10 @@ func (v *VIXClient) FetchLatest(ctx context.Context, apiKey string) (float64, fl
 	url := fmt.Sprintf("%s/v2/aggs/ticker/I:VIX/range/1/day/%s/%s?apiKey=%s",
 		v.baseURL, from, to, apiKey)
 
+	if !v.circuitBreaker.Allow() {
+		return 0, 0, fmt.Errorf("vix circuit breaker open")
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, 0, err
@@ -51,13 +59,16 @@ func (v *VIXClient) FetchLatest(ctx context.Context, apiKey string) (float64, fl
 
 	resp, err := v.httpClient.Do(req)
 	if err != nil {
+		v.circuitBreaker.RecordFailure()
 		return 0, 0, fmt.Errorf("vix fetch: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		v.circuitBreaker.RecordFailure()
 		return 0, 0, fmt.Errorf("vix fetch: status %d", resp.StatusCode)
 	}
+	v.circuitBreaker.RecordSuccess()
 
 	var result polygonVIXResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

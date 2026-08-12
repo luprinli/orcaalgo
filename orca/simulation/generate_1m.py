@@ -125,7 +125,19 @@ def _compute_generation_id(config: dict[str, Any]) -> str:
 
 
 def _get_us_trading_days(start: datetime, end: datetime) -> list[datetime]:
-    """Return list of US market trading days (Monday-Friday, excluding NYSE holidays)."""
+    """Return list of US market trading days (Monday-Friday, excluding NYSE holidays).
+
+    Uses the real NYSE holiday calendar from orca.data.nyse_calendar.
+    """
+    try:
+        from orca.data.nyse_calendar import get_trading_days
+        return [
+            datetime(d.year, d.month, d.day, tzinfo=UTC)
+            for d in get_trading_days(start.date(), end.date())
+        ]
+    except ImportError:
+        pass
+
     trading_days = []
     current = start.replace(hour=0, minute=0, second=0, microsecond=0)
     if current.tzinfo is None:
@@ -174,7 +186,6 @@ def generate_1m_candles(
         DataFrame with columns: time, open, high, low, close, volume, symbol.
     """
     rng = np.random.default_rng(seed)
-    np.random.seed(seed)
 
     if calibration is None:
         calibration = calibrate_symbol(symbol, timeframe, start, end)

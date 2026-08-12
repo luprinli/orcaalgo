@@ -17,6 +17,7 @@ type AdminHandler struct {
 	repo         *db.Repository
 	seeder       *db.Seeder
 	emailService email.EmailService
+	environment  string
 }
 
 func NewAdminHandler(repo *db.Repository) *AdminHandler {
@@ -25,6 +26,10 @@ func NewAdminHandler(repo *db.Repository) *AdminHandler {
 
 func (h *AdminHandler) SetEmailService(svc email.EmailService) {
 	h.emailService = svc
+}
+
+func (h *AdminHandler) SetEnvironment(env string) {
+	h.environment = env
 }
 
 func (h *AdminHandler) GetHealth(c *gin.Context) {
@@ -50,6 +55,10 @@ func (h *AdminHandler) GetHealth(c *gin.Context) {
 }
 
 func (h *AdminHandler) SeedDatabase(c *gin.Context) {
+	if h.environment == "production" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "seed-db is disabled in production"})
+		return
+	}
 	if h.repo == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
 		return

@@ -81,14 +81,14 @@ func EvaluateOOSMultiMetric(owr *OptimizedWalkForwardResult, mcResult *MonteCarl
 
 	var totalOOSSharpe float64
 	var totalOOSTrades int
-	var worstDrawdown float64 = 0
+	var worstMaxDD float64
 	var totalOOSWinRate float64
 
 	for _, w := range owr.Windows {
 		totalOOSSharpe += w.OutSampleSharpe
 		totalOOSTrades += w.OOSTrades
-		if w.OOSReturnPct < worstDrawdown {
-			worstDrawdown = w.OOSReturnPct
+		if w.OOSMaxDD > worstMaxDD {
+			worstMaxDD = w.OOSMaxDD
 		}
 		totalOOSWinRate += w.OOSWinRate
 	}
@@ -100,10 +100,7 @@ func EvaluateOOSMultiMetric(owr *OptimizedWalkForwardResult, mcResult *MonteCarl
 		avgWinRate = totalOOSWinRate / float64(len(owr.Windows))
 	}
 
-	maxDD := -worstDrawdown
-	if worstDrawdown >= 0 {
-		maxDD = 0
-	}
+	maxDD := worstMaxDD
 
 	passProb := 0.0
 	if mcResult != nil {

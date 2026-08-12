@@ -3,7 +3,10 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 type BacktestRunRecord struct {
@@ -185,4 +188,65 @@ func (r *Repository) GetBacktestResults(ctx context.Context, runID string) ([]*B
 func cnd(runType string) string {
 	if runType != "" { return " WHERE run_type='" + runType + "'" }
 	return ""
+}
+
+func (r *Repository) CreateBacktestRunsBatch(ctx context.Context, runs []BacktestRunRecord) ([]string, error) {
+	if len(runs) == 0 {
+		return nil, nil
+	}
+	batch := &pgx.Batch{}
+	for i := range runs {
+		br := &runs[i]
+		sids := stringsToPgArray(br.StrategyIDs)
+		syms := stringsToPgArray(br.Symbols)
+		gatePassed := false
+		if br.GatePassed != nil {
+			gatePassed = *br.GatePassed
+		}
+		batch.Queue(
+			`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+			 RETURNING id`,
+			br.StrategyID, br.RunType, br.Status, sids, syms,
+			br.StartDate, br.EndDate, br.InitialCapital, br.Config,
+			br.SharpeRatio, br.SortinoRatio, br.MaxDrawdown, br.MaxDrawdownDur,
+			br.TotalReturn, br.WinRate, br.ProfitFactor,
+			br.AvgTrade, br.AvgWin, br.AvgLoss,
+			br.NumTrades, br.NumWins, br.NumLosses, gatePassed,
+			br.ResultsJSON,
+		)
+	}
+	br := r.pool.SendBatch(ctx, batch)
+	defer br.Close()
+
+	ids := make([]string, len(runs))
+	for i := range runs {
+		if err := br.QueryRow().Scan(&ids[i]); err != nil {
+			return nil, fmt.Errorf("batch insert run %d: %w", i, err)
+		}
+	}
+	return ids, nil
+}
+
+func (r *Repository) InsertBacktestResultsBatch(ctx context.Context, results []BacktestResultRecord) error {
+	if len(results) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	for i := range results {
+		btr := &results[i]
+		batch.Queue(
+			`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.EquityCurve, btr.Trades,
+		)
+	}
+	br := r.pool.SendBatch(ctx, batch)
+	defer br.Close()
+	for range results {
+		if _, err := br.Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

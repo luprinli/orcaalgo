@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -274,7 +274,7 @@ func parseFloat(s string) float64 {
 	var f float64
 	n, err := fmt.Sscanf(s, "%f", &f)
 	if n != 1 || err != nil {
-		log.Printf("alpaca parseFloat: failed to parse %q: %v", s, err)
+		slog.Warn("failed to parse float", "value", s, "error", err, "component", "alpaca")
 		return 0
 	}
 	return f

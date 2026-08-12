@@ -158,10 +158,13 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 				StrategyParams:     result.StrategyParams,
 				EquityCurve:        result.EquityCurve,
 				Trades:             result.Trades,
-			}
-			return nil
-		})
-	}
+			MtmSharpeRatio:     result.MtmSharpeRatio,
+			MtmMaxDrawdown:     result.MtmMaxDrawdown,
+			MLFeatureEnabled:   result.MLFeatureEnabled,
+		}
+		return nil
+	})
+}
 }
 _ = g.Wait()
 results = append(results, chunkResults...)
@@ -395,6 +398,9 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				RewardRiskRatio:    computeRewardRisk(result.AvgWin, result.AvgLoss),
 				DailyVolatility:    computeDailyVolatility(result.DailyReturns),
 				TrainPct:           result.TrainPct,
+				MtmSharpeRatio:     result.MtmSharpeRatio,
+				MtmMaxDrawdown:     result.MtmMaxDrawdown,
+				MLFeatureEnabled:   result.MLFeatureEnabled,
 			}
 			if onProgress != nil {
 				onProgress(i, "completed", "", &results[i])

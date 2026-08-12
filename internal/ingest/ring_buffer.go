@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"log/slog"
 	"sync/atomic"
 	"unsafe"
 )
@@ -21,11 +22,12 @@ type GoMarketTick struct {
 }
 
 type RingBuffer struct {
-	head     int32
-	tail     int32
-	capacity int32
-	_pad     int32
-	ticks    [MaxTickBuffer]GoMarketTick
+	head          int32
+	tail          int32
+	capacity      int32
+	overflowCount int64
+	_pad          int32
+	ticks         [MaxTickBuffer]GoMarketTick
 }
 
 func NewRingBuffer(capacity int) *RingBuffer {
@@ -59,6 +61,10 @@ func (rb *RingBuffer) Push(tick *GoMarketTick) bool {
 	tail := atomic.LoadInt32(&rb.tail)
 	next := (tail + 1) % rb.capacity
 	if next == head {
+		dropped := atomic.AddInt64(&rb.overflowCount, 1)
+		if dropped%1000 == 0 {
+			slog.Warn("ring buffer overflow, events dropped", "dropped_total", dropped, "component", "ring_buffer")
+		}
 		return false
 	}
 	rb.ticks[tail] = *tick

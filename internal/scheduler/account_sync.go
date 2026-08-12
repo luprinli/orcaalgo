@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/broker"
@@ -32,7 +32,7 @@ func NewAccountSyncService(cfg AccountSyncConfig) *AccountSyncService {
 
 func (s *AccountSyncService) Start() {
 	if s.cfg.AccountMgr == nil {
-		log.Println("account_sync: AccountManager not configured, skipping")
+		slog.Warn("AccountManager not configured, skipping", "component", "account_sync")
 		return
 	}
 	if s.cfg.Interval <= 0 {
@@ -40,7 +40,7 @@ func (s *AccountSyncService) Start() {
 	}
 
 	go s.run()
-	log.Printf("account_sync: started with interval %v", s.cfg.Interval)
+	slog.Info("account sync started", "interval", s.cfg.Interval, "component", "account_sync")
 }
 
 func (s *AccountSyncService) Stop() {
@@ -68,7 +68,7 @@ func (s *AccountSyncService) sync() {
 	accounts := s.cfg.AccountMgr.ListAccountsByUser(ctx, "")
 	for _, acct := range accounts {
 		if err := s.cfg.AccountMgr.SyncAccountState(ctx, acct.ID); err != nil {
-			log.Printf("account_sync: failed to sync account %s: %v", acct.ID, err)
+			slog.Error("failed to sync account", "account_id", acct.ID, "error", err, "component", "account_sync")
 			continue
 		}
 

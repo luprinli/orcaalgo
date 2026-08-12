@@ -82,7 +82,7 @@ export default function AdminPage() {
   const fetchSeedInfo = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/v1/admin/info').then(r => r.json())
+      const res = await admin.info()
       setSeedInfo(res)
     } catch { /* ignore */ }
     finally { setLoading(false) }
@@ -106,10 +106,10 @@ export default function AdminPage() {
   const handleUserToggle = async (userId: string, enable: boolean) => {
     try {
       if (enable) {
-        const res = await fetch(`/api/v1/admin/users/${userId}/enable`, { method: 'PUT' }).then(r => r.json())
+        const res = await admin.enableUser(userId)
         setMsg(res?.enabled ? t('admin:userEnabled', 'User enabled') : t('admin:failed', 'Failed'))
       } else {
-        const res = await fetch(`/api/v1/admin/users/${userId}/disable`, { method: 'PUT' }).then(r => r.json())
+        const res = await admin.disableUser(userId)
         setMsg(res?.disabled ? t('admin:userDisabled', 'User disabled') : t('admin:failed', 'Failed'))
       }
       fetchUsers()
@@ -120,7 +120,7 @@ export default function AdminPage() {
 
   const handleTestEmail = async () => {
     try {
-      const res = await fetch('/api/v1/admin/email/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(emailForm) }).then(r => r.json())
+      const res = await admin.testEmail(emailForm)
       setMsg(res.ok ? t('admin:emailTestSuccess', 'Email test successful') : t('admin:emailTestFailed', 'Email test failed: {{error}}', { error: res.error }))
     } catch (err) {
       setMsg(err instanceof Error ? err.message : t('admin:emailTestFailed', 'Email test failed', { error: '' }))
@@ -129,7 +129,7 @@ export default function AdminPage() {
 
   const handleSaveEmail = async () => {
     try {
-      const res = await fetch('/api/v1/admin/email/config', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(emailForm) }).then(r => r.json())
+      const res = await admin.saveEmailConfig(emailForm)
       setMsg(res.ok ? t('admin:emailConfigSaved', 'Email config saved') : t('admin:failed', 'Failed'))
     } catch (err) {
       setMsg(err instanceof Error ? err.message : t('settings:updateFailed', 'Save failed'))

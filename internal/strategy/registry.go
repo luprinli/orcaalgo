@@ -86,9 +86,10 @@ func (r *Registry) All() []Strategy {
 
 func (r *Registry) EvaluateAll(candle Candle, regime int8) []*Signal {
 	var signals []*Signal
-	for _, s := range r.entries {
+	for name, s := range r.entries {
 		sig := s.Evaluate(candle, regime)
 		if sig != nil {
+			sig.StrategyID = name
 			signals = append(signals, sig)
 		}
 	}

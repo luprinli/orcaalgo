@@ -1,7 +1,7 @@
 package audit
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -53,7 +53,7 @@ func (m *HTTPAuditMiddleware) Handler() gin.HandlerFunc {
 		}
 
 		if err := m.logger.Log(c.Request.Context(), entry); err != nil {
-			log.Printf("audit middleware: failed to log request: %v", err)
+			slog.Error("failed to log audit request", "error", err, "component", "audit")
 		}
 	}
 }

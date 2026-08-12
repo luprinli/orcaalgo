@@ -21,6 +21,7 @@ type SeedData struct {
 	MarketTicks      []MarketTickSeed
 	RegimeLogs       []RegimeLogSeed
 	VIXLogs          []VIXLogSeed
+	SentimentLogs    []SentimentLogSeed
 	TradeHistory     []TradeHistorySeed
 	BacktestResults  []BacktestResultSeed
 	UniverseConfigs  []UniverseConfigSeed
@@ -111,6 +112,12 @@ type VIXLogSeed struct {
 	Time      time.Time
 	VIXValue  float64
 	VIXChange float64
+}
+
+type SentimentLogSeed struct {
+	Time  time.Time
+	Score int
+	Label string
 }
 
 type TradeHistorySeed struct {
@@ -219,6 +226,7 @@ func GenerateSeedData() *SeedData {
 		MarketTicks:   nil,
 		RegimeLogs:    generateRegimeLogs(today, symbols),
 		VIXLogs:       generateVIXLogs(today, candles),
+		SentimentLogs: generateSentimentLogs(today),
 		TradeHistory: nil,
 		BacktestResults: nil,
 		UniverseConfigs: []UniverseConfigSeed{
@@ -338,6 +346,43 @@ func loadCandlesFromDataDir() []CandleSeed {
 	return allCandles
 }
 
+func generateSentimentLogs(today time.Time) []SentimentLogSeed {
+	labels := []string{"Extreme Fear", "Fear", "Neutral", "Greed", "Extreme Greed"}
+	start := today.AddDate(0, 0, -400)
+	var logs []SentimentLogSeed
+
+	for i := 0; i < 400; i++ {
+		day := start.AddDate(0, 0, i)
+		sinVal := math.Sin(float64(i) * 0.08)
+		rw := math.Sin(float64(i)*0.3)*15 + math.Sin(float64(i)*0.7)*10
+		score := int(50 + sinVal*20 + rw)
+		if score < 5 {
+			score = 5
+		} else if score > 95 {
+			score = 95
+		}
+		labelIdx := 0
+		switch {
+		case score <= 25:
+			labelIdx = 0
+		case score <= 45:
+			labelIdx = 1
+		case score <= 55:
+			labelIdx = 2
+		case score <= 75:
+			labelIdx = 3
+		default:
+			labelIdx = 4
+		}
+		logs = append(logs, SentimentLogSeed{
+			Time:  day,
+			Score: score,
+			Label: labels[labelIdx],
+		})
+	}
+	return logs
+}
+
 func generateVIXLogs(today time.Time, candles []CandleSeed) []VIXLogSeed {
 	type dayRange struct {
 		sum   float64
@@ -370,18 +415,18 @@ func generateVIXLogs(today time.Time, candles []CandleSeed) []VIXLogSeed {
 	start := today.AddDate(0, 0, -400)
 	for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
 		key := d.Format("2006-01-02")
-		v := 12.0
+		v := 16.0
 		if dv, ok := dailyVol[key]; ok && dv.count > 0 {
 			avgRange := (dv.sum / float64(dv.count)) * 100.0
-			v = 10.0 + avgRange*15.0
+			v = 8.0 + avgRange*12.0
 		}
-		sawtooth := float64((int(d.Unix()/86400)*7+13)%100-50) / 50.0 * 1.5
+		sawtooth := math.Sin(float64(d.Unix()/86400)*0.05)*2.0 + math.Sin(float64(d.Unix()/86400)*0.13)*3.0
 		v += sawtooth
 		if v > 55.0 {
 			v = 55.0
 		}
-		if v < 10.0 {
-			v = 10.0
+		if v < 9.0 {
+			v = 9.0
 		}
 		rawDays = append(rawDays, dayVIX{time: d, raw: v})
 	}

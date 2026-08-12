@@ -238,11 +238,16 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                     <TableHead className="h-7 px-2" title="Short Profit Factor">S-PF</TableHead>
                     <TableHead className="h-7 px-2">Gate</TableHead>
                     <TableHead className="h-7 px-2" title="Parameters optimized">Opt</TableHead>
+                    <TableHead className="h-7 px-2 cursor-pointer select-none" onClick={() => onSortToggle('calmar')} title="Calmar Ratio (Return/MaxDD)">Calmar{sortIndicator('calmar')}</TableHead>
+                    <TableHead className="h-7 px-2" title="Total Broker Fees">Fees</TableHead>
+                    <TableHead className="h-7 px-2" title="Avg Slippage (bps)">Slip</TableHead>
+                    <TableHead className="h-7 px-2" title="Candle Count">Cand</TableHead>
+                    <TableHead className="h-7 px-2" title="Warnings / Data Quality">Warn</TableHead>
                     {onViewDetail && <TableHead className="h-7 px-2 w-12" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={onViewDetail ? 18 : 17} /></TableRow>}
+                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={onViewDetail ? 23 : 22} /></TableRow>}
                   {sortedMatrixResults.slice(win.start, win.end).map((r, i) => (
                     <TableRow key={win.start + i} className={`h-[26px] ${r.sharpe_ratio >= 1.0 ? 'bg-emerald-500/5' : ''}`}>
                       <TableCell className="px-2">
@@ -264,6 +269,11 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       <TableCell className="px-2 text-[11px] tabular-nums">{r.short_profit_factor != null ? r.short_profit_factor.toFixed(2) : '\u2014'}</TableCell>
                       <TableCell className="px-2">{r.gate_passed === true ? <Badge variant="default" className="text-[10px] h-4 px-1">PASS</Badge> : r.gate_passed === false ? <Badge variant="destructive" className="text-[10px] h-4 px-1">FAIL</Badge> : '\u2014'}</TableCell>
                       <TableCell className="px-2">{r.optimized ? <Badge variant="outline" className="text-[10px] h-4 px-1" title={JSON.stringify(r.strategy_params || r.best_params || {})}>Y</Badge> : '\u2014'}</TableCell>
+                      <TableCell className="px-2 text-[11px] tabular-nums">{r.calmar_ratio != null ? r.calmar_ratio.toFixed(2) : '\u2014'}</TableCell>
+                      <TableCell className="px-2 text-[11px] tabular-nums">{r.total_fees != null ? `$${r.total_fees.toFixed(0)}` : '\u2014'}</TableCell>
+                      <TableCell className="px-2 text-[11px] tabular-nums">{r.avg_slippage_bps != null ? r.avg_slippage_bps.toFixed(1) : '\u2014'}</TableCell>
+                      <TableCell className="px-2 text-[11px] tabular-nums">{r.candle_count != null ? r.candle_count.toLocaleString() : '\u2014'}</TableCell>
+                      <TableCell className="px-2">{r.warnings && r.warnings.length > 0 ? <Badge variant="secondary" className="text-[10px] h-4 px-1" title={r.warnings.join('; ')}>{r.warnings.length}</Badge> : '\u2014'}</TableCell>
                       {onViewDetail && (
                         <TableCell className="px-2">
                           <div className="flex gap-1">
@@ -279,7 +289,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       )}
                     </TableRow>
                   ))}
-                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={onViewDetail ? 18 : 17} /></TableRow>}
+                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={onViewDetail ? 23 : 22} /></TableRow>}
                 </TableBody>
               </Table>
             </div>

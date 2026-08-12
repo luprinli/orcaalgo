@@ -8,6 +8,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/lee-econ/orca-core/internal/metrics"
 )
 
 var (
@@ -67,7 +68,7 @@ var (
 	dbPoolInUse = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "orca_db_pool_in_use",
 		Help: "Database connections currently in use",
-	}, func() float64 { return float64(atomic.LoadInt64(&dbPoolInUseVal)) })
+	}, func() float64 { return float64(metrics.DBPoolInUse()) })
 	heapInUseBytes = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "orca_heap_inuse_bytes",
 		Help: "Go heap memory currently in use",
@@ -102,8 +103,6 @@ var (
 		Help: "Rolling Sharpe ratio per strategy",
 	}, []string{"strategy_id", "window"})
 )
-
-var dbPoolInUseVal int64
 
 func init() {
 	prometheus.MustRegister(
@@ -229,8 +228,8 @@ func SetBrokerConnected(connected bool) {
 	}
 }
 
-func SetDBPoolInUse(count int) {
-	atomic.StoreInt64(&dbPoolInUseVal, int64(count))
+func SetDBPoolInUse(count int32) {
+	metrics.SetDBPoolInUse(count)
 }
 
 func RecordMatrixBatchStart() {

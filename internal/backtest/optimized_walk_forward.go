@@ -73,6 +73,7 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 			trainCfg := config.Config
 			trainCfg.StartDate = w.TrainStart
 			trainCfg.EndDate = w.TrainEnd
+			trainCfg.StrategyParams = params
 
 			trainResult, err := e.Run(ctx, trainCfg)
 			if err != nil || trainResult == nil {
@@ -90,6 +91,19 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		sort.Slice(allScores, func(i, j int) bool {
 			return allScores[i].Score > allScores[j].Score
 		})
+
+		scoresOnly := make([]float64, len(allScores))
+		for k, s := range allScores {
+			scoresOnly[k] = s.Score
+		}
+		sort.Float64s(scoresOnly)
+		median := scoresOnly[len(scoresOnly)/2]
+		var sumSq float64
+		for _, v := range scoresOnly {
+			sumSq += (v - median) * (v - median)
+		}
+		std := math.Sqrt(sumSq / float64(len(scoresOnly)))
+		scoreThreshold := median + 2.0*std
 
 		bestParams := allScores[0].Params
 		result.BestParamsPerWindow[wi] = bestParams
@@ -158,14 +172,21 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 			OutSampleSharpe: bestOOSTestResult.SharpeRatio,
 			OOSWinRate:      bestOOSTestResult.WinRate,
 			OOSReturnPct:    bestOOSTestResult.TotalReturnPct,
+			OOSMaxDD:        bestOOSTestResult.MaxDrawdown,
 			OOSTrades:       bestOOSTestResult.NumTrades,
 			PassedCompliance:      bestOOSTestResult.ComplianceReport != nil && bestOOSTestResult.ComplianceReport.Passed,
+			MultiplicityWarning:   allScores[0].Score <= scoreThreshold,
 		}
 
 		result.Windows = append(result.Windows, wr)
 	}
 
-	result.PassedWindows = len(result.Windows)
+	result.PassedWindows = 0
+	for _, w := range result.Windows {
+		if w.PassedCompliance {
+			result.PassedWindows++
+		}
+	}
 
 	var totalIS, totalOOS float64
 	for _, w := range result.Windows {

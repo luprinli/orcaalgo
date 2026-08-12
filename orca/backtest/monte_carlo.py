@@ -21,6 +21,7 @@ import numpy as np
 
 def generate_random_trades(
     num_trades: int,
+    rng: np.random.Generator,
     win_rate: float = 0.55,
     avg_win: float = 1.0,
     avg_loss: float = 0.8,
@@ -28,9 +29,9 @@ def generate_random_trades(
     pnls = []
     for _ in range(num_trades):
         if random.random() < win_rate:
-            pnls.append(abs(np.random.normal(avg_win, avg_win * 0.3)))
+            pnls.append(abs(rng.normal(avg_win, avg_win * 0.3)))
         else:
-            pnls.append(-abs(np.random.normal(avg_loss, avg_loss * 0.3)))
+            pnls.append(-abs(rng.normal(avg_loss, avg_loss * 0.3)))
     return pnls
 
 
@@ -67,7 +68,7 @@ def apply_consistency_rule(
     peak = starting_balance
 
     for daily_pnl in daily_pnls:
-        pnl_pct = (daily_pnl / balance) * 100
+        pnl_pct = (daily_pnl / starting_balance) * 100
 
         if abs(pnl_pct) > daily_limit_pct:
             return False, balance
@@ -95,6 +96,7 @@ def run_simulation(
     starting_balance: float,
     monthly_target_pct: float,
     consistency_threshold_pct: float,
+    rng: np.random.Generator,
     actual_pnls: list[float] | None = None,
 ) -> dict:
     passes = 0
@@ -104,7 +106,7 @@ def run_simulation(
         if actual_pnls and len(actual_pnls) > 0:
             trades = resample_actual_trades(actual_pnls, num_trades)
         else:
-            trades = generate_random_trades(num_trades)
+            trades = generate_random_trades(num_trades, rng)
 
         trades_per_day = max(1, num_trades // num_days)
         daily_pnls = []
@@ -164,7 +166,7 @@ def main():
     args = parser.parse_args()
 
     random.seed(args.seed)
-    np.random.seed(args.seed)
+    rng = np.random.default_rng(args.seed)
 
     num_trades = args.num_trades if args.num_trades is not None else args.trades
     capital = args.starting_balance if args.starting_balance is not None else args.capital
@@ -197,6 +199,7 @@ def main():
         starting_balance=capital,
         monthly_target_pct=monthly_target,
         consistency_threshold_pct=args.consistency_threshold,
+        rng=rng,
         actual_pnls=actual_pnls,
     )
 

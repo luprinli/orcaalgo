@@ -3,12 +3,14 @@ package backtest
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/hash"
+	"github.com/lee-econ/orca-core/internal/market"
 	"github.com/lee-econ/orca-core/internal/ml"
 	"github.com/lee-econ/orca-core/internal/model"
 	"github.com/lee-econ/orca-core/internal/monitor"
@@ -62,6 +64,9 @@ type BacktestConfig struct {
 	EnablePrefetch        bool   `json:"enable_prefetch,omitempty"`
 	WarmUpBars            int               `json:"warmup_bars,omitempty"`
 	SecondarySymbols      map[string]string `json:"secondary_symbols,omitempty"` // primary → secondary for pairs trading
+	EarningsCalendar      *market.EarningsCalendar `json:"-"`
+	SkipEarningsDays      bool                     `json:"skip_earnings_days,omitempty"`
+	AdjustmentProvider    market.AdjustmentProvider `json:"-"`
 }
 
 type MatrixBacktestConfig struct {
@@ -122,6 +127,17 @@ type ComboResult struct {
 	RewardRiskRatio    float64             `json:"reward_risk_ratio"`
 	DailyVolatility    float64             `json:"daily_volatility"`
 	TrainPct           float64             `json:"train_pct"`
+	MtmSharpeRatio     float64             `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown     float64             `json:"mtm_max_drawdown,omitempty"`
+	MLFeatureEnabled   bool                `json:"ml_feature_enabled,omitempty"`
+	TotalFees          float64             `json:"total_fees,omitempty"`
+	AvgSlippageBps     float64             `json:"avg_slippage_bps,omitempty"`
+	CalmarRatio        float64             `json:"calmar_ratio,omitempty"`
+	CandleCount        int                 `json:"candle_count,omitempty"`
+	FirstCandleTime    time.Time           `json:"first_candle_time,omitempty"`
+	LastCandleTime     time.Time           `json:"last_candle_time,omitempty"`
+	DeclaredBarsPerDay float64             `json:"declared_bars_per_day,omitempty"`
+	EffectiveBarsPerDay float64            `json:"effective_bars_per_day,omitempty"`
 }
 
 type MatrixResult struct {
@@ -199,6 +215,9 @@ type BacktestResult struct {
 	AvgMFE        float64
 	RegimeStats    []RegimeStat
 	EquityCurve    []EquityPoint
+	MtmEquity      []EquityPoint `json:"mtm_equity,omitempty"`
+	MtmSharpeRatio float64       `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown float64       `json:"mtm_max_drawdown,omitempty"`
 	DailyReturns   []DailyReturn
 	TemporalBreakdown TemporalBreakdown
 	ComplianceReport     *ComplianceReport
@@ -207,12 +226,21 @@ type BacktestResult struct {
 	Warnings       []string        `json:"warnings,omitempty"`
 	MetricGateStatus *MultiMetricVerdict `json:"metric_gate_status,omitempty"`
 	StrategyParams   map[string]float64   `json:"strategy_params,omitempty"`
+	CalmarRatio      float64              `json:"calmar_ratio,omitempty"`
 	TrainPct         float64
 	SignalDiag     SignalDiag          `json:"signal_diag,omitempty"`
 	EngineVersion  string          `json:"engine_version,omitempty"`
 	StrategyHash   string          `json:"strategy_hash,omitempty"`
 	SchemaVersion  int             `json:"schema_version,omitempty"`
 	LongShort      LongShortBreakdown `json:"long_short,omitempty"`
+	MLFeatureEnabled bool             `json:"ml_feature_enabled,omitempty"`
+	TotalFees        float64             `json:"total_fees,omitempty"`
+	AvgSlippageBps   float64             `json:"avg_slippage_bps,omitempty"`
+	CandleCount      int                 `json:"candle_count,omitempty"`
+	FirstCandleTime  time.Time           `json:"first_candle_time,omitempty"`
+	LastCandleTime   time.Time           `json:"last_candle_time,omitempty"`
+	EffectiveBarsPerDay float64          `json:"effective_bars_per_day,omitempty"`
+	DeclaredBarsPerDay  float64          `json:"declared_bars_per_day,omitempty"`
 }
 
 type TemporalBreakdown struct {
@@ -292,6 +320,7 @@ type Engine struct {
 	regimeEnhancer *ml.RegimeEnhancer
 	exitOrch       *ml.ExitOrchestrator
 	pipeline       *risk.RiskPipeline
+	featureStore   *ml.FeatureStore
 }
 
 type Database interface {
@@ -329,17 +358,7 @@ type SentimentLog struct {
 }
 
 func NewEngine(db Database) *Engine {
-	return &Engine{
-		db:             db,
-		fillSim:        NewFillSimulator(DefaultEquitySlippage()),
-		stratBySymbol:  make(map[string]strategy.Strategy),
-		orderLimiter:   risk.NewOrderRateLimiter(10),
-		volHalt:        risk.NewVolatilityHalt(3.0),
-		exposure:       risk.NewExposureTracker(5.0, 0.25),
-		kellyMult:      0.25,
-		positionSizer:  risk.NewPositionSizer(nil),
-		metaCfg:        ml.DefaultMetaLabelerConfig(),
-	}
+	return NewEngineBuilder(db).Build()
 }
 
 // SetMetaLabeler configures the ML meta-labeling subsystem.
@@ -375,6 +394,13 @@ func (e *Engine) SetRiskPipeline(p *risk.RiskPipeline) {
 	e.pipeline = p
 }
 
+// SetFeatureStore injects a feature store for ML feature computation.
+// When set, generateSignal will compute 21-dim feature vectors from candle data
+// and pass them to the batch inferrer instead of nil features.
+func (e *Engine) SetFeatureStore(fs *ml.FeatureStore) {
+	e.featureStore = fs
+}
+
 // WirePipeline creates a SignalGateImpl from the engine's existing volHalt,
 // positionSizer, and exposure components, then sets up the canonical
 // RiskPipeline. The pipeline becomes the primary path in generateSignal.
@@ -383,10 +409,15 @@ func (e *Engine) WirePipeline() {
 	signalGate := risk.NewSignalGateImpl(e.volHalt, e.positionSizer, e.exposure, nil)
 	signalGate.SetBacktestMode(true)
 
+	var propFirmGate risk.PropFirmGate
+	if e.ftmo != nil {
+		propFirmGate = e.ftmo
+	}
+
 	e.pipeline = &risk.RiskPipeline{
 		SignalGate:   signalGate,
 		Capital:      nil,
-		PropFirm:     e.ftmo,
+		PropFirm:     propFirmGate,
 		KellyMult:    e.kellyMult,
 		RegimeMatrix: risk.NewRegimeActivationMatrix(),
 	}
@@ -399,61 +430,19 @@ func (e *Engine) GetDB() Database {
 }
 
 func NewEngineWithFixedSeed(db Database, seed int64) *Engine {
-	model := DefaultEquitySlippage()
-	e := &Engine{
-		db:             db,
-		fillSim:        NewFillSimulatorWithSeed(model, seed),
-		stratBySymbol:  make(map[string]strategy.Strategy),
-		orderLimiter:   risk.NewOrderRateLimiter(10),
-		volHalt:        risk.NewVolatilityHalt(3.0),
-		exposure:       risk.NewExposureTracker(5.0, 0.25),
-		kellyMult:      0.25,
-		positionSizer:  risk.NewPositionSizer(nil),
-	}
-	return e
+	return NewEngineBuilder(db).WithSeed(seed).Build()
 }
 
 func NewEngineWithSlippage(db Database, model SlippageModel) *Engine {
-	return &Engine{
-		db:             db,
-		fillSim:        NewFillSimulator(model),
-		stratBySymbol:  make(map[string]strategy.Strategy),
-		orderLimiter:   risk.NewOrderRateLimiter(10),
-		volHalt:        risk.NewVolatilityHalt(3.0),
-		exposure:       risk.NewExposureTracker(5.0, 0.25),
-		kellyMult:      0.25,
-		positionSizer:  risk.NewPositionSizer(nil),
-	}
+	return NewEngineBuilder(db).WithSlippage(model).Build()
 }
 
 func NewEngineWithStrategy(db Database, sr strategy.Strategy) *Engine {
-	e := &Engine{
-		db:             db,
-		fillSim:        NewFillSimulator(DefaultEquitySlippage()),
-		stratBySymbol:  make(map[string]strategy.Strategy),
-		orderLimiter:   risk.NewOrderRateLimiter(10),
-		volHalt:        risk.NewVolatilityHalt(3.0),
-		exposure:       risk.NewExposureTracker(5.0, 0.25),
-		kellyMult:      0.25,
-		positionSizer:  risk.NewPositionSizer(nil),
-	}
-	e.stratBySymbol["default"] = sr
-	return e
+	return NewEngineBuilder(db).WithStrategy(sr).Build()
 }
 
 func NewEngineWithSlippageAndStrategy(db Database, model SlippageModel, sr strategy.Strategy) *Engine {
-	e := &Engine{
-		db:             db,
-		fillSim:        NewFillSimulator(model),
-		stratBySymbol:  make(map[string]strategy.Strategy),
-		orderLimiter:   risk.NewOrderRateLimiter(10),
-		volHalt:        risk.NewVolatilityHalt(3.0),
-		exposure:       risk.NewExposureTracker(5.0, 0.25),
-		kellyMult:      0.25,
-		positionSizer:  risk.NewPositionSizer(nil),
-	}
-	e.stratBySymbol["default"] = sr
-	return e
+	return NewEngineBuilder(db).WithSlippage(model).WithStrategy(sr).Build()
 }
 
 func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *BacktestResult, err error) {
@@ -544,6 +533,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	}
 
 	allCandles := mergeCandlesByTime(candlesBySymbol)
+	result.CandleCount = len(allCandles)
+	if len(allCandles) > 0 {
+		result.FirstCandleTime = allCandles[0].Time
+		result.LastCandleTime = allCandles[len(allCandles)-1].Time
+	}
 
 	if config.CommissionBps <= 0 {
 		config.CommissionBps = 5.0
@@ -566,6 +560,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	capital := config.InitialCapital
 	peakCapital := config.InitialCapital
 	equity := []EquityPoint{}
+	mtmEquity := []EquityPoint{}
 	trades := []Trade{}
 
 	e.ftmo = nil
@@ -588,6 +583,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	var lastDay string
 	var atrWindow []Candle
 	var hasHighVIX bool
+	var hasVIXSpike bool
+	var prevVIX float64
 	atrPeriod := 14
 	if config.StopLoss != nil && config.StopLoss.ATRPeriod > 0 {
 		atrPeriod = config.StopLoss.ATRPeriod
@@ -636,6 +633,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		regime := getRegimeAt(candle.Time, regimeLogs)
 		vix := getVIXAt(candle.Time, vixLogs)
 		sentiment := getSentimentAt(candle.Time, sentimentLogs)
+		if vix > 25.0 {
+			hasHighVIX = true
+		}
+		if prevVIX > 0 && vix > 0 {
+			vixDelta := math.Abs(vix - prevVIX)
+			if vixDelta > 3.0 {
+				hasVIXSpike = true
+			}
+		}
+		prevVIX = vix
 		e.positionSizer.UpdateMarketState(vix, sentiment, regime)
 
 		sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
@@ -644,6 +651,13 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		}
 		if atrReceiver, ok := sr.(strategy.ATRReceiver); ok {
 			atrVal := ComputeATR(atrWindow, atrPeriod)
+			if config.EarningsCalendar != nil && config.EarningsCalendar.IsEarningsDay(candle.Symbol, candle.Time) {
+				atrVal *= 1.2
+				if config.SkipEarningsDays {
+					continue
+				}
+				log.Printf("backtest: earnings day for %s on %s — ATR adjusted x1.2", candle.Symbol, candle.Time.Format("2006-01-02"))
+			}
 			atrReceiver.SetATR(atrVal)
 		}
 		if pendingTrade, ok := pendingAS[candle.Symbol]; ok {
@@ -705,14 +719,17 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 							if dynamicStop > stop.EntryPrice.Float64()*1.20 {
 								dynamicStop = stop.EntryPrice.Float64() * 1.20
 							}
-							stop.StopPrice = types.PriceFromFloat(dynamicStop)
+							if dynamicStop < stop.StopPrice.Float64() && stop.StopType == StopLossTrail {
+							} else {
+								stop.StopPrice = types.PriceFromFloat(dynamicStop)
+							}
 						}
 					}
 				}
 			}
 
 			exitReason := ""
-			exitPrice := candle.Close.Float64()
+			exitPrice := candle.Close.Float64() * candle.AdjustmentFactor
 			fillQty := ot.Quantity
 			shouldExit := false
 
@@ -747,7 +764,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 			if shouldExit {
 				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64(), candle.Volume)
+				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64()*candle.AdjustmentFactor, candle.Volume)
 				if simulatedExit.FillPrice.Float64() > 0 {
 					exitPrice = simulatedExit.FillPrice.Float64()
 				}
@@ -778,12 +795,14 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				ot.BrokerFee = brokerFee
 
 				entry := ot.EntryPrice.Float64()
-				if ot.Side == "BUY" {
-					ot.MAE = entry - ot.lowestSinceEntry
-					ot.MFE = ot.highestSinceEntry - entry
-				} else {
-					ot.MAE = ot.highestSinceEntry - entry
-					ot.MFE = entry - ot.lowestSinceEntry
+				if entry > 0 {
+					if ot.Side == "BUY" {
+						ot.MAE = (entry - ot.lowestSinceEntry) / entry * 100.0
+						ot.MFE = (ot.highestSinceEntry - entry) / entry * 100.0
+					} else {
+						ot.MAE = (ot.highestSinceEntry - entry) / entry * 100.0
+						ot.MFE = (entry - ot.lowestSinceEntry) / entry * 100.0
+					}
 				}
 
 				capital += ot.PnL
@@ -846,7 +865,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			if signal != nil {
 			e.signalDiag.TradesOpened++
 			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64(), signal.Quantity, signal.Side, candle.Close.Float64(), candle.Time, midPrice, candle.Close.Float64(), candle.Volume)
+			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*candle.AdjustmentFactor, signal.Quantity, signal.Side, candle.Close.Float64()*candle.AdjustmentFactor, candle.Time, midPrice, candle.Close.Float64()*candle.AdjustmentFactor, candle.Volume)
 			entryPrice := simulatedEntry.FillPrice.Float64()
 			entryQty := simulatedEntry.FillQuantity
 			entrySlippageMid := simulatedEntry.SlippageMidBps
@@ -919,6 +938,20 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			Regime: regime,
 		})
 
+		var unrealizedPnL float64
+		for _, ot := range openTrades {
+			if ot.Side == "BUY" {
+				unrealizedPnL += (candle.Close.Float64() - ot.EntryPrice.Float64()) * ot.Quantity
+			} else {
+				unrealizedPnL += (ot.EntryPrice.Float64() - candle.Close.Float64()) * ot.Quantity
+			}
+		}
+		mtmEquity = append(mtmEquity, EquityPoint{
+			Time:   candle.Time,
+			Value:  capital + unrealizedPnL,
+			Regime: regime,
+		})
+
 		if e.recorder != nil {
 			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
 			var position, volume, value float64
@@ -946,6 +979,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	if len(allCandles) == 0 {
 		result.Trades = trades
 		result.EquityCurve = equity
+		result.MtmEquity = mtmEquity
 		result.NumTrades = 0
 		result.TotalReturnPct = 0
 		result.TotalReturn = 0
@@ -956,7 +990,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 	lastCandle := allCandles[len(allCandles)-1]
 	for _, ot := range openTrades {
-		exitPrice := lastCandle.Close.Float64()
+		exitPrice := lastCandle.Close.Float64() * lastCandle.AdjustmentFactor
 		exitReason := "end_of_data"
 		if stop, ok := activeStops[ot.Symbol]; ok {
 			if stopHit, sp := CheckStopHit(lastCandle, stop); stopHit {
@@ -988,12 +1022,14 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		ot.BrokerFee = brokerFee
 
 		entry := ot.EntryPrice.Float64()
-		if ot.Side == "BUY" {
-			ot.MAE = entry - ot.lowestSinceEntry
-			ot.MFE = ot.highestSinceEntry - entry
-		} else {
-			ot.MAE = ot.highestSinceEntry - entry
-			ot.MFE = entry - ot.lowestSinceEntry
+		if entry > 0 {
+			if ot.Side == "BUY" {
+				ot.MAE = (entry - ot.lowestSinceEntry) / entry * 100.0
+				ot.MFE = (ot.highestSinceEntry - entry) / entry * 100.0
+			} else {
+				ot.MAE = (ot.highestSinceEntry - entry) / entry * 100.0
+				ot.MFE = (entry - ot.lowestSinceEntry) / entry * 100.0
+			}
 		}
 
 		capital += ot.PnL
@@ -1011,16 +1047,27 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 	result.Trades = trades
 	result.EquityCurve = equity
+	result.MtmEquity = mtmEquity
 	result.NumTrades = len(trades)
 
-	var sumMAE, sumMFE float64
+	var sumMAE, sumMFE, totalFees, totalSlippage float64
+	var slippageCount int
 	for _, t := range trades {
 		sumMAE += t.MAE
 		sumMFE += t.MFE
+		totalFees += t.BrokerFee
+		if t.SlippageMidBps > 0 {
+			totalSlippage += t.SlippageMidBps
+			slippageCount++
+		}
 	}
 	if len(trades) > 0 {
 		result.AvgMAE = sumMAE / float64(len(trades))
 		result.AvgMFE = sumMFE / float64(len(trades))
+		result.TotalFees = totalFees
+	}
+	if slippageCount > 0 {
+		result.AvgSlippageBps = totalSlippage / float64(slippageCount)
 	}
 
 	result.TotalReturnPct = (capital - config.InitialCapital) / config.InitialCapital * 100
@@ -1043,8 +1090,13 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	if hasHighVIX {
 		result.Warnings = append(result.Warnings, "VIX exceeded 25 during backtest period: regime detection accuracy may be reduced vs live (VIX modulation not applied to pre-computed regime logs)")
 	}
+	if hasVIXSpike {
+		result.Warnings = append(result.Warnings, "VIX spike detected (daily change > 3 points): volatility regime transition may cause whipsaw losses")
+	}
 
 	barsPerDay = effectiveBarsPerDay(allCandles, declaredBarsPerDay)
+	result.DeclaredBarsPerDay = declaredBarsPerDay
+	result.EffectiveBarsPerDay = barsPerDay
 	if declaredBarsPerDay > 0 && math.Abs(barsPerDay-declaredBarsPerDay) > declaredBarsPerDay*0.01 {
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("barsPerDay corrected: declared=%.1f, effective=%.1f (timeframe label may not match data resolution)",
@@ -1070,9 +1122,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			result.SortinoRatio = calculateSortino(equity, barsPerDay)
 			result.MaxDrawdown = calculateMaxDrawdown(equity)
 			result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
+			result.CalmarRatio = calculateCalmar(equity, barsPerDay)
 			result.AvgTrade = result.TotalReturn / float64(result.NumTrades)
 			result.AvgWin, result.AvgLoss = calculateAvgWinLoss(trades)
 			result.NumWins, result.NumLosses = countWinsLosses(trades)
+		}
+		if len(mtmEquity) >= 2 && result.NumTrades >= minTradesForMetrics {
+			result.MtmSharpeRatio = calculateMtmSharpe(mtmEquity, barsPerDay)
+		}
+		if result.NumTrades >= minTradesForReliable {
+			result.MtmMaxDrawdown = calculateMaxDrawdown(mtmEquity)
 		}
 		result.ProfitFactor = calculateProfitFactor(trades)
 		result.AdverseSelectionRate = calculateAdverseSelectionRate(trades)
@@ -1123,6 +1182,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	}
 
 	result.SignalDiag = e.signalDiag
+	result.MLFeatureEnabled = e.featureStore != nil
 
 	return result, nil
 }
@@ -1155,7 +1215,24 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 
 	confidence := 1.0
 	if e.batchInferrer != nil && e.metaLabeler != nil && e.metaLabeler.IsHealthy() {
-		metaResult := e.batchInferrer.Evaluate(nil, raw.PWin)
+		hmmAlpha := [4]float64{}
+		if regime >= 0 && regime < 4 {
+			hmmAlpha[regime] = 1.0
+		}
+
+		var metaResult ml.MetaLabelingResult
+		if e.featureStore != nil {
+			e.featureStore.Push(candle)
+			features, err := e.featureStore.Compute(candle.Time, hmmAlpha, confidence, 1, 0.75, 0.0, 0.001)
+			if err == nil && features != nil && features.Validate() {
+				metaResult = e.batchInferrer.Evaluate(features.ToSlice(), raw.PWin)
+			} else {
+				metaResult = e.batchInferrer.Evaluate(nil, raw.PWin)
+			}
+		} else {
+			metaResult = e.batchInferrer.Evaluate(nil, raw.PWin)
+		}
+
 		if !metaResult.Accepted {
 			e.signalDiag.MLRejected++
 			return nil
@@ -1170,8 +1247,12 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 	}
 
 	if e.regimeEnhancer != nil && e.regimeEnhancer.IsHealthy() {
+		hmmVec := [4]float64{}
+		if regime >= 0 && regime < 4 {
+			hmmVec[regime] = 1.0
+		}
 		score, _ := e.regimeEnhancer.Evaluate(
-			[4]float64{}, 0, 0, 0, 0.5, float64(candle.Time.Hour()),
+			hmmVec, 0, 0, 0, 0.5, float64(candle.Time.Hour()),
 		)
 		e.positionSizer.SetRegimeScore(score)
 	}
@@ -1554,7 +1635,7 @@ func calculateSortino(equity []EquityPoint, barsPerDay float64) float64 {
 	if math.IsNaN(mean) || math.IsNaN(sumSq) || math.IsInf(mean, 0) || math.IsInf(sumSq, 0) {
 		return 0
 	}
-	downStdDev := math.Sqrt(sumSq / float64(count-1))
+	downStdDev := math.Sqrt(sumSq / float64(count))
 	if downStdDev < 1e-6 {
 		return 0
 	}
@@ -1563,6 +1644,18 @@ func calculateSortino(equity []EquityPoint, barsPerDay float64) float64 {
 		return 0
 	}
 	return result
+}
+
+func calculateCalmar(equity []EquityPoint, _ float64) float64 {
+	if len(equity) < 2 {
+		return 0
+	}
+	cagr := computeCAGR(equity)
+	maxDD := computeMaxDrawdown(equity)
+	if maxDD <= 0 {
+		return 0
+	}
+	return cagr / maxDD
 }
 
 func calculateMaxDrawdown(equity []EquityPoint) float64 {
@@ -1785,6 +1878,8 @@ type MultiBacktestResult struct {
 	WinRate         float64
 	NumTrades       int
 	EquityCurve     []EquityPoint
+	MtmSharpeRatio  float64       `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown  float64       `json:"mtm_max_drawdown,omitempty"`
 	StrategyMetrics map[string]*StrategyBacktestMetric
 	ComplianceReport      *ComplianceReport
 }
@@ -1875,6 +1970,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 	capital := config.InitialCapital
 	peakCapital := config.InitialCapital
 	equity := []EquityPoint{}
+	mtmMultiEquity := []EquityPoint{}
 	trades := []Trade{}
 
 	type openPosition struct {
@@ -1929,7 +2025,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 					Symbol:     sig.Symbol,
 					Side:       sig.Side,
 					Quantity:   sig.Quantity,
-					EntryPrice: candle.Close,
+					EntryPrice: types.PriceFromFloat(candle.Close.Float64() * candle.AdjustmentFactor),
 					EntryTime:  candle.Time,
 					StrategyID: sid,
 				},
@@ -1938,7 +2034,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		}
 
 		for sid, op := range openPositions {
-			exitPrice := candle.Close.Float64()
+			exitPrice := candle.Close.Float64() * candle.AdjustmentFactor
 			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
 
 			var pnl float64
@@ -1967,6 +2063,20 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		equity = append(equity, EquityPoint{
 			Time:   candle.Time,
 			Value:  capital,
+			Regime: regime,
+		})
+
+		var multiUnrealizedPnL float64
+		for _, op := range openPositions {
+			if op.Trade.Side == "BUY" {
+				multiUnrealizedPnL += (candle.Close.Float64() - op.Trade.EntryPrice.Float64()) * op.Trade.Quantity
+			} else {
+				multiUnrealizedPnL += (op.Trade.EntryPrice.Float64() - candle.Close.Float64()) * op.Trade.Quantity
+			}
+		}
+		mtmMultiEquity = append(mtmMultiEquity, EquityPoint{
+			Time:   candle.Time,
+			Value:  capital + multiUnrealizedPnL,
 			Regime: regime,
 		})
 
@@ -2007,6 +2117,11 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		result.WinRate = calculateWinRate(trades)
 		result.SharpeRatio = calculateSharpe(equity, 1.0)
 		result.MaxDrawdown = calculateMaxDrawdown(equity)
+	}
+
+	if len(mtmMultiEquity) >= 2 {
+		result.MtmSharpeRatio = calculateMtmSharpe(mtmMultiEquity, 1.0)
+		result.MtmMaxDrawdown = calculateMaxDrawdown(mtmMultiEquity)
 	}
 
 	for _, sid := range config.StrategyIDs {
@@ -2144,9 +2259,6 @@ func calculateTemporalBreakdown(trades []Trade) TemporalBreakdown {
 		m := t.ExitTime.Format("2006-01")
 		w := isoWeek(t.ExitTime)
 		d := t.ExitTime.Format("2006-01-02")
-		yw, _ := t.ExitTime.ISOWeek()
-		_ = yw
-		_ = w
 
 		addToPeriod(yearly, y, t)
 		addToPeriod(monthly, m, t)

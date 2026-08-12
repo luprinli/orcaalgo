@@ -3,7 +3,7 @@ package broker
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/lee-econ/orca-core/internal/db"
@@ -313,7 +313,7 @@ func (am *AccountManager) SyncAccountState(ctx context.Context, accountID string
 
 	if am.repo != nil {
 		if err := am.repo.UpsertAccountBalance(ctx, accountID, acct.Balance.Float64(), acct.Equity.Float64(), acct.DailyPnL, acct.HighWaterMark); err != nil {
-			log.Printf("account_manager: failed to persist account %s balance: %v", accountID, err)
+			slog.Error("failed to persist account balance", "account_id", accountID, "error", err, "component", "account_manager")
 		}
 	}
 
@@ -333,7 +333,7 @@ func (am *AccountManager) SyncAccountState(ctx context.Context, accountID string
 				UnrealizedPL:  pos.UnrealizedPL,
 			}
 			if err := am.repo.UpsertAccountPosition(ctx, ap); err != nil {
-				log.Printf("account_manager: failed to persist position for account %s: %v", accountID, err)
+				slog.Error("failed to persist position", "account_id", accountID, "error", err, "component", "account_manager")
 			}
 		}
 	}
@@ -344,7 +344,7 @@ func (am *AccountManager) SyncAccountState(ctx context.Context, accountID string
 func (am *AccountManager) SyncAll(ctx context.Context) {
 	for _, acct := range am.ListAccountsByUser(ctx, "") {
 		if err := am.SyncAccountState(ctx, acct.ID); err != nil {
-			log.Printf("account_manager: sync failed for account %s: %v", acct.ID, err)
+			slog.Error("sync failed for account", "account_id", acct.ID, "error", err, "component", "account_manager")
 		}
 	}
 }
@@ -352,7 +352,7 @@ func (am *AccountManager) SyncAll(ctx context.Context) {
 func (am *AccountManager) CloseAllPositionsAcrossAll(ctx context.Context) {
 	for _, acct := range am.ListAccountsByUser(ctx, "") {
 		if err := acct.CloseAllPositions(ctx); err != nil {
-			log.Printf("account_manager: CloseAllPositions failed for account %s: %v", acct.ID, err)
+			slog.Error("CloseAllPositions failed for account", "account_id", acct.ID, "error", err, "component", "account_manager")
 		}
 	}
 }
@@ -360,7 +360,7 @@ func (am *AccountManager) CloseAllPositionsAcrossAll(ctx context.Context) {
 func (am *AccountManager) CancelAllOrdersAcrossAll(ctx context.Context) {
 	for _, acct := range am.ListAccountsByUser(ctx, "") {
 		if err := acct.CancelAllOrders(ctx); err != nil {
-			log.Printf("account_manager: CancelAllOrders failed for account %s: %v", acct.ID, err)
+			slog.Error("CancelAllOrders failed for account", "account_id", acct.ID, "error", err, "component", "account_manager")
 		}
 	}
 }

@@ -13,6 +13,6 @@ def ewma_volatility(returns: np.ndarray, span: int = 20) -> float:
     alpha = 2.0 / (span + 1)
     seed_window = min(len(returns), max(span, 5))
     ewmv = float(np.var(returns[:seed_window]))
-    for r in returns[1:]:
+    for r in returns[seed_window:]:
         ewmv = alpha * r * r + (1 - alpha) * ewmv
     return float(np.sqrt(max(ewmv, 0.0)))

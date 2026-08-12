@@ -18,6 +18,7 @@ import ChartOverlayButtons from '../components/ChartOverlayButtons'
 import TimeframeChips from '../components/TimeframeChips'
 import { useTimeframeStore } from '../stores/timeframeStore'
 import type { Candle, TradeSummary, IndicatorSpec, IndicatorWithData } from '../types/api'
+import { CHART_LAYOUT } from './chartConfig'
 
 interface LiveMonitorChartProps {
   candles: Candle[]
@@ -60,7 +61,7 @@ export default function LiveMonitorChart({
   const chartOptions = useMemo(() => ({
     height,
     timeScaleRightOffset: 5,
-    rightPriceScaleMargins: { top: 0.1, bottom: 0.2 },
+    rightPriceScaleMargins: CHART_LAYOUT.CANDLE_SCALE_MARGINS,
   }), [height])
 
   const chartRef = useChart(containerRef, chartOptions)
@@ -86,7 +87,7 @@ export default function LiveMonitorChart({
     if (!chartRef.current) return
     try {
       chartRef.current.priceScale('volume').applyOptions({
-        scaleMargins: { top: 0.85, bottom: 0 },
+        scaleMargins: CHART_LAYOUT.VOLUME_SCALE_MARGINS,
       })
     } catch { /* volume scale may not exist yet */ }
   }, [chartRef])

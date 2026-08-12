@@ -3,7 +3,8 @@ package engine
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -33,31 +34,37 @@ type LiveEngine struct {
 	TickCount   uint64
 	SignalCount uint64
 
-	metaLabeler    ml.Predictor      // H1–H3: meta-labeler for signal gating + priority
-	batchInferrer  *ml.BatchInferrer // H1–H3: threshold skip + cache wrapper around predictor
+	metaLabeler    ml.Predictor
+	batchInferrer  *ml.BatchInferrer
 	metaCfg        ml.MetaLabelerConfig
-	featureStore   *ml.FeatureStore  // H1: feature computation for ML inference
-	exitOrch       *ml.ExitOrchestrator // H5: ML dynamic stop adjustment
-	regimeEnhancer *ml.RegimeEnhancer   // H4: regime-adaptive sizing
-	regimeDailyLossPct float64          // H4: cached daily loss limit
-	openPositions  map[string]*backtest.ActiveStop  // H5: symbol → active stop
+	featureStore   *ml.FeatureStore
+	exitOrch       *ml.ExitOrchestrator
+	regimeEnhancer *ml.RegimeEnhancer
+	regimeDailyLossPct float64
+	openPositions  map[string]*backtest.ActiveStop
 
-	lastVIX         float64 // live VIX reading for regime classifier
-	lastSentiment   float64 // live sentiment score (0-100)
-	lastCVD         float64 // live cumulative volume delta trend
-	lastVolStructure float64 // ratio of short-term to long-term realized volatility
+	lastVIX         float64
+	lastSentiment   float64
+	lastCVD         float64
+	lastVolStructure float64
+	lastDay          string
 
-	StrategyHash  string  // content-addressable instance hash of the deployed strategy
-	KellyFraction float64 // fractional Kelly multiplier (0.25 default)
+	StrategyHash  string
+	KellyFraction float64
+	runningCapital float64
 
-	pipeline  *risk.RiskPipeline             // shared signal-audit pipeline (optional)
-	multiPool *risk.MultiAccountCapitalPool   // per-account capital pools (optional)
+	pipeline  *risk.RiskPipeline
+	multiPool *risk.MultiAccountCapitalPool
 
-	accountRegistries map[string]*strategy.Registry // per-account isolated strategy instances
-	defaultRegistry   *strategy.Registry            // fallback for single-account (created from factories)
+	accountRegistries map[string]*strategy.Registry
+	defaultRegistry   *strategy.Registry
 
-	slippageModel       backtest.SlippageModel // adaptive slippage model calibrated from observed fills
+	slippageModel       backtest.SlippageModel
 	slippageSampleCount int
+
+	warmUpCount  int
+	warmUpTicks  map[uint32]int
+	stopLossCfg  *backtest.StopLossConfig
 }
 
 func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) {
@@ -151,8 +158,40 @@ func NewLiveEngine() *LiveEngine {
 		RiskState:         risk.NewGlobalRiskState(),
 		openPositions:     make(map[string]*backtest.ActiveStop),
 		KellyFraction:     0.25,
+		runningCapital:    100000.0,
 		accountRegistries: make(map[string]*strategy.Registry),
+		warmUpCount:       20,
+		warmUpTicks:       make(map[uint32]int),
+		stopLossCfg: &backtest.StopLossConfig{
+			Type:          backtest.StopLossATR,
+			ATRPeriod:     14,
+			ATRMultiplier: 2.0,
+		},
 	}
+}
+
+func (e *LiveEngine) SetRunningCapital(capital float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.runningCapital = capital
+}
+
+func (e *LiveEngine) GetRunningCapital() float64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.runningCapital
+}
+
+func (e *LiveEngine) SetWarmUpBars(n int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.warmUpCount = n
+}
+
+func (e *LiveEngine) SetStopLossConfig(cfg *backtest.StopLossConfig) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.stopLossCfg = cfg
 }
 
 // VerifyStrategyHash hard-fails if the engine has no strategy hash (unverified
@@ -218,11 +257,39 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 	candle := s.Aggregator.GetLatestBar("1m")
 	goCandle := strategy.BarToCandle(candle)
 
+	currentDay := time.Unix(0, timestampNS).UTC().Format("2006-01-02")
+	if e.lastDay != "" && currentDay != e.lastDay {
+		if e.pipeline != nil && e.pipeline.Capital != nil {
+			if pm, ok := e.pipeline.Capital.(interface{ ResetDaily() }); ok {
+				pm.ResetDaily()
+			}
+		}
+		if e.multiPool != nil {
+			e.multiPool.ResetAllDaily()
+		}
+	}
+	e.lastDay = currentDay
+
+	if e.pipeline != nil {
+		if sg, ok := e.pipeline.SignalGate.(*risk.SignalGateImpl); ok {
+			sg.SetVIX(e.lastVIX)
+			sg.SetRegime(regimeInt8)
+		}
+	}
+
 	reg := e.getRegistryForAccount(accountID)
 	for _, runner := range reg.All() {
 		if receiver, ok := runner.(strategy.VIXReceiver); ok {
 			receiver.SetVIX(e.lastVIX)
 		}
+	}
+
+	e.warmUpTicks[symbolID]++
+	if e.warmUpTicks[symbolID] < e.warmUpCount {
+		for _, runner := range reg.All() {
+			runner.Evaluate(goCandle, regimeInt8)
+		}
+		return nil
 	}
 
 	signals := e.getRegistryForAccount(accountID).EvaluateAll(goCandle, regimeInt8)
@@ -274,23 +341,28 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 		})
 	}
 
-		if e.pipeline != nil {
-			filtered := approvedSignals[:0]
-			e.pipeline.CurrentRegime = regimeInt8
-			for _, sig := range approvedSignals {
+	if e.pipeline != nil {
+		filtered := approvedSignals[:0]
+		e.pipeline.CurrentRegime = regimeInt8
+		for _, sig := range approvedSignals {
 			pWin := sig.PWin
 			if pWin <= 0 {
 				pWin = 0.5
 			}
+			capital := e.GetRunningCapital()
+			stratID := sig.StrategyID
+			if stratID == "" {
+				stratID = "live"
+			}
 			result := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
-				StrategyID:       "live",
+				StrategyID:       stratID,
 				Symbol:           sig.Symbol,
 				Side:             sig.Side,
 				Price:            goCandle.Close.Float64(),
 				Confidence:       pWin,
 				BaseSize:         sig.Quantity,
 				ExistingPosition: 0,
-				RunningCapital:   e.regimeDailyLossPct * 10000,
+				RunningCapital:   capital,
 			})
 			if result.Approved {
 				sig.Quantity = result.Size
@@ -304,6 +376,11 @@ func (e *LiveEngine) ProcessTickForAccount(accountID string, symbolID uint32, pr
 			kelly = 0.25
 		}
 		for _, sig := range approvedSignals {
+			pWin := sig.PWin
+			if pWin <= 0 {
+				pWin = 0.5
+			}
+			sig.Quantity *= math.Min(pWin*1.5, 1.0)
 			sig.Quantity *= kelly
 		}
 	}
@@ -336,14 +413,31 @@ func (e *LiveEngine) CheckOpenStops(symbolID uint32, s *SymbolState, goCandle st
 		return
 	}
 
+	atrVal := 0.0
+	cfg := e.stopLossCfg
+	if cfg != nil && cfg.Type == backtest.StopLossATR && cfg.ATRPeriod > 0 {
+		bars := s.Aggregator.GetBars("1m", cfg.ATRPeriod+1)
+		if len(bars) >= cfg.ATRPeriod+1 {
+			atrVal = backtest.ComputeATR(strategy.BarsToCandles(bars), cfg.ATRPeriod)
+		}
+	}
+
 	// Track new positions from approved signals
 	for _, sig := range *approvedSignals {
 		if sig.Side == "BUY" || sig.Side == "SELL" {
-			stopType := backtest.StopLossATR
 			side := sig.Side
-			stopPrice := price * 0.98
-			if side == "SELL" {
-				stopPrice = price * 1.02
+			var stopPrice float64
+			var stopType backtest.StopLossType
+			if cfg != nil {
+				stopPrice = backtest.CalculateStopPrice(price, side, cfg, atrVal, goCandle.High.Float64())
+				stopType = cfg.Type
+			}
+			if stopPrice <= 0 {
+				stopPrice = price * 0.98
+				if side == "SELL" {
+					stopPrice = price * 1.02
+				}
+				stopType = backtest.StopLossFixed
 			}
 			e.openPositions[sig.Symbol] = &backtest.ActiveStop{
 				EntryPrice: types.PriceFromFloat(price),
@@ -550,7 +644,7 @@ func (e *LiveEngine) LoadFeatureStore(ctx context.Context, pool *pgxpool.Pool) {
 	}
 	restored, _, err := ml.LoadFeatureStore(ctx, pool, "global")
 	if err != nil {
-		log.Printf("[live] feature store load: %v — starting fresh", err)
+		slog.Warn("feature store load failed, starting fresh", "error", err, "component", "live")
 		return
 	}
 	e.featureStore = restored

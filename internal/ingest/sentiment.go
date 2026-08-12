@@ -7,14 +7,17 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/breaker"
 )
 
 type SentimentClient struct {
-	baseURL    string
-	httpClient *http.Client
-	lastValue  int
-	lastLabel  string
-	lastFetch  time.Time
+	baseURL        string
+	httpClient     *http.Client
+	lastValue      int
+	lastLabel      string
+	lastFetch      time.Time
+	circuitBreaker *breaker.CircuitBreaker
 }
 
 type alternativeMeResponse struct {
@@ -42,11 +45,16 @@ func NewSentimentClient() *SentimentClient {
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
+		circuitBreaker: breaker.NewCircuitBreaker(3, 30*time.Second),
 	}
 }
 
 func (s *SentimentClient) Fetch(ctx context.Context) (int, string, error) {
 	url := s.baseURL + "?limit=1"
+
+	if !s.circuitBreaker.Allow() {
+		return 0, "", fmt.Errorf("sentiment circuit breaker open")
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -55,13 +63,16 @@ func (s *SentimentClient) Fetch(ctx context.Context) (int, string, error) {
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		s.circuitBreaker.RecordFailure()
 		return 0, "", fmt.Errorf("sentiment fetch: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		s.circuitBreaker.RecordFailure()
 		return 0, "", fmt.Errorf("sentiment fetch: status %d", resp.StatusCode)
 	}
+	s.circuitBreaker.RecordSuccess()
 
 	var result alternativeMeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

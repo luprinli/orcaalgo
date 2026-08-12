@@ -7,6 +7,7 @@ real TimescaleDB candles to drive realistic synthetic 1-minute generation.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -15,6 +16,8 @@ from typing import Any
 import numpy as np
 from scipy.optimize import minimize
 from scipy.stats import gaussian_kde
+
+logger = logging.getLogger(__name__)
 
 
 def _get_db_url() -> str:
@@ -185,8 +188,8 @@ def compute_heston_params(prices: np.ndarray) -> dict[str, float]:
             theta = float(result.x[1])
             sigma_v = float(result.x[2])
             rho = float(result.x[3])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Heston MLE optimization failed: {e}, using defaults")
 
     return {"kappa": kappa, "theta": theta, "sigma_v": sigma_v, "rho": rho}
 

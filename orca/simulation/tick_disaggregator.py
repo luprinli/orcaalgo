@@ -220,3 +220,26 @@ def load_candle_parquet(input_path: str | Path) -> pd.DataFrame:
     if path.is_dir():
         return pd.read_parquet(path)
     return pd.read_parquet(path)
+
+
+SYMBOL_TICKS_PER_MINUTE: dict[str, int] = {
+    "SPY": 120,
+    "QQQ": 120,
+    "AAPL": 90,
+    "MSFT": 90,
+    "NVDA": 90,
+    "TSLA": 90,
+    "IWM": 60,
+    "GLD": 40,
+    "EURUSD=X": 30,
+    "BTC-USD": 30,
+}
+
+
+def get_symbol_ticks_per_minute(symbol: str) -> int:
+    """Return configured ticks-per-minute for a symbol's liquidity profile.
+
+    High-liquidity equities get 90-120 ticks/min; medium get 60;
+    forex/crypto get 30-40. Default: 60.
+    """
+    return SYMBOL_TICKS_PER_MINUTE.get(symbol, 60)

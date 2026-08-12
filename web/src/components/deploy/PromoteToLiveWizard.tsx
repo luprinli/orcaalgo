@@ -15,9 +15,9 @@ interface Props {
   onDeployed: () => void
 }
 
+import { SYMBOL_OPTIONS, TIMEFRAME_OPTIONS } from '../../data/constants'
+
 const GATES = { sharpeMin: 1.0, maxDDMax: 8.0, passProbMin: 80, profitFactorMin: 1.5 }
-const SYMBOL_OPTIONS = ["SPX500", "JPN225", "ES", "NQ", "YM", "RTY", "SPY", "QQQ", "AAPL", "MSFT"]
-const TIMEFRAME_OPTIONS = ["1h", "4h", "1d", "30m", "15m"]
 const RECOMMENDED_SUPPLEMENTARY = [
   { strategy_id: "grid_trading", symbol: "JPN225", timeframe: "1h" },
   { strategy_id: "rsi2_reversion", symbol: "JPN225", timeframe: "1h" },

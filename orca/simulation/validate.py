@@ -219,6 +219,7 @@ def validate_strategy_coverage(
     orca_cli_path: str = "orca-cli",
     symbol: str = "",
     data_source: str = "synthetic",
+    generate_first: bool = False,
 ) -> dict[str, Any]:
     """Validate that all strategy families produce trades on generated data.
 
@@ -231,6 +232,9 @@ def validate_strategy_coverage(
         orca_cli_path: Path to orca-cli binary.
         symbol: Symbol to backtest (required).
         data_source: Data source to pass to orca-cli.
+        generate_first: If True, generate data before running backtests
+            to avoid the circular dependency where validation tries to
+            read data that hasn't been seeded yet.
 
     Returns:
         Dict with per-strategy Sharpe ratios and pass/fail status.
@@ -239,6 +243,17 @@ def validate_strategy_coverage(
         strategies = ["intraday_mr", "trend_following", "opening_range_breakout", "grid_trading"]
     if not symbol:
         return {"passed": False, "error": "symbol is required"}
+
+    if generate_first:
+        _ensure_data_exists(symbol, data_source, generation_id)
+
+    data_check = _check_data_availability(symbol, data_source, generation_id)
+    if not data_check["available"]:
+        return {
+            "passed": False,
+            "error": f"No data available for symbol={symbol} source={data_source}. Run seed-all first with --generate-first.",
+            "data_check": data_check,
+        }
 
     results: dict[str, Any] = {}
     all_passed = True
@@ -278,3 +293,65 @@ def validate_strategy_coverage(
         "passed": all_passed,
         "strategies": results,
     }
+
+
+def _check_data_availability(
+    symbol: str,
+    data_source: str,
+    generation_id: str | None = None,
+) -> dict[str, Any]:
+    """Check if data exists for the given symbol before running backtests.
+
+    Prevents the circular dependency where validate_strategy_coverage calls
+    backtest on data that hasn't been generated yet.
+    """
+    try:
+        from orca.data.db_integration import get_connection
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                if data_source == "synthetic":
+                    cur.execute(
+                        "SELECT COUNT(*) FROM candles WHERE symbol = %s AND timeframe = '1d'",
+                        (symbol,),
+                    )
+                else:
+                    cur.execute(
+                        "SELECT COUNT(*) FROM candles WHERE timeframe = '1d'",
+                    )
+                    cur.execute(
+                        "SELECT COUNT(*) FROM candles c JOIN symbols s ON c.symbol_id = s.id WHERE s.ticker = %s",
+                        (symbol,),
+                    )
+                row = cur.fetchone()
+                count = row[0] if row else 0
+                return {"available": count > 0, "candle_count": count, "symbol": symbol}
+        finally:
+            conn.close()
+    except Exception as e:
+        return {"available": False, "error": str(e), "symbol": symbol}
+
+
+def _ensure_data_exists(
+    symbol: str,
+    data_source: str,
+    generation_id: str | None = None,
+) -> None:
+    """Generate data if it doesn't exist, breaking the circular dependency."""
+    try:
+        from datetime import date, timedelta
+        from orca.data.seed_all import seed_all
+
+        check = _check_data_availability(symbol, data_source, generation_id)
+        if check["available"]:
+            return
+
+        seed_all(
+            symbols=[symbol],
+            start=date.today() - timedelta(days=365),
+            end=date.today(),
+            reset=False,
+            verbose=True,
+        )
+    except Exception:
+        pass

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Anti-Pattern Scanner — Enforces the 10 Hard Prohibitions from AGENTS.md.
+Anti-Pattern Scanner — Enforces the 18 Hard Prohibitions from AGENTS.md.
 
 Scans the codebase for violations of the OrcaAlgo hard prohibitions:
   Rule 1:  No reimplementing canonical math in Go/Odin        [CRITICAL]
@@ -13,6 +13,7 @@ Scans the codebase for violations of the OrcaAlgo hard prohibitions:
   Rule 8:  No bypassing kill-switch re-entrancy guard          [CRITICAL]
   Rule 9:  No perfect fill assumption in backtests             [HIGH]
   Rule 10: No panic/throw for recoverable errors               [HIGH]
+  Rule 11: No bypassing RiskPipeline (HP #17)                  [CRITICAL]
 
 Usage: python scripts/anti_pattern_scan.py [--changed-only] [--format sarif] [--min-severity HIGH]
 Exit:   0 if no CRITICAL+HIGH violations found (default), 1 if any blocking violation detected.
@@ -35,7 +36,7 @@ SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}
 RULE_SEVERITY = {
     1: "CRITICAL", 2: "CRITICAL", 3: "MEDIUM", 4: "CRITICAL",
     5: "HIGH", 6: "CRITICAL", 7: "HIGH", 8: "CRITICAL",
-    9: "HIGH", 10: "HIGH",
+    9: "HIGH", 10: "HIGH", 11: "CRITICAL",
 }
 
 CANONICAL_MATH_FUNCS = ["kelly", "brier", "platt", "wilson", "ewma"]
@@ -64,6 +65,7 @@ class Violation:
             refs = {
                 1: "§3.1-3.5", 2: "§6.8", 3: "§5.1", 4: "§9.3", 5: "§9.2",
                 6: "§3.1.3", 7: "§2.1.2", 8: "§4.2.2", 9: "§9.1.3", 10: "Antipattern #10",
+                11: "Antipattern #17",
             }
             self.spec_ref = refs.get(self.rule, "")
 
@@ -447,6 +449,64 @@ def check_rule_10(changed_only: bool = False) -> list[Violation]:
     return violations
 
 
+# ─── Rule 11: No bypassing RiskPipeline (HP #17) ──────────────────────────
+def check_rule_11(changed_only: bool = False) -> list[Violation]:
+    """Flag NewEngine() followed by Run() without intervening WirePipeline() in Go files.
+
+    HP #17: Engine.generateSignal and LiveEngine.ProcessTick both route through
+    RiskPipeline.ProcessSignal/ReconcileFill. New risk checks must be added to the
+    pipeline, not duplicated in each engine.
+    """
+    violations = []
+    changed = set(get_changed_files()) if changed_only else None
+    targets = ["internal/backtest/**/*.go", "internal/engine/**/*.go", "cmd/**/*.go"]
+
+    for pattern in targets:
+        for go_file in ROOT.glob(pattern):
+            if go_file.name.endswith("_test.go"):
+                continue
+            fname = str(go_file)
+            if changed_only and not any(fname.replace("\\", "/").endswith(c) for c in changed):
+                continue
+            try:
+                content = go_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            lines = content.splitlines()
+
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                if "//" in stripped and stripped.strip().startswith("//"):
+                    continue
+
+                if "NewEngine(" in stripped or "NewEngineBuilder(" in stripped:
+                    needle = "WirePipeline"
+                    has_pipeline = False
+                    for j in range(i + 1, min(i + 15, len(lines))):
+                        if needle in lines[j] and "//" not in lines[j].split(needle)[0]:
+                            has_pipeline = True
+                            break
+                        if re.match(rf"^\s*[a-zA-Z_]\w*\.Run\b|^\s*Run\(", lines[j]):
+                            break
+                    if not has_pipeline:
+                        found_run = False
+                        for j in range(i + 1, min(i + 20, len(lines))):
+                            if re.match(rf"^\s*[a-zA-Z_]\w*\.Run\b|^\s*Run\(", lines[j]):
+                                found_run = True
+                                break
+                        if found_run:
+                            violations.append(Violation(
+                                11, fname, i + 1,
+                                "NewEngine() followed by Run() without WirePipeline(). "
+                                "Engine.generateSignal must route through RiskPipeline.ProcessSignal. "
+                                "Call engine.WirePipeline() before engine.Run()."
+                            ))
+    return violations
+
+
 # ─── Output formatters ───────────────────────────────────────────────────────
 def format_text(violations: list[Violation], min_severity: str = "HIGH") -> str:
     min_rank = SEVERITY_RANK.get(min_severity, 1)
@@ -497,6 +557,7 @@ def main():
     checks = [
         check_rule_1, check_rule_2, check_rule_3, check_rule_4, check_rule_5,
         check_rule_6, check_rule_7, check_rule_8, check_rule_9, check_rule_10,
+        check_rule_11,
     ]
 
     violations: list[Violation] = []

@@ -4,11 +4,20 @@ Architecture specifications, technical references, and operations guides.
 
 [↑ Back to Root README](../README.md)
 
-## Active Documents
+## Reference Documents
 
 | File | Content |
 |------|---------|
-| `capital-pool-live-wiring-plan-2026-07-25.md` | 6-wave implementation plan: RiskPipeline interfaces, CapitalGate/PropFirmGate/SignalGate abstractions, BaseCapitalPool extraction, Engine/LiveEngine/API server wiring, per-account strategy isolation, KillSwitch integration |
+| `Synthetic Data Generation Best Practices 2026-08-11.md` | Data generation methodology, 5-minute base resampling, validation checklist |
 | `grafana/` | Grafana monitoring dashboard setup, JWT authentication, and CI validation documents |
-| `tutorials/` | Tutorial documentation |
-| `README.md` | This file — documentation index |
+| `runbooks/` | Operational runbooks: startup/shutdown, kill-switch, database migrations, incident response |
+| `archive/` | Archived audit reports and historical assessments |
+
+## Operational Runbooks
+
+| File | Content |
+|------|---------|
+| `runbooks/startup-shutdown.md` | Service startup and graceful shutdown procedures |
+| `runbooks/kill-switch.md` | Kill-switch activation and recovery procedures |
+| `runbooks/database-migrations.md` | Database migration guide |
+| `runbooks/incident-response.md` | Incident classification and response protocols |

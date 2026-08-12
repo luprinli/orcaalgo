@@ -20,9 +20,7 @@ import { orchestrator, strategies as strategiesApi } from "../../api/client"
 import OrchMatrixResultsPanel from "./OrchMatrixResultsPanel"
 import { useCacheStore } from "../../stores/cacheStore"
 import type { OrchestrationSubmitRequest, Strategy } from "../../types/api"
-
-const SYMBOL_OPTIONS = ["ES", "NQ", "YM", "RTY", "JPN225", "SPY", "QQQ", "IWM", "AAPL", "MSFT", "SPX500", "ETHUSD", "BTCUSD"]
-const TIMEFRAME_OPTIONS = ["1m", "5m", "15m", "30m", "1h", "4h", "1d"]
+import { SYMBOL_OPTIONS, TIMEFRAME_OPTIONS, POLL_INTERVALS } from "../../data/constants"
 
 interface StrategyRow {
   strategy_id: string
@@ -190,7 +188,7 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
             clearInterval(pollInterval)
           }
         } catch { /* polling will retry */ }
-      }, 3000)
+      }, POLL_INTERVALS.ORCH_MATRIX_POLL)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Matrix submission failed")
     } finally { setMatrixLoading(false) }

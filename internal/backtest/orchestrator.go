@@ -26,6 +26,7 @@ type OrchestratorConfig struct {
 	EnableCorrelationBrake bool
 	CorrelationThreshold   float64
 	FrictionModel          string
+	CommissionBps          float64
 }
 
 type OrchestratorStrategy struct {
@@ -89,6 +90,9 @@ func NewOrchestrator(db Database, cfg OrchestratorConfig) (*Orchestrator, error)
 	}
 	if cfg.MaxPositionPct <= 0.001 || cfg.MaxPositionPct > 0.20 {
 		cfg.MaxPositionPct = 0.02
+	}
+	if cfg.CommissionBps <= 0 {
+		cfg.CommissionBps = 2.0
 	}
 
 	return &Orchestrator{
@@ -262,9 +266,9 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 		}
 
 		var currentVIX float64
-		for _, vl := range vixLogs {
-			if vl.Time.Equal(candle.Time) || vl.Time.After(candle.Time) {
-				currentVIX = vl.VIXValue
+		for i := len(vixLogs) - 1; i >= 0; i-- {
+			if vixLogs[i].Time.Before(candle.Time) || vixLogs[i].Time.Equal(candle.Time) {
+				currentVIX = vixLogs[i].VIXValue
 				break
 			}
 		}
@@ -440,7 +444,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 				pnl = (op.Trade.EntryPrice.Float64() - fp) * op.Trade.Quantity
 			}
 
-			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * 0.0002
+			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * (o.config.CommissionBps / 10000.0)
 			pnl -= commission
 
 			pnlPct := 0.0
@@ -766,26 +770,12 @@ func RunPoolMonteCarlo(dailyReturns []float64, iterations int) *MCResult {
 
 	results := make([]MCIterationResult, iterations)
 	for i := 0; i < iterations; i++ {
-		sampled := make([]float64, len(dailyReturns))
-		for j := range sampled {
-			sampled[j] = dailyReturns[rand.IntN(len(dailyReturns))]
-		}
-		equity := 1.0
-		peakEquity := 1.0
-		var maxDD float64
-		for _, r := range sampled {
-			equity *= (1.0 + r)
-			if equity > peakEquity {
-				peakEquity = equity
-			}
-			dd := (peakEquity - equity) / peakEquity
-			if dd > maxDD {
-				maxDD = dd
-			}
-		}
+		localRng := rand.New(rand.NewPCG(uint64(i), uint64(time.Now().UnixNano())))
+		path := bootstrapBlockPath(dailyReturns, len(dailyReturns), localRng, 7)
+		pnlPct, maxDD := computePathMetrics(path)
 		results[i] = MCIterationResult{
-			PnlPct:   (equity - 1.0) * 100,
-			MaxDDPct: maxDD * 100,
+			PnlPct:   pnlPct,
+			MaxDDPct: maxDD,
 		}
 	}
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"math"
 	"math/rand/v2"
@@ -12,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -73,6 +73,15 @@ type Server struct {
 	strategyStatusHandler  *StrategyStatusHandler
 	monitoringHandler      *MonitoringHandler
 	dataSource            string
+	environment           string
+}
+
+func (s *Server) SetEnvironment(env string) {
+	s.environment = env
+	if s.adminHandler != nil {
+		s.adminHandler.SetEnvironment(env)
+	}
+	slog.Info("environment configured", "env", env)
 }
 
 func NewServer(vault risk.VaultProvider, adapter broker.Adapter, ks *risk.KillSwitch, hub *monitor.WSHub, repo *db.Repository, brokerReg *broker.BrokerDriverRegistry) *Server {
@@ -135,6 +144,7 @@ func NewServerWithServices(vault risk.VaultProvider, adapter broker.Adapter, ks 
 }
 
 func (s *Server) registerRoutes() {
+	s.router.Use(middleware.TraceMiddleware())
 	s.router.Use(middleware.CORSMiddleware())
 	v1 := s.router.Group("/api/v1")
 
@@ -554,7 +564,7 @@ func (s *Server) reloadStrategy(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Strategy not found", "reloaded": false})
 			return
 		}
-		log.Printf("strategy %s reload request received", id)
+		slog.Info("strategy reload request received", "strategy_id", id, "component", "router")
 	}
 
 	c.JSON(http.StatusOK, gin.H{"reloaded": true, "strategy_id": id})
@@ -822,7 +832,7 @@ func (s *Server) createAccount(c *gin.Context) {
 
 	if s.repo != nil {
 		if err := s.repo.InsertAccount(c.Request.Context(), acct.ToDBAccount()); err != nil {
-			log.Printf("router: failed to persist account %s: %v", req.ID, err)
+			slog.Error("failed to persist account", "account_id", req.ID, "error", err, "component", "router")
 		}
 	}
 
@@ -838,7 +848,7 @@ func (s *Server) deleteAccount(c *gin.Context) {
 	s.accountManager.UnregisterAccount(id)
 	if s.repo != nil {
 		if err := s.repo.DeleteAccount(c.Request.Context(), id); err != nil {
-			log.Printf("router: failed to delete account %s from db: %v", id, err)
+			slog.Error("failed to delete account from db", "account_id", id, "error", err, "component", "router")
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": id})
@@ -1101,6 +1111,15 @@ func (s *Server) submitBacktest(c *gin.Context) {
 				}
 			}()
 
+			type collectedPair struct {
+				rec    *db.BacktestRunRecord
+				btr    *db.BacktestResultRecord
+				index  int
+				cr     backtest.ComboResult
+			}
+			var mu sync.Mutex
+			var collected []collectedPair
+
 			dbAdapter := &backtestRepoAdapter{repo: s.repo}
 			_, _ = backtest.RunMatrixConcurrent(context.Background(), dbAdapter, mc,
 				func(index int, status string, errMsg string, result *backtest.ComboResult) {
@@ -1151,31 +1170,72 @@ func (s *Server) submitBacktest(c *gin.Context) {
 								return
 							}
 							rec.ResultsJSON = fullMetricsJSON
-							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
-								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
-							} else {
-								cr := *result
-								cr.RunID = rec.ID
-								cr.EquityCurve = nil
-								cr.Trades = nil
-								s.progressStore.UpdateCombo(bid, index, "completed", "", &cr)
-								eqJSON, _ := json.Marshal(result.EquityCurve)
-								tradesJSON, _ := json.Marshal(result.Trades)
-								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
-									RunID:         rec.ID,
-									StrategyID:    result.StrategyID,
-									ResultType:    "matrix",
-									TrialIndex:    0,
-									SchemaVersion: 1,
-									Metrics:       rec.ResultsJSON,
-									EquityCurve:   eqJSON,
-									Trades:        tradesJSON,
-								})
+							eqJSON, _ := json.Marshal(result.EquityCurve)
+							tradesJSON, _ := json.Marshal(result.Trades)
+							btr := &db.BacktestResultRecord{
+								StrategyID:    result.StrategyID,
+								ResultType:    "matrix",
+								TrialIndex:    0,
+								SchemaVersion: 1,
+								Metrics:       fullMetricsJSON,
+								EquityCurve:   eqJSON,
+								Trades:        tradesJSON,
 							}
+							mu.Lock()
+							collected = append(collected, collectedPair{rec: rec, btr: btr, index: index, cr: *result})
+							mu.Unlock()
 						}
 					}
 				},
 			)
+
+			if len(collected) > 0 && s.repo != nil {
+				batchSize := 100
+				for start := 0; start < len(collected); start += batchSize {
+					end := start + batchSize
+					if end > len(collected) {
+						end = len(collected)
+					}
+					chunk := collected[start:end]
+
+					runs := make([]db.BacktestRunRecord, len(chunk))
+					for i, p := range chunk {
+						runs[i] = *p.rec
+					}
+					ids, batchErr := s.repo.CreateBacktestRunsBatch(context.Background(), runs)
+					if batchErr != nil {
+						slog.Error("matrix: batch create runs failed, falling back to individual inserts", "err", batchErr)
+						for _, p := range chunk {
+							if cerr := s.repo.CreateBacktestRun(context.Background(), p.rec); cerr != nil {
+								slog.Error("matrix: fallback create run failed", "symbol", p.cr.Symbol, "strategy", p.cr.StrategyID, "err", cerr)
+								continue
+							}
+							p.btr.RunID = p.rec.ID
+							_ = s.repo.InsertBacktestResult(context.Background(), p.btr)
+							cr := p.cr
+							cr.RunID = p.rec.ID
+							cr.EquityCurve = nil
+							cr.Trades = nil
+							s.progressStore.UpdateCombo(bid, p.index, "completed", "", &cr)
+						}
+						continue
+					}
+
+					resultRecords := make([]db.BacktestResultRecord, len(chunk))
+					for i, p := range chunk {
+						p.btr.RunID = ids[i]
+						resultRecords[i] = *p.btr
+						cr := p.cr
+						cr.RunID = ids[i]
+						cr.EquityCurve = nil
+						cr.Trades = nil
+						s.progressStore.UpdateCombo(bid, p.index, "completed", "", &cr)
+					}
+					if insErr := s.repo.InsertBacktestResultsBatch(context.Background(), resultRecords); insErr != nil {
+						slog.Error("matrix: batch insert results failed", "err", insErr)
+					}
+				}
+			}
 		}(batchID)
 
 		c.JSON(http.StatusAccepted, gin.H{
@@ -1233,7 +1293,11 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		s.progressStore.Create(batchID, totalCombos, combos)
 
 		go func(bid string) {
-			defer func() { recover() }()
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("light-optimize goroutine panicked", "batch_id", bid, "panic", r)
+				}
+			}()
 			idx := 0
 			sizes := []float64{0.02, 0.04, 0.06, 0.08}
 			for _, sym := range req.Symbols {
@@ -1279,6 +1343,9 @@ func (s *Server) submitBacktest(c *gin.Context) {
 						ShortGrossPnL:  result.LongShort.ShortGrossPnL,
 						LongPF:         result.LongShort.LongPF,
 						ShortPF:        result.LongShort.ShortPF,
+						TotalFees:      result.TotalFees,
+						AvgSlippageBps: result.AvgSlippageBps,
+						CalmarRatio:    result.CalmarRatio,
 					}
 					s.progressStore.UpdateCombo(bid, idx, "completed", "", &cr)
 					idx++
@@ -1302,16 +1369,22 @@ func (s *Server) submitBacktest(c *gin.Context) {
 
 	runID := "bt-" + time.Now().Format("20060102150405") + "-" + strategyID
 	if s.repo != nil {
-		metricsJSON, _ := json.Marshal(gin.H{
-			"sharpe_ratio":  result.SharpeRatio,
-			"max_drawdown":  result.MaxDrawdown,
-			"total_return":  result.TotalReturnPct,
-			"win_rate":      result.WinRate,
-			"num_trades":    result.NumTrades,
-			"profit_factor": result.ProfitFactor,
-			"data_source":   ds,
-			"timeframe":     tf,
-		})
+		metricsData := gin.H{
+			"sharpe_ratio":    result.SharpeRatio,
+			"max_drawdown":    result.MaxDrawdown,
+			"total_return":    result.TotalReturnPct,
+			"win_rate":        result.WinRate,
+			"num_trades":      result.NumTrades,
+			"profit_factor":   result.ProfitFactor,
+			"sortino_ratio":   result.SortinoRatio,
+			"calmar_ratio":    result.CalmarRatio,
+			"total_fees":      result.TotalFees,
+			"avg_slippage_bps": result.AvgSlippageBps,
+			"candle_count":    result.CandleCount,
+			"data_source":     ds,
+			"timeframe":       tf,
+		}
+		metricsJSON, _ := json.Marshal(metricsData)
 		runRecord := &db.BacktestRunRecord{
 			StrategyID:     strategyID,
 			RunType:        "single",
@@ -1329,7 +1402,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 			ResultsJSON:    metricsJSON,
 		}
 		if err := s.repo.CreateBacktestRun(c.Request.Context(), runRecord); err != nil {
-			log.Printf("backtest history: failed to persist run: %v", err)
+			slog.Error("failed to persist backtest run", "error", err, "component", "router")
 		} else {
 			runID = runRecord.ID
 			eqJSON, _ := json.Marshal(result.EquityCurve)
@@ -1345,7 +1418,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 				EquityCurve:   eqJSON,
 				Trades:        tradesJSON,
 			}); insErr != nil {
-				log.Printf("backtest: failed to persist result detail: %v", insErr)
+				slog.Error("failed to persist backtest result detail", "error", insErr, "component", "router")
 			}
 		}
 	}
@@ -1359,6 +1432,11 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		"win_rate":      result.WinRate,
 		"num_trades":    result.NumTrades,
 		"profit_factor": result.ProfitFactor,
+		"sortino_ratio": result.SortinoRatio,
+		"calmar_ratio":  result.CalmarRatio,
+		"total_fees":    result.TotalFees,
+		"avg_slippage_bps": result.AvgSlippageBps,
+		"candle_count":  result.CandleCount,
 		"data_source":   ds,
 		"timeframe":     tf,
 		"warnings":      result.Warnings,
@@ -2069,7 +2147,18 @@ func (a *backtestRepoAdapter) LoadVIXLogs(ctx context.Context, start, end time.T
 }
 
 func (a *backtestRepoAdapter) LoadSentimentLogs(ctx context.Context, start, end time.Time) ([]backtest.SentimentLog, error) {
-	return nil, nil
+	if a.repo == nil {
+		return nil, nil
+	}
+	logs, err := a.repo.LoadSentimentLogs(ctx, start, end)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]backtest.SentimentLog, len(logs))
+	for i, l := range logs {
+		result[i] = backtest.SentimentLog{Time: l.Time, Score: l.Score, Label: l.Label}
+	}
+	return result, nil
 }
 
 func (a *backtestRepoAdapter) SaveBacktestResult(ctx context.Context, result *backtest.BacktestResult) error {
@@ -2220,6 +2309,15 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	s.progressStore.Create(batchID, combos, progresses)
 
 	go func() {
+		type collectedPair struct {
+			rec    *db.BacktestRunRecord
+			btr    *db.BacktestResultRecord
+			index  int
+			cr     backtest.ComboResult
+		}
+		var mu sync.Mutex
+		var collected []collectedPair
+
 		_, err := backtest.RunMatrixConcurrent(context.Background(), dbAdapter, config,
 			func(index int, status string, errMsg string, result *backtest.ComboResult) {
 				switch status {
@@ -2265,32 +2363,74 @@ func (s *Server) submitMatrix(c *gin.Context) {
 						fullMetricsJSON, merr := json.Marshal(result)
 						if merr == nil {
 							rec.ResultsJSON = fullMetricsJSON
-							if cerr := s.repo.CreateBacktestRun(context.Background(), rec); cerr != nil {
-								slog.Error("matrix: failed to persist combo", "symbol", result.Symbol, "strategy", result.StrategyID, "tf", result.Timeframe, "err", cerr)
-							} else {
-								cr := *result
-								cr.RunID = rec.ID
-								cr.EquityCurve = nil
-								cr.Trades = nil
-								s.progressStore.UpdateCombo(batchID, index, "completed", "", &cr)
-								eqJSON, _ := json.Marshal(result.EquityCurve)
-								tradesJSON, _ := json.Marshal(result.Trades)
-								_ = s.repo.InsertBacktestResult(context.Background(), &db.BacktestResultRecord{
-									RunID:         rec.ID,
-									StrategyID:    result.StrategyID,
-									ResultType:    "matrix",
-									TrialIndex:    0,
-									SchemaVersion: 1,
-									Metrics:       rec.ResultsJSON,
-									EquityCurve:   eqJSON,
-									Trades:        tradesJSON,
-								})
+							eqJSON, _ := json.Marshal(result.EquityCurve)
+							tradesJSON, _ := json.Marshal(result.Trades)
+							btr := &db.BacktestResultRecord{
+								StrategyID:    result.StrategyID,
+								ResultType:    "matrix",
+								TrialIndex:    0,
+								SchemaVersion: 1,
+								Metrics:       fullMetricsJSON,
+								EquityCurve:   eqJSON,
+								Trades:        tradesJSON,
 							}
+							mu.Lock()
+							collected = append(collected, collectedPair{rec: rec, btr: btr, index: index, cr: *result})
+							mu.Unlock()
 						}
 					}
 				}
 			},
 		)
+
+		if len(collected) > 0 && s.repo != nil {
+			batchSize := 100
+			for start := 0; start < len(collected); start += batchSize {
+				end := start + batchSize
+				if end > len(collected) {
+					end = len(collected)
+				}
+				chunk := collected[start:end]
+
+				runs := make([]db.BacktestRunRecord, len(chunk))
+				for i, p := range chunk {
+					runs[i] = *p.rec
+				}
+				ids, batchErr := s.repo.CreateBacktestRunsBatch(context.Background(), runs)
+				if batchErr != nil {
+					slog.Error("matrix: batch create runs failed, falling back to individual inserts", "err", batchErr)
+					for _, p := range chunk {
+						if cerr := s.repo.CreateBacktestRun(context.Background(), p.rec); cerr != nil {
+							slog.Error("matrix: fallback create run failed", "symbol", p.cr.Symbol, "strategy", p.cr.StrategyID, "err", cerr)
+							continue
+						}
+						p.btr.RunID = p.rec.ID
+						_ = s.repo.InsertBacktestResult(context.Background(), p.btr)
+						cr := p.cr
+						cr.RunID = p.rec.ID
+						cr.EquityCurve = nil
+						cr.Trades = nil
+						s.progressStore.UpdateCombo(batchID, p.index, "completed", "", &cr)
+					}
+					continue
+				}
+
+				resultRecords := make([]db.BacktestResultRecord, len(chunk))
+				for i, p := range chunk {
+					p.btr.RunID = ids[i]
+					resultRecords[i] = *p.btr
+					cr := p.cr
+					cr.RunID = ids[i]
+					cr.EquityCurve = nil
+					cr.Trades = nil
+					s.progressStore.UpdateCombo(batchID, p.index, "completed", "", &cr)
+				}
+				if insErr := s.repo.InsertBacktestResultsBatch(context.Background(), resultRecords); insErr != nil {
+					slog.Error("matrix: batch insert results failed", "err", insErr)
+				}
+			}
+		}
+
 		if err != nil {
 			slog.Error("matrix failed", "batch_id", batchID, "error", err)
 		}

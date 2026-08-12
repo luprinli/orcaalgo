@@ -6,10 +6,10 @@ The approved technology stack:
 
 | Component | Language | Role |
 |-----------|----------|------|
-| Strategy IR, Math, Calibration | **Python** (3.11+) | Domain models, GKR strategy IR, canonical math (Kelly, Brier, Platt, Wilson, EWMA), calibration audit, PnL attribution, pre-flight checklist |
-| API, Broker, Ingest, Scheduling | **Go** (1.25) | HTTP API (Gin), broker integration (Alpaca/IBKR/Paper), market data ingestion (WebSocket→ring buffer), WebSocket hub, background scheduler, DB repository, RiskPipeline + CapitalGate + PropFirmGate + SignalGate, CapitalPoolSim/CapitalPoolManager, BaseCapitalPool, KillSwitch + multi-account iteration, per-account strategy isolation, light optimizer wiring, Monte Carlo bootstrapping, walk-forward framework |
+| Strategy IR, Math, Calibration | **Python** (3.11+) | Domain models, GKR strategy IR, canonical math (Kelly, Brier, Platt, Wilson, EWMA), calibration audit, PnL attribution, pre-flight checklist, block bootstrap MC, multiple testing correction, NYSE holiday calendar, data integrity validation |
+| API, Broker, Ingest, Scheduling | **Go** (1.25) | HTTP API (Gin), broker integration (Alpaca/IBKR/Paper), market data ingestion (WebSocket→ring buffer), WebSocket hub, background scheduler, DB repository, RiskPipeline + CapitalGate + PropFirmGate + SignalGate, CapitalPoolSim/CapitalPoolManager, BaseCapitalPool, KillSwitch + multi-account iteration, per-account strategy isolation, light optimizer wiring (run + sensitivity report), Monte Carlo bootstrapping, walk-forward framework, VIX BIGINT migration |
 | Web Dashboard | **React 18 + TypeScript 5 + Tailwind CSS 4 + shadcn/ui** | SPA with lightweight-charts, WebSocket live feed, MonitorPage (4 tabs), BacktestHub (Runner + History + Detail + Optimize), StrategyHub (3 tabs), ChartingHub (Candles + Indicators), IntegrationsPage, Accounts, Admin (9 tabs), Emergency |
-| Time-Series Storage | **PostgreSQL + TimescaleDB** | Hypertables (market_ticks, candles, trade_executions), BIGINT fixed-point price storage, compression (7d) + retention (30d) policies |
+| Time-Series Storage | **PostgreSQL + TimescaleDB** | Hypertables (market_ticks, candles, trade_executions), BIGINT fixed-point price storage (candles + VIX), compression (7d) + retention (30d) policies |
 | Audit Log (consider) | **SQLite** | Append-only WAL mode for lightweight deployments |
 
 ## Hard Prohibitions
@@ -34,7 +34,7 @@ These are **NEVER** permitted. Violations block PR merge.
 | 14 | **Do not use `barSpacing` mutation for keyboard zoom.** Use `getVisibleLogicalRange()` + `setVisibleLogicalRange()` on the time scale. | lightweight-charts docs |
 | 15 | **Do not leave `requestAnimationFrame` un-cancelled.** All `requestAnimationFrame` calls in chart hooks must be cancelled in the `useEffect` cleanup via `cancelAnimationFrame`. | React best practice |
 | 16 | **Do not use `Array.find()` in crosshair handlers.** Crosshair `subscribeCrosshairMove` fires at 60fps. Build `Map<time, value>` lookups in a `useEffect` and use O(1) `.get()` in the handler. | Performance |
-| 17 | **Do not bypass the RiskPipeline in backtest or live paths.** `Engine.generateSignal` and `LiveEngine.ProcessTick` both route through `RiskPipeline.ProcessSignal` / `ReconcileFill`. New risk checks must be added to the pipeline, not duplicated in each engine. | Architecture |
+| 17 | **Do not bypass the RiskPipeline in backtest or live paths.** `Engine.generateSignal` and `LiveEngine.ProcessTick` both route through `RiskPipeline.ProcessSignal` / `ReconcileFill`. New risk checks must be added to the pipeline, not duplicated in each engine. CI-enforced via anti-pattern Rule 11. | Architecture |
 | 18 | **Do not share strategy instances across accounts in live trading.** Use `RegisterAccountStrategies(accountID)` to create factory-isolated instances per account. | Per-account isolation |
 
 ## Language Boundary Rules
@@ -49,6 +49,11 @@ These are **NEVER** permitted. Violations block PR merge.
 - Temporal contract validation (look-ahead prevention)
 - Deterministic hashing (canonical JSON + SHA-256)
 - CLI entry points (Typer)
+- Data pipeline: seed-all, resampling, regime inference, VIX ingestion, data integrity validation
+- Sentiment backfill (Alternative.me Fear & Greed Index)
+- NYSE holiday calendar for trading day filtering
+- Block bootstrap Monte Carlo for performance estimation
+- Multiple testing correction (Bonferroni + Benjamini-Hochberg)
 
 ### What goes in Go (`internal/`)
 - HTTP API handlers and middleware (Gin)
@@ -67,8 +72,9 @@ These are **NEVER** permitted. Violations block PR merge.
 - Kill-switch (re-entrancy guard, multi-account, pool propagation)
 - Risk management (adversarial, volatility halt, exposure tracker, rate limiter)
 - Background scheduler, LLM client
-- Backtest execution engine (event-driven, walk-forward, Monte Carlo, light optimizer)
+- Backtest execution engine (event-driven, walk-forward, Monte Carlo, light optimizer, parameter sensitivity)
 - Per-account strategy isolation (`internal/engine/live_engine.go`)
+- Matrix runner with `--optimize` and `--walk-forward` flags
 - Monitor/metrics/telemetry
 
 ### What goes in React (`web/`)
@@ -87,7 +93,7 @@ These are **NEVER** permitted. Violations block PR merge.
 
 ## Cross-Language Integration Rules
 
-1. **Go → Python:** Go calls Python via `os/exec` subprocess for `orca validate`, `orca calibrate`, `orca preflight`, `orca attribute`.
+1. **Go → Python:** Go calls Python via `os/exec` subprocess for `orca validate`, `orca calibrate`, `orca preflight`, `orca attribute`, `orca validate-data-integrity`.
 2. **Go → React:** WebSocket on `/ws` (gorilla/websocket). Push risk status every 5s, ticks every 50ms. REST API on `/api/v1/*`.
 
 ## Verification Gates
@@ -97,7 +103,7 @@ These are **NEVER** permitted. Violations block PR merge.
 1. **Python:** `ruff check orca/ tests/ && mypy orca/ && pytest tests/ -v`
 2. **Go:** `go build ./... && go test ./internal/... -v -count=1 && golangci-lint run ./...`
 3. **GKR validation:** `orca validate configs/strategies/*.gkr.yaml`
-4. **Anti-pattern scan:** `python scripts/anti_pattern_scan.py` — zero violations
+4. **Anti-pattern scan:** `python scripts/anti_pattern_scan.py` — zero violations (18 rules including HP #17 CI check)
 5. **LWC chart scan:** `node scripts/scan-chart-patterns.mjs` — zero errors (warnings allowed)
 6. **Guardian tests:** `pytest tests/guardian/ -v` — all critical paths pass
 7. **Frontend tests:** `cd web && npx tsc --noEmit && npx vitest run && npx playwright test` — `npm test` / `npm run test:watch` / `npm run test:coverage` / `npm run test:e2e` — 233 unit + 49 e2e
@@ -108,9 +114,9 @@ These are **NEVER** permitted. Violations block PR merge.
 |-----|----------|-------|
 | `python` | Python | ruff, mypy, pytest (coverage ≥ 80%) |
 | `backend` | Go | golangci-lint, go vet, test (race + coverage ≥ 60%), E2E |
-| `frontend` | React/TS | ESLint, tsc, vite build, vitest (228 tests), playwright (49 e2e tests) |
+| `frontend` | React/TS | ESLint, tsc, vite build, vitest (233 tests), playwright (49 e2e tests) |
 | `gkr-validate` | GKR IR | Strategy validation for all `.gkr.yaml` files |
-| `anti-pattern-scan` | All | 18 hard prohibition enforcement |
+| `anti-pattern-scan` | All | 18 hard prohibition enforcement (includes HP #17 Rule 11) |
 | `security` | All | Gitleaks + Go vulnerability scan |
 | `guardian` | Python + Go | Regression smoke tests (20 critical paths) |
 | `mutation-test` | Python | Mutation testing on `orca/sizing/`, `orca/math/` (main only) |
@@ -120,9 +126,55 @@ These are **NEVER** permitted. Violations block PR merge.
 - `orca preflight --strict` — 12-point checklist
 - GKR strategy hash verification
 - `orca calibrate` — calibration audit
+- `orca validate-data-integrity` — cross-pipeline data integrity check
 - Config hash integrity check
 - Kill-switch E2E test
 - Balance reconciliation
+- Backtest-vs-replay parity verification
+
+## Audit Remediation Summary (2026-08-11)
+
+Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRITICAL, 35 HIGH, 38 MEDIUM, 18 LOW resolved.
+
+### Key New Packages
+
+| Package | Purpose |
+|---------|---------|
+| `internal/breaker/` | Circuit breakers on telegram/VIX/sentiment |
+| `internal/api/middleware/rate_limit.go` | API rate limiting |
+| `internal/api/middleware/trace.go` | Request tracing |
+| `internal/db/token_revocation.go` | JWT token revocation |
+
+### Key New Infrastructure
+
+- Rate limiting middleware, login brute-force protection
+- Circuit breakers on telegram/VIX/sentiment
+- Readiness probe `/readyz`, 30s drain timeout
+- Config validation at startup, `ORCA_ENVIRONMENT` flag
+- DB-based token revocation
+
+### Library Upgrades
+
+| Component | Before | After |
+|-----------|--------|-------|
+| JWT | Hand-rolled | `golang-jwt/jwt/v5` |
+| TOTP | Hand-rolled | `pquerna/otp` |
+
+### Infrastructure Changes
+
+- Dockerfile: non-root user added
+- Redis removed from docker-compose
+- Compression/retention added to candles hypertable (migration 000036)
+
+### ML Parity
+
+- FeatureStore integration in backtest engine
+- MTM equity tracking
+- PWin formula unified between backtest and live paths
+
+### Python Fixes
+
+11 math/model fixes: Monte Carlo, EWMA, Kelly, Poisson, random seeds, validator, compiler.
 
 ### Kilo Commands for CI/CD
 
@@ -138,7 +190,7 @@ These are **NEVER** permitted. Violations block PR merge.
 | `/fix-anti-pattern` | Auto-fix common violations |
 | `/deploy-gate` | Full pre-deployment verification |
 
-## Current Implementation State (2026-08-03)
+## Current Implementation State (2026-08-12)
 
 ### Strategy Portfolio (16 strategies, 14 registered)
 
@@ -163,48 +215,54 @@ These are **NEVER** permitted. Violations block PR merge.
 
 ### Architecture Highlights
 
-- **RiskPipeline** (`internal/risk/pipeline.go`): Canonical signal-audit path shared by backtest and live engines. ProcessSignal order: volatility halt → sizing → prop-firm halt → regime gate → sizing (Kelly + multipliers) → soft halt → exposure check → cross-strategy correlation brake → capital authorization.
+- **RiskPipeline** (`internal/risk/pipeline.go`): Canonical signal-audit path shared by backtest and live engines. ProcessSignal order: volatility halt → sizing → prop-firm halt → regime gate → sizing (Kelly + multipliers) → soft halt → exposure check → cross-strategy correlation brake → capital authorization. **CI-enforced**: Anti-pattern Rule 11 checks that `WirePipeline()` is called between `NewEngine()` and `Run()`.
 
 - **SignalGateImpl** (`internal/risk/signal_gate_impl.go`): Concrete implementation wrapping VolatilityHalt, PositionSizer, ExposureTracker, and OrderRateLimiter. Used by both engines.
 
-- **RegimeActivationMatrix** (`internal/risk/regime_activation.go`): 14 strategies × 4 regimes with per-regime Kelly multiplier overrides. Default mappings from the original Strategy Selection & Deployment Architecture (2026-08-10).
+- **RegimeActivationMatrix** (`internal/risk/regime_activation.go`): 14 strategies × 4 regimes with per-regime Kelly multiplier overrides.
 
-- **PropFirmEnforcer** (`internal/backtest/propfirm_enforcer.go`): Soft halt (positions reduced 50%) at configurable daily loss threshold, hard halt (trading stopped) at configurable limit. Per-profile configurable via `propfirm.Profile`.
+- **PropFirmEnforcer** (`internal/backtest/propfirm_enforcer.go`): Soft halt (positions reduced 50%) at configurable daily loss threshold, hard halt (trading stopped) at configurable limit.
 
-- **Walk-Forward Automation** (`internal/scheduler/reoptimization.go`): Degradation-triggered daily re-optimization. Checks OOS Sharpe degradation (>20%) or parameter age (>90 days). Light optimizer integration with automatic version save/activate.
+- **Walk-Forward Automation** (`internal/scheduler/reoptimization.go`): Degradation-triggered daily re-optimization. Checks OOS Sharpe degradation (>20%) or parameter age (>90 days).
 
-- **Parameter Versioning** (`internal/db/parameter_version_repo.go`): `strategy_params_version` table with JSONB params, IS/OOS metrics, active flag, and activate/deactivate API endpoints.
+- **Parameter Versioning** (`internal/db/parameter_version_repo.go`): `strategy_params_version` table with JSONB params, IS/OOS metrics, active flag.
 
-- **Phase 8 Completed**: All 7 alternative/complementary strategies implemented. Multi-Asset StatArb replaced by simpler PairsRunner (cointegration spread). VIX Futures Carry uses spot VIX as contango proxy. Vol-Adjusted Grid uses ATR/VIX dynamic spacing.
+### Data Infrastructure (2026-08-12)
 
-### Key Files Added (2026-08-03)
+| Data Type | Source | Status |
+|-----------|--------|--------|
+| Candles | Yahoo Finance 1d + 5m, resampled to 15m/30m/1h/4h | 36,693 bars, 475 combos BPD ≤5% |
+| VIX | Yahoo ^VIX + OU model fallback, **BIGINT** (migration 000039) | 1,255 rows, 5-year history |
+| Regime | Volatility/trend-based inference from candle data | 8,841 rows across 7 symbols |
+| Sentiment | Synthetic from returns + Alternative.me backfill | 110 rows synthetic, full history available |
 
-| File | Phase | Purpose |
-|------|-------|---------|
-| `internal/risk/signal_gate_impl.go` | -1 | Shared SignalGate for both engines |
-| `internal/risk/regime_activation.go` | 1 | Strategy × regime matrix |
-| `internal/risk/regime_activation_test.go` | 1 | Matrix + pipeline tests |
-| `internal/strategy/vol_harvesting_runner.go` | 4 | Volatility harvesting |
-| `internal/strategy/pairs_runner.go` | 4 | Cointegration spread trading |
-| `internal/strategy/dragon_trend_runner.go` | 8 | Multi-EMA trend (8,21,50,200) |
-| `internal/strategy/volume_scalp_runner.go` | 8 | Volume-confirmed scalp |
-| `internal/strategy/vix_futures_carry_runner.go` | 8 | VIX contango proxy |
-| `internal/db/migrations/000030_parameter_versions.up.sql` | 5 | Parameter version table |
-| `internal/db/parameter_version_repo.go` | 5 | Version CRUD |
-| `internal/scheduler/reoptimization.go` | 5 | Degradation-triggered re-optimization |
-| `internal/api/param_version_handler.go` | 5 | API for param versions |
-| `web/src/components/backtest/RegimeActivationMatrix.tsx` | 6 | Strategy × regime UI grid |
-| `web/src/components/backtest/SoftHaltGauge.tsx` | 6 | Daily loss gauge |
-| `web/src/pages/ParamVersionPage.tsx` | 6 | Parameter version management |
-| `web/src/__tests__/regimeMatrix.test.tsx` | 7 | Frontend tests |
-| `docs/Senior Quantitative Audit Report 2026-08-02.md` | — | Full audit report |
-| `docs/Multi-Strategy Orchestration Design 2026-08-10.md` | — | Strategy selection & deployment architecture |
-| `docs/Orchestration-Backtest Integration Plan 2026-08-10.md` | — | Orchestration integration plan |
+### Key Files Added (2026-08-12)
+
+| File | Purpose |
+|------|---------|
+| `scripts/anti_pattern_scan.py` Rule 11 | HP #17 CI check — detects NewEngine()→Run() without WirePipeline() |
+| `internal/backtest/parity_test.go` | Backtest-vs-replay parity: batch/streaming determinism, pipeline signal parity |
+| `cmd/matrix-runner/main.go` `--optimize` | Per-combo light optimizer in matrix sweeps |
+| `cmd/matrix-runner/main.go` `--walk-forward` | Per-combo walk-forward validation (WfISSharpe/WfOOSSharpe columns) |
+| `orca/data/validate_integrity.py` | Cross-pipeline data integrity validation CLI |
+| `orca/data/sentiment_backfill.py` | Historical sentiment backfill from Alternative.me Fear & Greed Index |
+| `orca/data/nyse_calendar.py` | NYSE holiday calendar (Gauss algorithm, observed holidays) |
+| `internal/backtest/light_optimizer.go` `RunParameterSensitivity` | Per-parameter sensitivity scores + robust/moderate/sensitive classification |
+| `orca/simulation/validate.py` `generate_first` | Fix circular dependency in validate_strategy_coverage |
+| `orca/data/seed_all.py` `_write_manifest` | `data/.manifest.json` auto-generated on every seed-all |
+| `internal/db/migrations/000039_vix_bigint.up.sql` | VIX DOUBLE PRECISION → BIGINT (scale 10000, idempotent) |
+| `orca/sizing/block_bootstrap.py` | Block bootstrap Monte Carlo with temporal dependency preservation |
+| `orca/sizing/multiple_testing.py` | Bonferroni + Benjamini-Hochberg multiple testing correction |
+| `orca/simulation/tick_disaggregator.py` `get_symbol_ticks_per_minute` | Per-symbol liquidity-configured tick generation |
+| `orca/simulation/generate_1m.py` _get_us_trading_days | NYSE holiday calendar integration in synthetic pipeline |
+
+### Migrations
+
+| # | Name | Purpose |
+|---|------|---------|
+| 000001–000038 | Various | Initial schema through sentiment_logs |
+| **000039** | **vix_bigint** | VIX DOUBLE PRECISION → BIGINT (HP #2 compliance, idempotent) |
 
 ### Known Issues
 
-1. **Live engine BatchInferrer parity resolved** — `ProcessTickForAccount` now routes through `batchInferrer.Evaluate()` (three-layer: threshold skip → cache → inference). Parity with backtest engine established in commit d2e59c3. Removed unsafe type assertion; any `ml.Predictor` implementation works.
-
-2. **`internal/ml/feature_store_persist.go`** — Now callable via `LiveEngine.PersistFeatureStore()` and `LoadFeatureStore()` methods. Wire into live engine lifecycle when ready (shutdown/startup hooks).
-
-3. **VIX Futures Carry uses spot VIX proxy** — No VIX futures data feed is ingested. Strategy uses `SetVIX()` with spot VIX as contango signal until futures data is available.
+All 102 issues identified in the Production Audit Report (2026-08-11) have been resolved. The 15-item data infrastructure implementation backlog (E-4, E-23, E-26, E-36, D-6, D-8, D-9, D-10, D-12, D-15, E-19b, E-24, E-27, E-28, E-36b) has been fully delivered. Historical audit and implementation documents have been cleaned up.

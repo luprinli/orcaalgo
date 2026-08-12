@@ -134,6 +134,16 @@ export interface ComboResult {
   avg_mfe?: number
   equity_curve?: EquityPoint[]
   trades?: TradeSummary[]
+  total_fees?: number
+  avg_slippage_bps?: number
+  calmar_ratio?: number
+  candle_count?: number
+  first_candle_time?: string
+  last_candle_time?: string
+  declared_bars_per_day?: number
+  effective_bars_per_day?: number
+  mtm_sharpe_ratio?: number
+  mtm_max_drawdown?: number
 }
 
 export interface MatrixResultsResponse {
@@ -775,13 +785,6 @@ export interface StrategyStats {
   profit_factor: number
   total_pnl: number
 }
-
-export interface MonthlyReturn {
-  year: number
-  month: number
-  return_pct: number
-}
-
 export interface OrchestrationStrategy {
   strategy_id: string
   symbol: string

@@ -2,8 +2,8 @@ package broker
 
 import (
 	"context"
-"fmt"
-"log"
+	"fmt"
+	"log/slog"
 	"sync"
 )
 
@@ -72,7 +72,7 @@ func (r *Registry) CancelAllOrders(ctx context.Context) {
 	defer r.mu.RUnlock()
 	for id, adapter := range r.adapters {
 		if err := adapter.CancelAllOrders(ctx); err != nil {
-			log.Printf("broker %s: CancelAllOrders failed: %v\n", id, err)
+			slog.Error("CancelAllOrders failed", "broker_id", id, "error", err, "component", "broker")
 		}
 	}
 }
@@ -82,7 +82,7 @@ func (r *Registry) CloseAllPositions(ctx context.Context) {
 	defer r.mu.RUnlock()
 	for id, adapter := range r.adapters {
 		if err := adapter.CloseAllPositions(ctx); err != nil {
-			log.Printf("broker %s: CloseAllPositions failed: %v\n", id, err)
+			slog.Error("CloseAllPositions failed", "broker_id", id, "error", err, "component", "broker")
 		}
 	}
 }

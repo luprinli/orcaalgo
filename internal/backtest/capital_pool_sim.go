@@ -137,7 +137,7 @@ func (c *CapitalPoolSim) RecordFill(strategyID, symbol, side string, pnl float64
 	}
 
 	s.dailyPnL += pnl
-	s.Allocated -= quantity * 100.0
+	s.Allocated -= quantity
 	if s.Allocated < 0 {
 		s.Allocated = 0
 	}

@@ -5,7 +5,7 @@ import {
 } from 'lightweight-charts'
 import { useChart, useLineSeries, useAreaSeries, convertToUTCTime, equityToLineData } from './useChart'
 import { useChartKeyboard } from '../hooks/useChartKeyboard'
-import { getChartColors } from './chartConfig'
+import { getChartColors, CHART_LAYOUT, OVERLAY_PALETTE } from './chartConfig'
 import CrosshairTooltip from './CrosshairTooltip'
 
 interface EquityPoint {
@@ -36,8 +36,6 @@ interface EquityCurveChartProps {
   color?: string
   title?: string
 }
-
-const OVERLAY_PALETTE = ['#3fb950', '#d29922', '#da3633', '#8b949e', '#f0883e', '#58a6ff', '#bc8cff', '#ff7b72']
 
 function computeDrawdown(data: EquityPoint[]): Array<{ time: Time; value: number }> {
   if (data.length === 0) return []
@@ -77,7 +75,7 @@ export default function EquityCurveChart({
 
   const chartRef = useChart(containerRef, {
     height,
-    rightPriceScaleMargins: { top: 0.02, bottom: 0.25 },
+    rightPriceScaleMargins: CHART_LAYOUT.EQUITY_SCALE_MARGINS,
   })
 
   const colors = getChartColors()
@@ -198,7 +196,7 @@ export default function EquityCurveChart({
   useEffect(() => {
     if (chartRef.current) {
       chartRef.current.priceScale('drawdown').applyOptions({
-        scaleMargins: { top: 0.75, bottom: 0 },
+        scaleMargins: CHART_LAYOUT.DRAWDDOWN_SCALE_MARGINS,
         visible: true,
       })
     }

@@ -17,6 +17,9 @@ type SlippageModel struct {
 	AdverseSelectBps   float64
 }
 
+// LimitFillProbability estimates the probability that a limit order at a given
+// distance from mid is filled. Available for future limit-order fill simulation
+// (not yet wired into SimulateFillWithTCA).
 func (m SlippageModel) LimitFillProbability(distanceFromMidBps float64) float64 {
 	if distanceFromMidBps <= 0 {
 		return 0.98
@@ -97,6 +100,9 @@ func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limit
 	slippageBps := sm.SpreadBps + sm.AdverseSelectBps
 	if sm.MaxSlippage > 0 {
 		randomFactor := math.Abs(s.rng.NormFloat64()) * sm.MaxSlippage * 0.5
+		if s.rng.Float64() < 0.05 {
+			randomFactor = -randomFactor * 0.5
+		}
 		slippageBps += randomFactor
 	}
 	if barVolume > 0 && sm.VolumeImpactFactor > 0 && quantity > 0 {

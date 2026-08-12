@@ -167,14 +167,16 @@ func TestOptionalAuthMiddleware_NoToken(t *testing.T) {
 	}
 }
 
-func TestGetJWTSecret_UsesDefaultWhenEnvEmpty(t *testing.T) {
-	// Reset sync.Once by re-creating the package-level state
+func TestGetJWTSecret_PanicsWhenEnvEmpty(t *testing.T) {
 	jwtSecret = nil
 	jwtSecretOnce = sync.Once{}
-	secret := GetJWTSecret()
-	if len(secret) == 0 {
-		t.Fatal("expected non-empty default secret")
-	}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic when ORCA_JWT_SECRET not set")
+		}
+	}()
+	GetJWTSecret()
 }
 
 func TestSetJWTSecret_Overrides(t *testing.T) {

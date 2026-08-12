@@ -391,6 +391,7 @@ func evalLightParams(ctx context.Context, db Database, cfg LightOptimizeConfig,
 	defer cancel()
 
 	eng := NewEngine(db)
+	eng.WirePipeline()
 	res, err := eng.Run(bctx, btCfg)
 	if err != nil || res == nil {
 		return 0, false
@@ -425,4 +426,203 @@ func estimateBarCount(timeframe string, start, end time.Time) int {
 	}
 	barsPerDay := barsPerDayFromTimeframe(timeframe)
 	return int(days * barsPerDay)
+}
+
+// ParamSensitivityResult holds per-parameter sensitivity scores and stability
+// classifications for a single strategy's search space.
+type ParamSensitivityResult struct {
+	StrategyID   string
+	Weights      [3]float64
+	Scores       map[string]float64          // param name -> normalized sensitivity [0,1]
+	Stability    map[string]string           // param name -> "robust"|"moderate"|"sensitive"
+	BestKnown    map[string]float64          // best params from full sweep
+	Evaluations  int                         // total sub-backtests run
+	Errors       []string
+}
+
+// SensitivityReport aggregates sensitivity results across strategies.
+type SensitivityReport struct {
+	Results      []ParamSensitivityResult
+	GeneratedAt  time.Time
+	ConfigHash   string
+}
+
+// RunParameterSensitivity evaluates each optimisable dimension independently to
+// produce a per-parameter sensitivity score. Parameters with flat optimum regions
+// are tagged "robust"; those with steep gradients are tagged "sensitive" and
+// flagged as risk-prone for institutional deployment.
+//
+// The function works by perturbing one parameter at a time around the best-known
+// params and measuring degradation in the composite objective. If no best params
+// are known, it sweeps the full grid and scores by output variance.
+func RunParameterSensitivity(ctx context.Context, db Database, cfg LightOptimizeConfig) ParamSensitivityResult {
+	applyLightOptDefaults(&cfg)
+
+	space := DefaultSearchSpace(cfg.StrategyID)
+	if !validSearchSpace(space) {
+		return ParamSensitivityResult{
+			StrategyID: cfg.StrategyID,
+			Errors:     []string{"search space invalid or too small"},
+		}
+	}
+
+	weights := weightMap(cfg.ObjectiveWeights)
+	result := ParamSensitivityResult{
+		StrategyID: cfg.StrategyID,
+		Weights:    cfg.ObjectiveWeights,
+		Scores:     make(map[string]float64),
+		Stability:  make(map[string]string),
+		BestKnown:  make(map[string]float64),
+	}
+
+	best := RunLightOptimize(ctx, db, cfg)
+	if best == nil {
+		best = registryDefaultParams(cfg.StrategyID)
+	}
+	result.BestKnown = best
+
+	paramNames := sortedParamNames(space)
+	if len(paramNames) == 0 {
+		return result
+	}
+
+	start, end := cfg.StartDate, cfg.EndDate
+	if start.IsZero() || end.IsZero() {
+		start = time.Now().AddDate(0, -3, 0)
+		end = time.Now()
+	}
+
+	baselineScore, ok := evalLightParams(ctx, db, cfg, best, cfg.Symbols, start, end, weights)
+	if !ok {
+		result.Errors = append(result.Errors, "baseline evaluation failed")
+		return result
+	}
+	result.Evaluations++
+
+	for _, pName := range paramNames {
+		pCol, ok := space[pName]
+		if !ok {
+			continue
+		}
+
+		var testValues []float64
+		switch pCol.Type {
+		case ParamCategorical:
+			testValues = make([]float64, len(pCol.CategoricalValues))
+			for i, v := range pCol.CategoricalValues {
+				if f, err := strconv.ParseFloat(v, 64); err == nil {
+					testValues[i] = f
+				}
+			}
+		default:
+			base := pCol.Min
+			if v, ok := best[pName]; ok {
+				base = v
+			}
+			testValues = []float64{}
+			mid := pCol.Min + (pCol.Max-pCol.Min)*0.5
+			for _, v := range []float64{pCol.Min, base - pCol.Step*2, base, base + pCol.Step*2, pCol.Max, mid} {
+				if v >= pCol.Min && v <= pCol.Max && !floatIn(v, testValues) {
+					testValues = append(testValues, v)
+				}
+			}
+		}
+
+		scores := make([]float64, len(testValues))
+		for i, val := range testValues {
+			perturb := cloneParams(best)
+			perturb[pName] = val
+
+			score, ok2 := evalLightParams(ctx, db, cfg, perturb, cfg.Symbols, start, end, weights)
+			if ok2 {
+				scores[i] = score
+			}
+			result.Evaluations++
+		}
+
+		if len(scores) < 2 {
+			continue
+		}
+
+		var minS, maxS float64 = math.Inf(1), math.Inf(-1)
+		for _, s := range scores {
+			if s < minS {
+				minS = s
+			}
+			if s > maxS {
+				maxS = s
+			}
+		}
+
+		degradation := 0.0
+		if baselineScore != 0 {
+			for _, s := range scores {
+				d := math.Abs(s-baselineScore) / math.Max(math.Abs(baselineScore), 1e-9)
+				if d > degradation {
+					degradation = d
+				}
+			}
+		} else {
+			rangeNorm := 0.0
+			if math.Abs(baselineScore) > 1e-9 {
+				rangeNorm = (maxS - minS) / math.Abs(baselineScore)
+			} else {
+				rangeNorm = maxS - minS
+			}
+			degradation = rangeNorm
+		}
+
+		result.Scores[pName] = math.Min(1.0, degradation)
+
+		switch {
+		case degradation < 0.10:
+			result.Stability[pName] = "robust"
+		case degradation < 0.30:
+			result.Stability[pName] = "moderate"
+		default:
+			result.Stability[pName] = "sensitive"
+		}
+	}
+
+	return result
+}
+
+// GenerateSensitivityReport runs parameter sensitivity analysis for all strategies
+// with valid search spaces and returns an aggregated report.
+func GenerateSensitivityReport(ctx context.Context, db Database, symbols []string, start, end time.Time, timeframe string) SensitivityReport {
+	report := SensitivityReport{
+		GeneratedAt: time.Now().UTC(),
+		Results:     make([]ParamSensitivityResult, 0),
+	}
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s-%s-%s", start.Format(time.RFC3339), end.Format(time.RFC3339), timeframe)))
+	report.ConfigHash = hex.EncodeToString(h.Sum(nil))[:16]
+
+	for _, runner := range strategy.GlobalRegistry().All() {
+		sID := runner.Name()
+		space := DefaultSearchSpace(sID)
+		if !validSearchSpace(space) {
+			continue
+		}
+		cfg := LightOptimizeConfig{
+			StrategyID:    sID,
+			Symbols:       symbols,
+			StartDate:     start,
+			EndDate:       end,
+			Timeframe:     timeframe,
+			TrainFraction: 0.80,
+		}
+		r := RunParameterSensitivity(ctx, db, cfg)
+		report.Results = append(report.Results, r)
+	}
+	return report
+}
+
+func floatIn(v float64, vals []float64) bool {
+	for _, x := range vals {
+		if math.Abs(x-v) < 1e-9 {
+			return true
+		}
+	}
+	return false
 }

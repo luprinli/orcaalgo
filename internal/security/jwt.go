@@ -1,22 +1,19 @@
 package security
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type Claims struct {
 	UserID   string   `json:"sub"`
 	Username string   `json:"name"`
 	Roles    []string `json:"roles"`
-	IssuedAt int64    `json:"iat"`
-	Expires  int64    `json:"exp"`
-	TokenID  string   `json:"jti"`
+	jwt.RegisteredClaims
 }
 
 type TokenPair struct {
@@ -27,22 +24,25 @@ type TokenPair struct {
 }
 
 func GenerateTokenPair(userID, username string, roles []string, secret []byte, ttl time.Duration) (*TokenPair, error) {
-	now := time.Now().Unix()
+	now := time.Now()
 	jti := make([]byte, 16)
 	if _, err := rand.Read(jti); err != nil {
 		return nil, fmt.Errorf("generate token ID: %w", err)
 	}
 
-	claims := Claims{
+	claims := &Claims{
 		UserID:   userID,
 		Username: username,
 		Roles:    roles,
-		IssuedAt: now,
-		Expires:  now + int64(ttl.Seconds()),
-		TokenID:  base64.RawURLEncoding.EncodeToString(jti),
+		RegisteredClaims: jwt.RegisteredClaims{
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
+			ID:        base64.RawURLEncoding.EncodeToString(jti),
+		},
 	}
 
-	accessToken, err := signToken(claims, secret)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	accessToken, err := token.SignedString(secret)
 	if err != nil {
 		return nil, fmt.Errorf("sign access token: %w", err)
 	}
@@ -61,78 +61,23 @@ func GenerateTokenPair(userID, username string, roles []string, secret []byte, t
 }
 
 func ValidateToken(tokenString string, secret []byte) (*Claims, error) {
-	parts := splitToken(tokenString)
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid token format")
-	}
+	parser := jwt.NewParser(jwt.WithValidMethods([]string{"HS256"}))
 
-	signingInput := parts[0] + "." + parts[1]
-	expectedSig := computeHMAC(signingInput, secret)
-	actualSig, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, fmt.Errorf("decode signature: %w", err)
-	}
-
-	if !hmacEqual(expectedSig, actualSig) {
-		return nil, fmt.Errorf("invalid signature")
-	}
-
-	claimsJSON, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("decode claims: %w", err)
-	}
-
-	var claims Claims
-	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
-		return nil, fmt.Errorf("parse claims: %w", err)
-	}
-
-	if time.Now().Unix() > claims.Expires {
-		return nil, fmt.Errorf("token expired")
-	}
-
-	return &claims, nil
-}
-
-func signToken(claims Claims, secret []byte) (string, error) {
-	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
-	claimsJSON, err := json.Marshal(claims)
-	if err != nil {
-		return "", fmt.Errorf("marshal claims: %w", err)
-	}
-	payload := base64.RawURLEncoding.EncodeToString(claimsJSON)
-	signingInput := header + "." + payload
-	sig := computeHMAC(signingInput, secret)
-	signature := base64.RawURLEncoding.EncodeToString(sig)
-	return signingInput + "." + signature, nil
-}
-
-func computeHMAC(input string, secret []byte) []byte {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(input))
-	return mac.Sum(nil)
-}
-
-func splitToken(token string) []string {
-	parts := make([]string, 0, 3)
-	start := 0
-	for i := 0; i < len(token); i++ {
-		if token[i] == '.' {
-			parts = append(parts, token[start:i])
-			start = i + 1
+	claims := &Claims{}
+	token, err := parser.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-	}
-	parts = append(parts, token[start:])
-	return parts
-}
+		return secret, nil
+	})
 
-func hmacEqual(a, b []byte) bool {
-	if len(a) != len(b) {
-		return false
+	if err != nil {
+		return nil, fmt.Errorf("validate token: %w", err)
 	}
-	result := byte(0)
-	for i := 0; i < len(a); i++ {
-		result |= a[i] ^ b[i]
+
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
 	}
-	return result == 0
+
+	return claims, nil
 }

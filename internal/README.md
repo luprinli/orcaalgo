@@ -61,7 +61,9 @@ Plugin registry pattern with `Adapter` interface.
 | `optimized_walk_forward.go` | Parameter optimization with IVS robustness, optimized params applied to OOS test |
 | `monte_carlo.go` | Go→Python subprocess for Monte Carlo pass-probability |
 | `batch_runner.go` | Matrix backtest orchestrator with Warnings and GatePassed propagation |
+| `light_optimizer.go` | Per-strategy light optimizer with parameter sensitivity report (RunParameterSensitivity) |
 | `multi_metric_gate.go` | Multi-Metric Gate with Default/Lenient/Strict profiles, auto-applied via ApplyGate |
+| `parity_test.go` | Backtest-vs-replay parity: batch/streaming determinism, pipeline signal parity |
 
 **Strategy runners** (`internal/strategy/`):
 
@@ -104,7 +106,7 @@ PostgreSQL + TimescaleDB access via `pgx/v5`.
 | `parameter_version_repo.go` | Parameter version CRUD: upsert, get active, list, activate, deactivate. Backed by `strategy_params_version` table |
 | `seeder.go` | Development seed data: strategies, symbols, regime logs |
 | `fixtures.go` | Fixtures: 16 strategies across 4 regimes, 17 Stooq symbols |
-| `migrations/` | 30 SQL migration files (golang-migrate compatible). Latest: `000030_parameter_versions` |
+| `migrations/` | 39 SQL migration files (golang-migrate compatible). Latest: `000039_vix_bigint` (VIX DOUBLE PRECISION → BIGINT, scale 10000) |
 
 ### `internal/propfirm/` — Prop Firm Profiles
 

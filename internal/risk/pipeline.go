@@ -111,7 +111,7 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	}
 	kelly := p.KellyMult
 	if p.RegimeMatrix != nil {
-		if override := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); override > 0 {
+		if override := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); override > kelly {
 			kelly = override
 		}
 	}

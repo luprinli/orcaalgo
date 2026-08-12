@@ -3,7 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -91,8 +91,7 @@ func (c *ReoptimizationConfig) Start(ctx context.Context) {
 	c.mu.Unlock()
 
 	go c.run(ctx)
-	log.Printf("[reopt] started: interval=%s, degradation_threshold=%.0f%%, max_age=%dd, auto_activate=%v",
-		c.Interval, c.DegradationThreshold, c.MaxAgeDays, c.EnableAutoActivate)
+	slog.Info("reopt started", "interval", c.Interval, "degradation_threshold_pct", c.DegradationThreshold, "max_age_days", c.MaxAgeDays, "auto_activate", c.EnableAutoActivate, "component", "reopt")
 }
 
 // Stop terminates the re-optimization loop.
@@ -104,7 +103,7 @@ func (c *ReoptimizationConfig) Stop() {
 	}
 	close(c.stopCh)
 	c.running = false
-	log.Println("[reopt] stopped")
+	slog.Info("reopt stopped", "component", "reopt")
 }
 
 func (c *ReoptimizationConfig) run(ctx context.Context) {
@@ -125,7 +124,7 @@ func (c *ReoptimizationConfig) run(ctx context.Context) {
 
 func (c *ReoptimizationConfig) CheckAndOptimize(ctx context.Context) {
 	if c.Repo == nil || c.Engine == nil {
-		log.Println("[reopt] skipped: engine or repo not configured")
+		slog.Warn("reopt skipped: engine or repo not configured", "component", "reopt")
 		return
 	}
 	strategies := c.Strategies
@@ -142,13 +141,13 @@ func (c *ReoptimizationConfig) CheckAndOptimize(ctx context.Context) {
 	for _, strategyID := range strategies {
 		shouldOptimize, reason := c.shouldReoptimize(ctx, strategyID)
 		if !shouldOptimize {
-			log.Printf("[reopt] %s: skipping — %s", strategyID, reason)
+			slog.Info("reopt skipping", "strategy", strategyID, "reason", reason, "component", "reopt")
 			continue
 		}
 
-		log.Printf("[reopt] %s: triggering re-optimization — %s", strategyID, reason)
+		slog.Info("reopt triggering", "strategy", strategyID, "reason", reason, "component", "reopt")
 		if err := c.reoptimize(ctx, strategyID); err != nil {
-			log.Printf("[reopt] %s: re-optimization failed: %v", strategyID, err)
+			slog.Error("reopt failed", "strategy", strategyID, "error", err, "component", "reopt")
 		}
 	}
 }
@@ -258,8 +257,7 @@ func (c *ReoptimizationConfig) reoptimize(ctx context.Context, strategyID string
 	if active != nil && active.OOSSharpe != nil && oosSharpe > 0 && *active.OOSSharpe > 0 {
 		drop := (*active.OOSSharpe - oosSharpe) / *active.OOSSharpe * 100.0
 		if drop > c.DegradationThreshold {
-			log.Printf("[reopt] %s: new params degrade OOS by %.1f%% — keeping current active params",
-				strategyID, drop)
+			slog.Warn("new params degrade OOS, keeping current", "strategy", strategyID, "drop_pct", drop, "component", "reopt")
 			// Still save for audit, but don't activate.
 			c.saveVersion(ctx, strategyID, params, startDate, endDate, oosSharpe, false)
 			return nil
@@ -305,9 +303,9 @@ func (c *ReoptimizationConfig) saveVersion(ctx context.Context, strategyID strin
 		if err := c.Repo.ActivateParams(ctx, strategyID, tag); err != nil {
 			return fmt.Errorf("activate params: %w", err)
 		}
-		log.Printf("[reopt] %s: activated version %s (OOS Sharpe=%.3f)", strategyID, tag, oosSharpe)
+		slog.Info("version activated", "strategy", strategyID, "version", tag, "oos_sharpe", oosSharpe, "component", "reopt")
 	} else {
-		log.Printf("[reopt] %s: saved version %s (OOS Sharpe=%.3f, manual review required)", strategyID, tag, oosSharpe)
+		slog.Info("version saved", "strategy", strategyID, "version", tag, "oos_sharpe", oosSharpe, "component", "reopt")
 	}
 
 	return nil

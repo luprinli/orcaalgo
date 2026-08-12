@@ -346,6 +346,11 @@ export const admin = {
   },
   seed: (force = false) => post('/api/v1/admin/seed', { force }),
   killHistory: () => get<{ events: { reason: string; source: string; triggered_at: string; resolved_at?: string }[] }>('/api/v1/admin/kill-history'),
+  info: () => get<Record<string, any>>('/api/v1/admin/info'),
+  enableUser: (userId: string) => put<{ enabled: boolean }>(`/api/v1/admin/users/${userId}/enable`),
+  disableUser: (userId: string) => put<{ disabled: boolean }>(`/api/v1/admin/users/${userId}/disable`),
+  testEmail: (config: Record<string, any>) => post<{ ok: boolean; error?: string }>('/api/v1/admin/email/test', config),
+  saveEmailConfig: (config: Record<string, any>) => put<{ ok: boolean }>('/api/v1/admin/email/config', config),
 }
 
 export const indicators = {

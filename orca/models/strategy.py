@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TokenRef(BaseModel):
@@ -67,6 +67,8 @@ class PortSignature(BaseModel):
 
     inputs: dict[str, InputSpec] = Field(default_factory=dict)
     outputs: dict[str, OutputSpec] = Field(default_factory=dict)
+    external_read: bool = False
+    external_write: bool = False
 
 
 class Node(BaseModel):
@@ -123,6 +125,14 @@ class RiskProfile(BaseModel):
     risk_per_trade_pct: float = Field(default=0.02, ge=0.001, le=0.10)
     kelly_multiplier: float = Field(default=0.25, ge=0.05, le=1.0)
     regime_multipliers: tuple[float, float, float, float] = (1.0, 0.85, 0.75, 0.0)
+
+    @field_validator("regime_multipliers")
+    @classmethod
+    def validate_regime_multipliers(cls, v):
+        if any(m < 0.0 or m > 2.0 for m in v):
+            raise ValueError("regime_multipliers must be in range [0.0, 2.0]")
+        return v
+
     vix_scaling_enabled: bool = Field(default=False)
 
 

@@ -240,7 +240,7 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
 
   const sortedMatrixResults = useMemo(() => {
     const list = [...filtered]
-    const eqKey = sortField === 'return' ? 'total_return' : sortField === 'max_dd' ? 'max_drawdown' : sortField === 'trades' ? 'num_trades' : `${sortField}_ratio` as keyof ComboResult
+    const eqKey = sortField === 'return' ? 'total_return' : sortField === 'max_dd' ? 'max_drawdown' : sortField === 'trades' ? 'num_trades' : sortField === 'total_fees' ? 'total_fees' : sortField === 'slippage' ? 'avg_slippage_bps' : sortField === 'candles' ? 'candle_count' : `${sortField}_ratio` as keyof ComboResult
     list.sort((a, b) => { const va = (a[eqKey] as number) ?? 0; const vb = (b[eqKey] as number) ?? 0; return sortAsc ? va - vb : vb - va })
     return list
   }, [filtered, sortField, sortAsc])

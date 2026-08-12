@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -80,7 +80,7 @@ func (s *Scheduler) RegisterDailyHealthJob() {
 		Name:     "daily_health",
 		Schedule: "0 9 * * *",
 		Run: func(ctx context.Context) error {
-			log.Println("daily health check: system OK")
+			slog.Info("daily health check: system OK", "component", "scheduler")
 			return nil
 		},
 	})
@@ -97,8 +97,7 @@ func (s *Scheduler) RegisterDailyResetJob() {
 			dailyPnlPct, consistencyMult, isHalted := s.ftmo.GetFTMOState()
 			threshold, penalty := s.ftmo.GetFTMOProfile()
 
-			log.Printf("daily reset: pnl_pct=%.2f, consistency_mult=%.2f, halted=%v, threshold=%.1f, penalty=%.2f",
-				dailyPnlPct, consistencyMult, isHalted, threshold, penalty)
+			slog.Info("daily reset", "pnl_pct", dailyPnlPct, "consistency_mult", consistencyMult, "halted", isHalted, "threshold", threshold, "penalty", penalty, "component", "scheduler")
 
 			actionTaken := ""
 			newMult := consistencyMult
@@ -118,8 +117,7 @@ func (s *Scheduler) RegisterDailyResetJob() {
 					"threshold", threshold,
 					"new_multiplier", newMult,
 					"action", "reducing_size_for_next_day")
-				log.Printf("consistency outlier: daily PnL %.2f%% > %.1f%%, reducing size to %.2fx",
-					dailyPnlPct, threshold, newMult)
+				slog.Warn("consistency outlier", "daily_pnl_pct", dailyPnlPct, "threshold", threshold, "new_multiplier", newMult, "component", "scheduler")
 			}
 
 			if s.dbPool != nil {
@@ -131,12 +129,12 @@ func (s *Scheduler) RegisterDailyResetJob() {
 					 ON CONFLICT (date) DO UPDATE SET daily_pnl_pct=$2, is_outlier=$3, action_taken=$4`,
 					today, dailyPnlPct, isOutlier, actionTaken,
 				); err != nil {
-					log.Printf("scheduler: failed to persist consistency log: %v", err)
+					slog.Error("failed to persist consistency log", "error", err, "component", "scheduler")
 				}
 			}
 
 			s.ftmo.ResetDailyState()
-			log.Println("daily reset: FTMO state reset")
+			slog.Info("daily reset: FTMO state reset", "component", "scheduler")
 			return nil
 		},
 	})
@@ -160,7 +158,7 @@ func (s *Scheduler) runJob(job Job) {
 		select {
 		case <-timer.C:
 			if err := job.Run(s.ctx); err != nil {
-				log.Printf("scheduler job %s error: %v", job.Name, err)
+				slog.Error("scheduler job error", "job", job.Name, "error", err, "component", "scheduler")
 			}
 		case <-s.ctx.Done():
 			timer.Stop()

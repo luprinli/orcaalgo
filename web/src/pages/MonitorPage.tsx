@@ -14,6 +14,7 @@ import type { LiveMetrics, EquityPoint, Position, Order, TradeSummary, RiskStatu
 import type { WSRiskData } from '../types/ws'
 import type { OverviewComputed } from './monitor/OverviewTab'
 import type { SignalEntry } from './monitor/SignalsTab'
+import { POLL_INTERVALS } from '../data/constants'
 
 type MonitorTab = 'overview' | 'positions' | 'risk' | 'signals' | 'systemHealth'
 
@@ -71,7 +72,7 @@ export default function MonitorPage() {
 
   useEffect(() => {
     fetchAll()
-    const interval = setInterval(fetchAll, 10000)
+    const interval = setInterval(fetchAll, POLL_INTERVALS.MONITOR_REFRESH)
     return () => clearInterval(interval)
   }, [fetchAll])
 
