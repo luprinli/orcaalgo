@@ -4,7 +4,7 @@ import type {
   DeployStrategyRequest, DeployStrategyResponse, PreflightResponse,
   StrategyValidationRequest, StrategyValidationResponse,
   BacktestRequest, BacktestResponse, BacktestMetrics,
-  EquityPoint, TradeSummary, TradeDetail, TradeDistribution, DailyReturn, MonthlyReturn, RollingMetric, LLMKey,
+  EquityPoint, TradeSummary, TradeDetail, TradeDistribution, DailyReturn, MonthlyReturn, RollingMetric, LLMKey, BenchmarkResponse,
   RegimeStat, OptimizationFootprint, WalkForwardResponse, LiveComparisonResponse,
   RiskStatus, PlaceOrderRequest, Order, Position, Account, CreateAccountRequest,
   CandleResponse, LiveMetrics, BacktestHistoryEntry, AppSettings,
@@ -203,6 +203,8 @@ export const backtests = {
     get<TradeDetail>(`/api/v1/backtests/${id}/trades/${tradeId}`),
   tradeDistribution: (id: string) =>
     get<TradeDistribution>(`/api/v1/backtests/${id}/trade-distribution`),
+  benchmark: (id: string) =>
+    get<BenchmarkResponse>(`/api/v1/backtests/${id}/benchmark`),
   dailyReturns: (id: string) => get<DailyReturn[]>(`/api/v1/backtests/${id}/daily-returns`),
   monthlyReturns: (id: string) => get<MonthlyReturn[]>(`/api/v1/backtests/${id}/monthly-returns`),
   optimization: (id: string) => get<OptimizationFootprint>(`/api/v1/backtests/${id}/optimization`),

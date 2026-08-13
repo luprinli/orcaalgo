@@ -306,6 +306,11 @@ export interface LLMKey {
   updated_at?: string
 }
 
+export interface BenchmarkResponse {
+  spy: EquityPoint[]
+  qqq: EquityPoint[]
+}
+
 export interface DailyReturn {
   date: string
   return_pct: number

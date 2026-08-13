@@ -489,3 +489,16 @@ Committed so far: 4.7, 4.9, `StopPrice`/`TakePrice` → `types.Price` (one commi
 **Validation:** `go build`/`go vet` clean; `go test ./internal/broker/alpaca` pass; anti-pattern scan clean.
 
 **Remaining for 4.5 (additive):** the scheduler corporate-action sync job calling `MarketDataProvider.CorporateActions` → `UpsertCorporateActionsBatch`, and symbol-mapping integration with `internal/universe` (single source of truth).
+
+### ✅ 4.5 (follow-up) + 4.6/4.9 additive wiring (DONE)
+- `internal/scheduler/scheduler.go` — `RegisterCorporateActionSyncJob(provider, repo, symbols)` (daily `corporate-action-sync` job).
+- `internal/api/router.go` — a real (non-dry-run) liquidation propagates `MultiAccountCapitalPool.MarkAllViolated("manual liquidation")`.
+- `internal/api/llm_handler.go` — `RateLimitMiddleware(2)` applied to `/llm/*`.
+
+### ✅ 4.8 — SPY/QQQ benchmark overlay (DONE)
+- `internal/api/backtest_metrics_handler.go` — `getBacktestBenchmark` (derives the date range from the equity curve, loads SPY/QQQ candles, `normalizeBenchmark` base-100) + `GET /backtests/:id/benchmark`.
+- `web/src/types/api.ts` + `web/src/api/client.ts` — `BenchmarkResponse` type + `backtests.benchmark`.
+- `web/src/pages/BacktestHub.tsx` — DetailView fetches the benchmark and overlays SPY (`benchmarkData`) + QQQ (`overlays`) on the equity chart.
+- `internal/api/benchmark_test.go` — `normalizeBenchmark` tests.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/api` pass; `tsc --noEmit` clean; `vitest` 233/233 pass; anti-pattern scan clean.

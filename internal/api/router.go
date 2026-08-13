@@ -202,6 +202,7 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/trades", s.getBacktestTrades)
 		protected.GET("/backtests/:id/trades/:tradeId", s.getBacktestTradeDetail)
 		protected.GET("/backtests/:id/trade-distribution", s.getBacktestTradeDistribution)
+		protected.GET("/backtests/:id/benchmark", s.getBacktestBenchmark)
 		protected.GET("/backtests/:id/daily-returns", s.getBacktestDailyReturns)
 		protected.GET("/backtests/:id/monthly-returns", s.getBacktestMonthlyReturns)
 		protected.GET("/backtests/:id/optimization", s.getBacktestOptimization)

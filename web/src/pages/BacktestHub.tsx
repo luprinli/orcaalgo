@@ -46,7 +46,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import type {
   MatrixResultsResponse, ComboResult, BacktestHistoryEntry, BacktestMetrics,
   EquityPoint, DailyReturn, TradeSummary, RegimeStat, OptimizationFootprint,
-  MonthlyReturn, Strategy,
+  MonthlyReturn, Strategy, BenchmarkResponse,
 } from '../types/api'
 import { GATE_PROFILES, DATA_SOURCES, ALL_STRATEGIES as FALLBACK_STRATEGIES, type SortField } from '../data/constants'
 
@@ -827,6 +827,7 @@ function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView,
   const [trades, setTrades] = useState<TradeSummary[]>([])
   const [regimeStats, setRegimeStats] = useState<RegimeStat[]>([])
   const [optimization, setOptimization] = useState<OptimizationFootprint | null>(null)
+  const [benchmark, setBenchmark] = useState<BenchmarkResponse | null>(null)
   const [monthlyReturns, setMonthlyReturns] = useState<MonthlyReturn[]>([])
   const [monthlyReturnsError, setMonthlyReturnsError] = useState(false)
   const [filteredMonth, setFilteredMonth] = useState<{ year: number; month: number } | null>(null)
@@ -929,6 +930,7 @@ function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView,
     backtests.monthlyReturns(id).then(mr => setMonthlyReturns(Array.isArray(mr) ? mr : [])).catch(() => setMonthlyReturnsError(true))
     backtests.regimeStats(id).then(rs => setRegimeStats(Array.isArray(rs) ? rs : [])).catch(() => {})
     backtests.optimization(id).then(o => setOptimization(o)).catch(() => {})
+    backtests.benchmark(id).then(b => setBenchmark(b)).catch(() => setBenchmark(null))
   }, [id])
 
   if (loading) return <Card><CardContent className="p-8 text-center"><p className="text-sm text-muted-foreground">Loading backtest...</p></CardContent></Card>
@@ -1028,7 +1030,7 @@ function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView,
     {equity.length > 0 && (
       <>
         <div className="mb-3"><h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">Equity Curve & Returns</h2>
-          <ErrorBoundary><div className="mb-3"><EquityCurveChart data={equity} height={300} title="Equity Curve" color="#2962FF" /></div></ErrorBoundary>
+          <ErrorBoundary><div className="mb-3"><EquityCurveChart data={equity} height={300} title="Equity Curve" color="#2962FF" benchmarkData={benchmark?.spy} overlays={benchmark?.qqq?.length ? [{ data: benchmark.qqq, label: 'QQQ' }] : undefined} /></div></ErrorBoundary>
         </div>
         {dailyReturns.length > 0 && (
           <ErrorBoundary>

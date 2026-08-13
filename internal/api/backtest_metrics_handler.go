@@ -131,6 +131,79 @@ func (s *Server) getBacktestMetrics(c *gin.Context) {
 	c.JSON(200, snapshot)
 }
 
+// getBacktestBenchmark returns the SPY/QQQ daily close series normalized to an
+// index of 100 over the backtest's date range, for a relative-performance
+// overlay on the equity curve.
+func (s *Server) getBacktestBenchmark(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "missing backtest ID"})
+		return
+	}
+
+	results, err := s.repo.GetBacktestResults(c.Request.Context(), id)
+	if err != nil || len(results) == 0 {
+		c.JSON(404, gin.H{"error": "no backtest results found"})
+		return
+	}
+
+	var start, end time.Time
+	for _, res := range results {
+		if res.EquityCurve == nil {
+			continue
+		}
+		var raw []backtest.EquityPoint
+		if err := json.Unmarshal(res.EquityCurve, &raw); err != nil || len(raw) == 0 {
+			continue
+		}
+		if start.IsZero() || raw[0].Time.Before(start) {
+			start = raw[0].Time
+		}
+		if end.IsZero() || raw[len(raw)-1].Time.After(end) {
+			end = raw[len(raw)-1].Time
+		}
+	}
+	if start.IsZero() || end.IsZero() {
+		c.JSON(200, gin.H{"spy": []backtest.EquityPoint{}, "qqq": []backtest.EquityPoint{}})
+		return
+	}
+
+	symbolCandles, err := s.repo.LoadCandles(c.Request.Context(), []string{"SPY", "QQQ"}, start, end)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var spy, qqq []backtest.EquityPoint
+	if len(symbolCandles) > 0 {
+		spy = normalizeBenchmark(symbolCandles[0])
+	}
+	if len(symbolCandles) > 1 {
+		qqq = normalizeBenchmark(symbolCandles[1])
+	}
+	c.JSON(200, gin.H{"spy": spy, "qqq": qqq})
+}
+
+// normalizeBenchmark converts a candle series to a base-100 index (first close
+// = 100) so it can be overlaid on the equity curve regardless of price scale.
+func normalizeBenchmark(candles []db.Candle) []backtest.EquityPoint {
+	if len(candles) == 0 {
+		return []backtest.EquityPoint{}
+	}
+	base := candles[0].Close.Float64()
+	if base <= 0 {
+		base = 1
+	}
+	out := make([]backtest.EquityPoint, 0, len(candles))
+	for _, c := range candles {
+		out = append(out, backtest.EquityPoint{
+			Time:  c.Time,
+			Value: c.Close.Float64() / base * 100.0,
+		})
+	}
+	return out
+}
+
 func (s *Server) getBacktestTradeDistribution(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
