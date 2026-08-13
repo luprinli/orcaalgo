@@ -478,3 +478,14 @@ Committed so far: 4.7, 4.9, `StopPrice`/`TakePrice` → `types.Price` (one commi
 **Validation:** `go build`/`go vet` clean; `go test ./internal/broker/alpaca ./internal/api` pass; anti-pattern scan clean.
 
 **Remaining for 4.6 (additive):** kill-switch re-entrancy guard + `MultiAccountCapitalPool.MarkAllViolated()` propagation, and the dispatch-summary email via `notify.BuildDispatchSummary`.
+
+### ✅ 4.5 — Broker data service (DONE, core)
+- `internal/broker/data.go` — `MarketDataProvider` optional interface + `Asset`/`MarketClock`/`CorporateAction` types.
+- `internal/broker/alpaca/data.go` — `Assets` (data API), `Clock` (broker API), `LatestPrice` (data API), `CorporateActions` (broker announcement feed, split→`SplitRatio`, dividend→`CashDividend`).
+- `internal/broker/alpaca/adapter.go` — `doRequest` refactored to `doRequestTo(base, …)` so data-API calls use `data.alpaca.markets` (no duplicated request logic).
+- `internal/db/corporate_actions.go` — `UpsertCorporateActionsBatch` (reuses `UpsertCorporateAction`).
+- `internal/broker/alpaca/data_test.go` — `parseTime` test.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/broker/alpaca` pass; anti-pattern scan clean.
+
+**Remaining for 4.5 (additive):** the scheduler corporate-action sync job calling `MarketDataProvider.CorporateActions` → `UpsertCorporateActionsBatch`, and symbol-mapping integration with `internal/universe` (single source of truth).

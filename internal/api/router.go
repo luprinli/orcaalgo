@@ -993,6 +993,12 @@ func (s *Server) liquidateAccount(c *gin.Context) {
 		return
 	}
 
+	// A real (non-dry-run) liquidation is an emergency action: propagate the
+	// violation across every account's capital pool so trading halts.
+	if !req.DryRun && result.Closed > 0 && s.multiCapitalPool != nil {
+		s.multiCapitalPool.MarkAllViolated("manual liquidation")
+	}
+
 	c.JSON(http.StatusOK, result)
 }
 

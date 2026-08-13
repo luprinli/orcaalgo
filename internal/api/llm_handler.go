@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lee-econ/orca-core/internal/api/middleware"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/llm"
 	"github.com/lee-econ/orca-core/internal/risk"
@@ -158,6 +159,9 @@ func (h *LLMHandler) Test(c *gin.Context) {
 
 func (h *LLMHandler) RegisterRoutes(router *gin.RouterGroup) {
 	group := router.Group("/llm")
+	// LLM endpoints make external, billed calls — throttle per-IP to prevent
+	// abuse/cost spikes.
+	group.Use(middleware.RateLimitMiddleware(2))
 	{
 		group.GET("/keys", h.ListKeys)
 		group.POST("/keys", h.AddKey)

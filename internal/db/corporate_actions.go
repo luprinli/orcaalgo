@@ -69,6 +69,17 @@ func (r *Repository) UpsertCorporateAction(ctx context.Context, symbol string, a
 	return err
 }
 
+// UpsertCorporateActionsBatch upserts multiple actions for one symbol,
+// reusing UpsertCorporateAction (idempotent per (symbol_id, action_date)).
+func (r *Repository) UpsertCorporateActionsBatch(ctx context.Context, symbol string, actions []CorporateAction) error {
+	for _, a := range actions {
+		if err := r.UpsertCorporateAction(ctx, symbol, a); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ListCorporateActions returns corporate actions for a symbol (or all symbols
 // when `symbol` is empty), ordered by action date ascending, as display views.
 func (r *Repository) ListCorporateActions(ctx context.Context, symbol string) ([]CorporateActionView, error) {

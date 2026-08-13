@@ -140,7 +140,13 @@ func (a *AlpacaAdapter) HealthCheck(ctx context.Context) error {
 }
 
 func (a *AlpacaAdapter) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
-	url := a.baseURL + path
+	return a.doRequestTo(ctx, a.baseURL, method, path, body)
+}
+
+// doRequestTo is doRequest against an explicit base URL, used for the Alpaca
+// data API (data.alpaca.markets) which differs from the trading host.
+func (a *AlpacaAdapter) doRequestTo(ctx context.Context, base, method, path string, body interface{}) ([]byte, error) {
+	url := base + path
 
 	var bodyReader io.Reader
 	if body != nil {

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lee-econ/orca-core/internal/broker"
+	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/risk"
 )
@@ -230,6 +232,34 @@ func (s *Scheduler) RegisterReoptimizationJob(cfg *ReoptimizationConfig) {
 		Schedule: "0 16 * * 1-5",
 		Run: func(ctx context.Context) error {
 			cfg.CheckAndOptimize(ctx)
+			return nil
+		},
+	})
+}
+
+// RegisterCorporateActionSyncJob registers a daily job that pulls split/dividend
+// announcements from the broker and upserts them (idempotent per symbol+date).
+func (s *Scheduler) RegisterCorporateActionSyncJob(provider broker.MarketDataProvider, repo *db.Repository, symbols []string) {
+	if provider == nil || repo == nil {
+		return
+	}
+	s.jobs = append(s.jobs, Job{
+		Name:     "corporate-action-sync",
+		Schedule: "0 6 * * *",
+		Run: func(ctx context.Context) error {
+			actions, err := provider.CorporateActions(ctx, symbols)
+			if err != nil {
+				return err
+			}
+			for _, ca := range actions {
+				if err := repo.UpsertCorporateAction(ctx, ca.Symbol, db.CorporateAction{
+					ActionDate:   ca.Date,
+					SplitRatio:   ca.SplitRatio,
+					CashDividend: ca.CashDividend,
+				}); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 	})
