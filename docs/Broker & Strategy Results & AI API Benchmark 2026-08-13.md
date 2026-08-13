@@ -459,3 +459,22 @@ Committed so far: 4.7, 4.9, `StopPrice`/`TakePrice` → `types.Price` (one commi
 - `internal/api/credential_handler.go` — `StoreCredential` returns the real `vault_path` as its id (removed `"credential-uuid"`); `RotateCredential` performs a real vault load → re-store under a `_rotated` path with `404` when absent (removed hardcoded `"providers/alpaca/algo_key_v2"`); `ListCredentials` returns the provider list from the repo instead of an empty stub.
 
 **Validation:** `go build`/`go vet` clean; `go test ./internal/api` pass.
+
+### ✅ 4.4 — Stop-loss lifecycle (DONE, core)
+- `internal/broker/adapter.go` — `OrderRequest` gains `StopLoss`/`TakeProfit` bracket fields; `OrderUpdate` type; `ReplaceOrderProvider` optional interface; `CapReplaceOrder` capability.
+- `internal/broker/alpaca/adapter.go` — `alpacaOrderRequest` gains `order_class`/`stop_loss`/`take_profit`; `buildOrderRequest` (extracted, unit-testable) emits an OTO bracket when a stop/target is set; `parseOrder` (extracted); `ReplaceOrder` (PATCH `/v2/orders/{id}`, zero-valued fields omitted); `Manifest()` advertises `CapReplaceOrder`.
+- `internal/broker/alpaca/adapter_test.go` — bracket/stop-loss construction, no-bracket default, and manifest capability tests.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/broker/...` pass; anti-pattern scan clean.
+
+**Remaining for 4.4 (additive):** wiring `ReplaceOrder` into the live engine's stop-move path (the live engine already tracks `stop.StopPrice` internally via the same `backtest.CalculateStopPrice` used by the backtest — the broker PATCH call is the missing glue), and IBKR/paper `ReplaceOrder` stubs (declare unsupported).
+
+### ✅ 4.6 — Granular liquidation (DONE, core)
+- `internal/broker/adapter.go` — `LiquidationRequest`/`LiquidationResult`/`LiquidationPositionResult` types + `Liquidator` optional interface (dry-run + discount).
+- `internal/broker/alpaca/adapter.go` — `Liquidate` flattens positions (sell longs / cover shorts) at a `DiscountPercent` limit (implied market price = `MarketValue/Quantity`) or market; `DryRun` returns the plan without placing orders; `liquidationLimitPrice` helper (extracted, tested).
+- `internal/api/router.go` — `POST /accounts/:id/liquidate` (protected): resolves the account adapter, type-asserts `Liquidator`, runs + returns the result (`501` when unsupported).
+- `internal/broker/alpaca/adapter_test.go` — `liquidationLimitPrice` tests.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/broker/alpaca ./internal/api` pass; anti-pattern scan clean.
+
+**Remaining for 4.6 (additive):** kill-switch re-entrancy guard + `MultiAccountCapitalPool.MarkAllViolated()` propagation, and the dispatch-summary email via `notify.BuildDispatchSummary`.

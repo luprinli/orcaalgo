@@ -39,6 +39,7 @@ const (
 	CapGetAccount          Capability = "GET_ACCOUNT"
 	CapValidateCredentials Capability = "VALIDATE_CREDENTIALS"
 	CapReconcileFills      Capability = "RECONCILE_FILLS"
+	CapReplaceOrder        Capability = "REPLACE_ORDER"
 )
 
 type Adapter interface {
@@ -89,6 +90,63 @@ type OrderRequest struct {
 	TimeInForce TimeInForce
 	StrategyID  string
 	TxID        string
+	// StopLoss, when > 0, requests a bracketed (OTO) order whose protective
+	// stop-loss leg closes the position at this price. 0 means no bracket.
+	StopLoss types.Price
+	// TakeProfit, when > 0, requests a bracketed take-profit leg at this limit.
+	TakeProfit types.Price
+}
+
+// OrderUpdate carries the fields that may be modified when replacing an
+// open order (e.g. moving a stop or resizing a limit). Zero-valued fields are
+// left unchanged by the broker.
+type OrderUpdate struct {
+	Quantity   float64
+	LimitPrice types.Price
+	StopPrice  types.Price
+}
+
+// ReplaceOrderProvider is implemented by brokers that support modifying an
+// open order (PATCH/replace semantics). It is an optional capability — the
+// CapReplaceOrder manifest flag advertises support.
+type ReplaceOrderProvider interface {
+	ReplaceOrder(ctx context.Context, orderID string, update *OrderUpdate) (*OrderResponse, error)
+}
+
+// LiquidationRequest describes a full account flatten. A positive
+// DiscountPercent places limit orders at that percentage below (longs) / above
+// (shorts) the reference price; 0 places market orders. DryRun computes the
+// plan without placing any orders.
+type LiquidationRequest struct {
+	DiscountPercent float64
+	DryRun          bool
+}
+
+// LiquidationPositionResult is the per-position outcome of a liquidation.
+type LiquidationPositionResult struct {
+	Symbol         string      `json:"symbol"`
+	Quantity       float64     `json:"quantity"`
+	ReferencePrice types.Price `json:"reference_price"`
+	LimitPrice     types.Price `json:"limit_price"`
+	Closed         bool        `json:"closed"`
+	Skipped        bool        `json:"skipped"`
+	Failed         bool        `json:"failed"`
+	Reason         string      `json:"reason,omitempty"`
+}
+
+// LiquidationResult summarizes a full-account flatten.
+type LiquidationResult struct {
+	DryRun    bool                        `json:"dry_run"`
+	Closed    int                         `json:"closed"`
+	Skipped   int                         `json:"skipped"`
+	Failed    int                         `json:"failed"`
+	Positions []LiquidationPositionResult `json:"positions"`
+}
+
+// Liquidator is implemented by brokers that support a full-account flatten
+// with a dry-run preview. Optional capability.
+type Liquidator interface {
+	Liquidate(ctx context.Context, req *LiquidationRequest) (*LiquidationResult, error)
 }
 
 type OrderResponse struct {

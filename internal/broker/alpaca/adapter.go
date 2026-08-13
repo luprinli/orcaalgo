@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"os"
 	"time"
@@ -24,14 +25,26 @@ type AlpacaAdapter struct {
 }
 
 type alpacaOrderRequest struct {
-	Symbol      string      `json:"symbol"`
-	Qty         float64     `json:"qty,omitempty"`
-	Notional    float64     `json:"notional,omitempty"`
-	Side        string      `json:"side"`
-	Type        string      `json:"type"`
-	TimeInForce string      `json:"time_in_force"`
-	LimitPrice  types.Price `json:"limit_price,omitempty"`
-	StopPrice   types.Price `json:"stop_price,omitempty"`
+	Symbol      string           `json:"symbol"`
+	Qty         float64          `json:"qty,omitempty"`
+	Notional    float64          `json:"notional,omitempty"`
+	Side        string           `json:"side"`
+	Type        string           `json:"type"`
+	TimeInForce string           `json:"time_in_force"`
+	LimitPrice  types.Price      `json:"limit_price,omitempty"`
+	StopPrice   types.Price      `json:"stop_price,omitempty"`
+	OrderClass  string           `json:"order_class,omitempty"`
+	StopLoss    *alpacaStopLoss  `json:"stop_loss,omitempty"`
+	TakeProfit  *alpacaTakeProfit `json:"take_profit,omitempty"`
+}
+
+type alpacaStopLoss struct {
+	StopPrice  types.Price `json:"stop_price"`
+	LimitPrice types.Price `json:"limit_price,omitempty"`
+}
+
+type alpacaTakeProfit struct {
+	LimitPrice types.Price `json:"limit_price"`
 }
 
 type alpacaOrder struct {
@@ -116,6 +129,7 @@ func (a *AlpacaAdapter) Manifest() broker.AdapterManifest {
 			broker.CapGetPositions,
 			broker.CapGetAccount,
 			broker.CapValidateCredentials,
+			broker.CapReplaceOrder,
 		},
 	}
 }
@@ -169,6 +183,20 @@ func (a *AlpacaAdapter) PlaceOrder(ctx context.Context, req *broker.OrderRequest
 		return nil, err
 	}
 
+	alpacaReq := a.buildOrderRequest(req)
+
+	data, err := a.doRequest(ctx, "POST", "/v2/orders", alpacaReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return a.parseOrder(data)
+}
+
+// buildOrderRequest converts an OrderRequest into the Alpaca payload, including
+// the bracketed (OTO) stop-loss/take-profit legs. Extracted so the bracket
+// construction is unit-testable without an HTTP round-trip.
+func (a *AlpacaAdapter) buildOrderRequest(req *broker.OrderRequest) alpacaOrderRequest {
 	alpacaReq := alpacaOrderRequest{
 		Symbol:      req.Symbol,
 		Qty:         req.Quantity,
@@ -184,25 +212,141 @@ func (a *AlpacaAdapter) PlaceOrder(ctx context.Context, req *broker.OrderRequest
 		alpacaReq.StopPrice = req.StopPrice
 	}
 
-	data, err := a.doRequest(ctx, "POST", "/v2/orders", alpacaReq)
-	if err != nil {
-		return nil, err
+	if req.StopLoss.Float64() > 0 || req.TakeProfit.Float64() > 0 {
+		alpacaReq.OrderClass = "oto"
+	}
+	if req.StopLoss.Float64() > 0 {
+		alpacaReq.StopLoss = &alpacaStopLoss{StopPrice: req.StopLoss}
+	}
+	if req.TakeProfit.Float64() > 0 {
+		alpacaReq.TakeProfit = &alpacaTakeProfit{LimitPrice: req.TakeProfit}
 	}
 
+	return alpacaReq
+}
+
+func (a *AlpacaAdapter) parseOrder(data []byte) (*broker.OrderResponse, error) {
 	var order alpacaOrder
 	if err := json.Unmarshal(data, &order); err != nil {
 		return nil, fmt.Errorf("unmarshal order: %w", err)
 	}
-
-	filledQty := parseFloat(order.FilledQty)
-	avgPrice := parseFloat(order.FilledAvgPrice)
-
 	return &broker.OrderResponse{
 		BrokerOrderID: order.ID,
 		Status:        broker.OrderStatus(order.Status),
-		FilledQty:     filledQty,
-		AvgFillPrice:  types.FromFloat64(avgPrice),
+		FilledQty:     parseFloat(order.FilledQty),
+		AvgFillPrice:  types.FromFloat64(parseFloat(order.FilledAvgPrice)),
 	}, nil
+}
+
+// ReplaceOrder modifies an open order (PATCH /v2/orders/{id}), e.g. to move a
+// protective stop or resize a limit. Zero-valued update fields are omitted so
+// the broker leaves them unchanged.
+func (a *AlpacaAdapter) ReplaceOrder(ctx context.Context, orderID string, update *broker.OrderUpdate) (*broker.OrderResponse, error) {
+	if update == nil {
+		return nil, fmt.Errorf("nil order update")
+	}
+	body := map[string]interface{}{}
+	if update.Quantity > 0 {
+		body["qty"] = update.Quantity
+	}
+	if update.LimitPrice.Float64() > 0 {
+		body["limit_price"] = update.LimitPrice
+	}
+	if update.StopPrice.Float64() > 0 {
+		body["stop_price"] = update.StopPrice
+	}
+
+	data, err := a.doRequest(ctx, "PATCH", "/v2/orders/"+orderID, body)
+	if err != nil {
+		return nil, err
+	}
+	return a.parseOrder(data)
+}
+
+// liquidationLimitPrice computes the limit price for a liquidation order at a
+// percentage discount from the reference price. A non-positive discount returns
+// 0, signalling a market order.
+func liquidationLimitPrice(refPrice, discountPercent float64) types.Price {
+	if refPrice <= 0 || discountPercent <= 0 {
+		return 0
+	}
+	return types.PriceFromFloat(refPrice * (1 - discountPercent/100.0))
+}
+
+// Liquidate flattens every position: longs are sold and shorts are covered. A
+// positive DiscountPercent places limit orders at that discount from the
+// position's implied market price (MarketValue/Quantity); 0 places market
+// orders. DryRun computes the plan without placing orders.
+func (a *AlpacaAdapter) Liquidate(ctx context.Context, req *broker.LiquidationRequest) (*broker.LiquidationResult, error) {
+	if req == nil {
+		return nil, fmt.Errorf("nil liquidation request")
+	}
+	positions, err := a.GetPositions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &broker.LiquidationResult{DryRun: req.DryRun}
+	for _, p := range positions {
+		if p.Quantity == 0 {
+			continue
+		}
+		qty := math.Abs(p.Quantity)
+		side := broker.Sell
+		if p.Quantity < 0 {
+			side = broker.Buy
+		}
+
+		lr := broker.LiquidationPositionResult{
+			Symbol:   p.Symbol,
+			Quantity: qty,
+		}
+
+		refPrice := 0.0
+		if qty > 0 {
+			refPrice = p.MarketValue.Float64() / qty
+		}
+		if refPrice <= 0 {
+			lr.Skipped = true
+			lr.Reason = "no reference price"
+			result.Skipped++
+			result.Positions = append(result.Positions, lr)
+			continue
+		}
+		lr.ReferencePrice = types.PriceFromFloat(refPrice)
+		lr.LimitPrice = liquidationLimitPrice(refPrice, req.DiscountPercent)
+
+		orderType := broker.Market
+		if lr.LimitPrice.Float64() > 0 {
+			orderType = broker.Limit
+		}
+
+		if req.DryRun {
+			lr.Closed = true
+			result.Closed++
+			result.Positions = append(result.Positions, lr)
+			continue
+		}
+
+		orderReq := &broker.OrderRequest{
+			Symbol:      p.Symbol,
+			Side:        side,
+			Type:        orderType,
+			Quantity:    qty,
+			LimitPrice:  lr.LimitPrice,
+			TimeInForce: broker.Day,
+		}
+		if _, err := a.PlaceOrder(ctx, orderReq); err != nil {
+			lr.Failed = true
+			lr.Reason = err.Error()
+			result.Failed++
+		} else {
+			lr.Closed = true
+			result.Closed++
+		}
+		result.Positions = append(result.Positions, lr)
+	}
+	return result, nil
 }
 
 func (a *AlpacaAdapter) CancelOrder(ctx context.Context, orderID string) error {

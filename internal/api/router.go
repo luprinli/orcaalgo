@@ -177,6 +177,7 @@ func (s *Server) registerRoutes() {
 		protected.POST("/accounts", s.createAccount)
 		protected.DELETE("/accounts/:id", s.deleteAccount)
 		protected.POST("/accounts/:id/default", s.setDefaultAccount)
+		protected.POST("/accounts/:id/liquidate", s.liquidateAccount)
 		protected.GET("/signals", s.getSignals)
 
 		protected.POST("/backtests", s.submitBacktest)
@@ -950,6 +951,49 @@ func (s *Server) hydrateAccounts(ctx context.Context) {
 			s.liveEngine.RegisterAccountStrategies(dba.ID, nil)
 		}
 	}
+}
+
+func (s *Server) liquidateAccount(c *gin.Context) {
+	id := c.Param("id")
+	var req struct {
+		DiscountPercent float64 `json:"discount_percent"`
+		DryRun          bool    `json:"dry_run"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var adapter broker.Adapter
+	if s.accountManager != nil {
+		if acct, err := s.accountManager.GetAccount(id); err == nil {
+			adapter = acct.Adapter()
+		}
+	}
+	if adapter == nil {
+		adapter = s.adapter
+	}
+	if adapter == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "account not found"})
+		return
+	}
+
+	liquidator, ok := adapter.(broker.Liquidator)
+	if !ok {
+		c.JSON(http.StatusNotImplemented, gin.H{"error": "liquidation not supported by this broker"})
+		return
+	}
+
+	result, err := liquidator.Liquidate(c.Request.Context(), &broker.LiquidationRequest{
+		DiscountPercent: req.DiscountPercent,
+		DryRun:          req.DryRun,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func (s *Server) deleteAccount(c *gin.Context) {
