@@ -174,4 +174,23 @@ def run_preflight_checks() -> list[CheckResult]:
     except ImportError:
         results.append(CheckResult("data_integrity", "warn", "Data quality module not available"))
 
+    # Check 13: Broker credential presence (env fallback vs. per-account BYOK)
+    alpaca_key = os.environ.get("ALPACA_API_KEY")
+    alpaca_secret = os.environ.get("ALPACA_API_SECRET")
+    if alpaca_key and alpaca_secret:
+        results.append(CheckResult("broker_credentials", "pass", "Alpaca env credentials set"))
+    else:
+        results.append(CheckResult("broker_credentials", "warn",
+            "Alpaca env credentials not set (per-account BYOK credentials may be used instead)"))
+
+    # Check 14: Broker/LLM schema migrations present (aligned with the DB)
+    for name, path in [
+        ("account_credentials_migration", "internal/db/migrations/000043_account_credentials.up.sql"),
+        ("llm_keys_migration", "internal/db/migrations/000044_llm_api_keys.up.sql"),
+    ]:
+        if Path(path).exists():
+            results.append(CheckResult(name, "pass", f"{Path(path).name} present"))
+        else:
+            results.append(CheckResult(name, "fail", f"{path} missing"))
+
     return results

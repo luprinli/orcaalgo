@@ -444,15 +444,12 @@ Begin with **4.7 trade-distribution metrics** (dependency-ordered foundation, Go
 
 ### Commit status & next steps
 
-Committed so far: 4.7, 4.9, `StopPrice`/`TakePrice` → `types.Price` (one commit). Uncommitted: 4.1 (+ hydration), 4.3.
+All primary workstreams (4.1–4.9) are implemented, validated, and committed. Remaining is the **cross-cutting hardening** (§5.3), prioritized below:
 
-**Remaining workstreams (dependency order, §5.5):**
-1. **4.2** (P0) — remove the stubbed broker handlers: `ProviderHandler.TestProvider/GetAccount` (hardcoded `latency=55`, `100000` fallback) and `CredentialHandler.ListCredentials/RotateCredential` (hardcoded `credential-uuid`, `algo_key_v2`).
-2. **4.4** (P1) — stop-loss lifecycle: `ReplaceOrder` capability, OTO bracket fields, order-state eval, with backtest parity.
-3. **4.6** (P2) — granular liquidation (dry-run + deviation bands) behind the kill-switch guard.
-4. **4.5** (P1) — broker data service: assets/clock/latest-price/corporate-action sync.
-5. **4.8** (P2) — SPY/QQQ benchmark overlay.
-6. Cross-cutting hardening (§5.3): `/llm` rate-limit + breaker, audit events, Prometheus metrics, `orca preflight` checks, docs.
+1. **Docs** — update `AGENTS.md` "Current Implementation State" + package READMEs to reflect the broker/AI/strategy-results enhancements.
+2. **Python-side** — `orca/sizing/promotion_gate.py` + `orca calibrate` consume the trade-distribution metrics (so promotion/calibration stay in lockstep with the detail page); `orca preflight` checks for broker-credential presence and LLM-key integrity.
+3. **Observability/security** — an `llm` circuit in `internal/breaker`, audit events for key/credential mutations, Prometheus cost/latency metrics, startup config validation.
+4. **Remaining additive glue** — IBKR/paper per-account constructors + `ReplaceOrder` stubs (declare unsupported), live-engine `ReplaceOrder` glue, symbol-mapping integration with `internal/universe`.
 
 ### ✅ 4.2 — Broker handler stub removal (DONE)
 - `internal/api/provider_handler.go` — `TestProvider` measures real latency (`time.Since`) and returns `404 {reachable:false}` when no adapter (removed `latency=55` + fake `100000` account); `GetAccount` returns `404 {error:"provider not found"}` instead of a fabricated `100000` account.

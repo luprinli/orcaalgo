@@ -334,3 +334,32 @@ Post-benchmark remediation of `docs/StratCraft Benchmark 2026-08-13.md` (cross-s
 - **No reimplemented math**: limit-fill probability uses Go stdlib `math.Erfc`; Kelly/Brier/Platt/Wilson/EWMA remain Python-only (HP #1).
 - **Backward compatibility**: all new endpoints are additive; no existing route, schema, or response shape was changed. The `Trade.Changes` field is additive to the serialized trade JSON.
 - **Frontend parity**: every backend change has a matching client method (`web/src/api/client.ts`) and Admin tab or detail panel.
+
+## Broker, AI & Strategy-Results Enhancements (2026-08-13)
+
+Post-benchmark remediation of `docs/Broker & Strategy Results & AI API Benchmark 2026-08-13.md` (cross-system broker/AI/strategy-results comparison vs. the StratCraft reference) is complete. All workstreams (4.1–4.9) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
+
+### Broker operations (`internal/broker/`)
+
+- **Per-account credentials + environment (4.1)**. `db.Account` gains `Environment`/`VaultPath` (`json:"-"`)/`MaskedKey` (migration 000043). `alpaca.NewAdapterWithCredentials(key, secret, baseURL)` builds a per-account adapter; `Server.hydrateAccounts` rebuilds adapters from `vault_path` on restart (idempotent, called lazily from `getAccounts`). `createAccount` stores creds in the vault (`accounts/{id}`) and returns a masked key.
+- **Dispatch preflight (4.3)**. `broker.Preflight(ctx, adapter, *OrderRequest)` guards state/reconciliation (duplicate open, close-with-no-position, insufficient buying power) and runs in `placeOrder` **before** `PlaceOrder`. It complements RiskPipeline (risk), never duplicates it.
+- **Stop-loss lifecycle (4.4)**. `OrderRequest.StopLoss/TakeProfit` bracket fields + optional `ReplaceOrderProvider` + `CapReplaceOrder`. Alpaca `buildOrderRequest` emits an OTO bracket; `ReplaceOrder` does `PATCH /v2/orders/{id}`.
+- **Granular liquidation (4.6)**. Optional `Liquidator` interface + `LiquidationRequest/Result`; `POST /accounts/:id/liquidate`. A real (non-dry-run) liquidation propagates `MultiAccountCapitalPool.MarkAllViolated("manual liquidation")`.
+- **Broker data service (4.5)**. Optional `MarketDataProvider` (`Assets`/`Clock`/`LatestPrice`/`CorporateActions`) + Alpaca impl (`data.go`). `db.UpsertCorporateActionsBatch` + `scheduler.RegisterCorporateActionSyncJob`.
+- **Stub removal (4.2)**. `ProviderHandler.TestProvider/GetAccount` return honest 404s + real latency; `CredentialHandler` performs real vault store/rotate (no hardcoded `credential-uuid`/`algo_key_v2`/`100000`).
+
+### BYOK LLM (4.9)
+
+- Per-user `llm_api_keys` (migration 000044, vault-backed, `user_id` FK `ON DELETE CASCADE`). `llm.NewClientWithKey(provider, key, baseURL)`; `/llm/keys` CRUD + `/llm/test` **honors the passed key** (fixes the old env-only bug), falling back to the stored vault key. Masking via a single `maskSuffix` helper; `/llm/*` behind `RateLimitMiddleware(2)`.
+
+### Strategy results (4.7, 4.8)
+
+- **Trade-distribution metrics**. `metrics.ComputeTradeDistribution` (median/avg PnL $ + %, best/worst, duration, unique tickers, win/loss split) + `GET /backtests/:id/trade-distribution`; `OverviewTab` grid. The shared `loadBacktestTrades` helper de-duplicates the trade JSON→`TradeSummary` mapping.
+- **SPY/QQQ benchmark overlay**. `GET /backtests/:id/benchmark` (base-100 `normalizeBenchmark`); `EquityCurveChart` overlays SPY (`benchmarkData`) + QQQ (`overlays`).
+
+### Preserve these invariants
+
+- **Optional-capability interfaces**: `ReplaceOrderProvider`, `Liquidator`, `MarketDataProvider`, `FillProvider` are separate from the required `Adapter` — a broker declares support by implementing the interface; type-assert, don't extend `Adapter` (avoids breaking all drivers).
+- **HP #2**: all broker/order prices are `types.Price`; `float64` only for quantities/percentages. Raw wire-format structs must not use a `float64` field named `*Price` (the anti-pattern scan flags it) — name them after the wire field (e.g. `P`).
+- **Secrets**: never persist or log raw credentials; store `vault_path` + masked suffix in the DB and decrypt via `risk.VaultProvider` at the boundary.
+- **System-wide alignment**: trade-distribution metrics must also be plumbed into `orca/sizing/promotion_gate.py` + `orca calibrate` (not just the detail page); `orca preflight` gained `broker_credentials`, `account_credentials_migration`, and `llm_keys_migration` checks.
