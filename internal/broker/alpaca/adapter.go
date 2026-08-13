@@ -80,13 +80,23 @@ func NewAdapter() (*AlpacaAdapter, error) {
 		}
 	}
 
+	return NewAdapterWithCredentials(key, secret, baseURL), nil
+}
+
+// NewAdapterWithCredentials builds an adapter from explicit credentials and a
+// base URL (per-account BYOK). An empty base URL defaults to the live Alpaca
+// endpoint.
+func NewAdapterWithCredentials(key, secret, baseURL string) *AlpacaAdapter {
+	if baseURL == "" {
+		baseURL = "https://api.alpaca.markets"
+	}
 	return &AlpacaAdapter{
 		apiKey:    key,
 		apiSecret: secret,
 		baseURL:   baseURL,
 		paper:     baseURL != "https://api.alpaca.markets",
 		client:    &http.Client{Timeout: 15 * time.Second},
-	}, nil
+	}
 }
 
 func (a *AlpacaAdapter) Manifest() broker.AdapterManifest {

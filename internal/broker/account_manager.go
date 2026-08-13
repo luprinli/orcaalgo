@@ -14,6 +14,9 @@ type ManagedAccount struct {
 	ID                string
 	BrokerType        string
 	Name              string
+	Environment       string
+	VaultPath         string
+	MaskedKey         string
 	PropFirmProfileID string
 	Balance           types.Price
 	Equity            types.Price
@@ -76,6 +79,9 @@ func (ma *ManagedAccount) ToDBAccount() *db.Account {
 		ID:                ma.ID,
 		BrokerType:        ma.BrokerType,
 		Name:              ma.Name,
+		Environment:       ma.Environment,
+		VaultPath:         ma.VaultPath,
+		MaskedKey:         ma.MaskedKey,
 		PropFirmProfileID: ma.PropFirmProfileID,
 		Balance:           ma.Balance.Float64(),
 		Equity:            ma.Equity.Float64(),
@@ -89,6 +95,9 @@ func (ma *ManagedAccount) ApplyFromDBAccount(a *db.Account) {
 	ma.ID = a.ID
 	ma.BrokerType = a.BrokerType
 	ma.Name = a.Name
+	ma.Environment = a.Environment
+	ma.VaultPath = a.VaultPath
+	ma.MaskedKey = a.MaskedKey
 	ma.PropFirmProfileID = a.PropFirmProfileID
 	ma.Balance = types.FromFloat64(a.Balance)
 	ma.Equity = types.FromFloat64(a.Equity)

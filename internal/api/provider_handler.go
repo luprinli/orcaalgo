@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lee-econ/orca-core/internal/broker"
@@ -51,41 +52,36 @@ func (h *ProviderHandler) DeleteProvider(c *gin.Context) {
 
 func (h *ProviderHandler) TestProvider(c *gin.Context) {
 	id := c.Param("id")
-	reachable := true
-	latency := 55
-	if h.brokerReg != nil {
-		adapter, ok := h.brokerReg.Get(id)
-		if ok && adapter != nil {
-			ctx := c.Request.Context()
-			acct, err := adapter.GetAccount(ctx)
-			if err != nil {
-				reachable = false
-				c.JSON(http.StatusOK, gin.H{"id": id, "reachable": false, "error": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{
-				"id": id, "reachable": true, "latency_ms": latency,
-				"account": gin.H{
-					"balance": acct.Balance, "equity": acct.Equity,
-					"daily_pnl": acct.DailyPL, "buying_power": acct.BuyingPower,
-				},
-			})
-			return
-		}
+	if h.brokerReg == nil {
+		c.JSON(http.StatusNotFound, gin.H{"id": id, "reachable": false, "error": "broker registry unavailable"})
+		return
+	}
+	adapter, ok := h.brokerReg.Get(id)
+	if !ok || adapter == nil {
+		c.JSON(http.StatusNotFound, gin.H{"id": id, "reachable": false, "error": "provider not found"})
+		return
+	}
+	start := time.Now()
+	acct, err := adapter.GetAccount(c.Request.Context())
+	latencyMs := time.Since(start).Milliseconds()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"id": id, "reachable": false, "latency_ms": latencyMs, "error": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"id": id, "reachable": reachable, "latency_ms": latency,
-		"account": gin.H{"balance": 100000.0, "equity": 100000.0, "daily_pnl": 0, "buying_power": 200000.0},
+		"id": id, "reachable": true, "latency_ms": latencyMs,
+		"account": gin.H{
+			"balance": acct.Balance, "equity": acct.Equity,
+			"daily_pnl": acct.DailyPL, "buying_power": acct.BuyingPower,
+		},
 	})
 }
 
 func (h *ProviderHandler) GetAccount(c *gin.Context) {
 	id := c.Param("id")
 	if h.brokerReg != nil {
-		adapter, ok := h.brokerReg.Get(id)
-		if ok && adapter != nil {
-			acct, err := adapter.GetAccount(c.Request.Context())
-			if err == nil && acct != nil {
+		if adapter, ok := h.brokerReg.Get(id); ok && adapter != nil {
+			if acct, err := adapter.GetAccount(c.Request.Context()); err == nil && acct != nil {
 				c.JSON(http.StatusOK, gin.H{
 					"balance": acct.Balance, "equity": acct.Equity,
 					"daily_pnl": acct.DailyPL, "buying_power": acct.BuyingPower,
@@ -94,7 +90,7 @@ func (h *ProviderHandler) GetAccount(c *gin.Context) {
 			}
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"balance": 100000.0, "equity": 100000.0, "daily_pnl": 0, "buying_power": 200000.0})
+	c.JSON(http.StatusNotFound, gin.H{"error": "provider not found"})
 }
 
 func (h *ProviderHandler) RegisterRoutes(router *gin.RouterGroup) {

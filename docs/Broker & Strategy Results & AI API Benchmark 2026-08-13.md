@@ -417,3 +417,45 @@ Begin with **4.7 trade-distribution metrics** (dependency-ordered foundation, Go
 **Validation:** `go build`/`go vet` clean; `go test ./internal/llm ./internal/api` pass (incl. `NewClientWithKey` + `maskSuffix`); `tsc --noEmit` clean; `vitest` 233/233 pass; anti-pattern scan clean for new files.
 
 **Remaining cross-cutting hardening (noted in §5.3):** rate-limit middleware on `/llm/*`, an `llm` circuit in `internal/breaker`, audit events for key add/delete, and Prometheus cost/latency metrics — all additive to this core.
+
+### ✅ 4.1 — Per-account broker credentials + environment (DONE, core)
+- `internal/db/migrations/000043_account_credentials.{up,down}.sql` — `environment`/`vault_path`/`masked_key` columns on `accounts` (secrets stay in the vault; only the path + a masked suffix are persisted).
+- `internal/db/account_repository.go` — `Account` gains `Environment`/`VaultPath` (`json:"-"`)/`MaskedKey`; `InsertAccount`/`GetAccount`/`ListAccounts`/`ListAccountsByUser` updated.
+- `internal/broker/alpaca/adapter.go` — `NewAdapterWithCredentials(key, secret, baseURL)`; `NewAdapter` refactored to delegate (no duplicated base-URL logic).
+- `internal/broker/account_manager.go` — `ManagedAccount` gains `Environment`/`VaultPath`/`MaskedKey`; `ToDBAccount`/`ApplyFromDBAccount` updated.
+- `internal/api/router.go` — `createAccount` accepts `environment` + `api_key`/`api_secret`, stores them in the vault (`accounts/{id}`), builds a per-account Alpaca adapter (paper/live by environment), persists + returns masked key; `getAccounts` returns `environment` + `masked_key`.
+- Frontend — `Account`/`CreateAccountRequest` types + `AccountsPage` (environment select, API key/secret inputs, Environment + Key columns).
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/api ./internal/broker/...` pass (incl. `alpaca.NewAdapterWithCredentials` 3 tests); `tsc --noEmit` clean; `vitest` 233/233 pass; anti-pattern scan clean.
+
+**Remaining for 4.1:** non-Alpaca per-account constructors (IBKR/paper) — additive follow-up (Alpaca path, the primary broker, is complete).
+
+### ✅ 4.1 (follow-up) — account hydration on restart
+- `internal/api/router.go` — `Server.hydrateAccounts(ctx)`: rebuilds in-memory accounts + adapters from the DB; for `vault_path` accounts it decrypts the vault creds and rebuilds a per-account Alpaca adapter (paper/live by environment), falling back to the shared registry/env adapter otherwise. Called lazily from `getAccounts`. Idempotent (skips already-registered accounts) and re-registers per-account strategy isolation.
+
+### ✅ 4.3 — Broker dispatch preflight (state/reconciliation guard)
+- `internal/broker/preflight.go` — `Preflight(ctx, adapter, *OrderRequest) PreflightResult`: broker-agnostic checks using only the `Adapter` interface — duplicate open (`position already open`), close with no position (`no position to close`), and `insufficient buying power` (limit orders only; market orders skip the price-based check; broker errors fail-open).
+- `internal/api/router.go` — `placeOrder` resolves the target adapter and runs `broker.Preflight` before `PlaceOrder`; a skip returns `409 {skipped: true, reason}`.
+- `internal/broker/preflight_test.go` — 10 unit tests (nil adapter, buy/sell position checks, buying power, fail-open, market-order skip).
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/api ./internal/broker` pass; anti-pattern scan clean.
+
+---
+
+### Commit status & next steps
+
+Committed so far: 4.7, 4.9, `StopPrice`/`TakePrice` → `types.Price` (one commit). Uncommitted: 4.1 (+ hydration), 4.3.
+
+**Remaining workstreams (dependency order, §5.5):**
+1. **4.2** (P0) — remove the stubbed broker handlers: `ProviderHandler.TestProvider/GetAccount` (hardcoded `latency=55`, `100000` fallback) and `CredentialHandler.ListCredentials/RotateCredential` (hardcoded `credential-uuid`, `algo_key_v2`).
+2. **4.4** (P1) — stop-loss lifecycle: `ReplaceOrder` capability, OTO bracket fields, order-state eval, with backtest parity.
+3. **4.6** (P2) — granular liquidation (dry-run + deviation bands) behind the kill-switch guard.
+4. **4.5** (P1) — broker data service: assets/clock/latest-price/corporate-action sync.
+5. **4.8** (P2) — SPY/QQQ benchmark overlay.
+6. Cross-cutting hardening (§5.3): `/llm` rate-limit + breaker, audit events, Prometheus metrics, `orca preflight` checks, docs.
+
+### ✅ 4.2 — Broker handler stub removal (DONE)
+- `internal/api/provider_handler.go` — `TestProvider` measures real latency (`time.Since`) and returns `404 {reachable:false}` when no adapter (removed `latency=55` + fake `100000` account); `GetAccount` returns `404 {error:"provider not found"}` instead of a fabricated `100000` account.
+- `internal/api/credential_handler.go` — `StoreCredential` returns the real `vault_path` as its id (removed `"credential-uuid"`); `RotateCredential` performs a real vault load → re-store under a `_rotated` path with `404` when absent (removed hardcoded `"providers/alpaca/algo_key_v2"`); `ListCredentials` returns the provider list from the repo instead of an empty stub.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/api` pass.

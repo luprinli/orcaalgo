@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/api/middleware"
 	"github.com/lee-econ/orca-core/internal/backtest"
 	"github.com/lee-econ/orca-core/internal/broker"
+	"github.com/lee-econ/orca-core/internal/broker/alpaca"
 	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/email"
@@ -689,6 +691,7 @@ func (s *Server) getAccounts(c *gin.Context) {
 	var accounts []gin.H
 
 	if s.accountManager != nil {
+		s.hydrateAccounts(c.Request.Context())
 		userID := c.GetString("user_id")
 		for _, acct := range s.accountManager.ListAccountsByUser(c.Request.Context(), userID) {
 			halted := s.killSwitch != nil && s.killSwitch.IsHalted()
@@ -697,6 +700,8 @@ func (s *Server) getAccounts(c *gin.Context) {
 				"label":                  acct.Name,
 				"firm":                   "Prop Firm",
 				"broker_type":            acct.BrokerType,
+				"environment":            acct.Environment,
+				"masked_key":             acct.MaskedKey,
 				"type":                   "prop",
 				"is_default":             acct.IsDefault,
 				"halted":                 halted,
@@ -815,6 +820,9 @@ func (s *Server) createAccount(c *gin.Context) {
 		BrokerType        string `json:"broker_type"`
 		PropFirmProfileID string `json:"prop_firm_profile_id"`
 		IsDefault         bool   `json:"is_default"`
+		Environment       string `json:"environment"`
+		APIKey            string `json:"api_key"`
+		APISecret         string `json:"api_secret"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -823,9 +831,31 @@ func (s *Server) createAccount(c *gin.Context) {
 	if req.Name == "" {
 		req.Name = req.ID
 	}
+	if req.Environment == "" {
+		req.Environment = "paper"
+	}
 
 	var adapter broker.Adapter
-	if s.brokerRegistry != nil {
+	vaultPath := ""
+	maskedKey := ""
+
+	// Per-account credentials (BYOK): build a dedicated adapter from the user's
+	// own key/secret instead of the shared env-var adapter.
+	if req.APIKey != "" && req.APISecret != "" && strings.EqualFold(req.BrokerType, "alpaca") {
+		baseURL := "https://paper-api.alpaca.markets"
+		if req.Environment == "live" {
+			baseURL = "https://api.alpaca.markets"
+		}
+		adapter = alpaca.NewAdapterWithCredentials(req.APIKey, req.APISecret, baseURL)
+		vaultPath = "accounts/" + req.ID
+		if s.vault != nil {
+			if err := s.vault.Store(vaultPath, map[string]string{"api_key": req.APIKey, "api_secret": req.APISecret}); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store credentials"})
+				return
+			}
+		}
+		maskedKey = maskSuffix(req.APIKey)
+	} else if s.brokerRegistry != nil {
 		var ok bool
 		adapter, ok = s.brokerRegistry.Get(req.BrokerType + ":" + req.ID)
 		if !ok && s.adapter != nil {
@@ -844,6 +874,9 @@ func (s *Server) createAccount(c *gin.Context) {
 	acct := broker.NewManagedAccount(req.ID, req.BrokerType, req.Name, adapter)
 	acct.PropFirmProfileID = req.PropFirmProfileID
 	acct.IsDefault = req.IsDefault
+	acct.Environment = req.Environment
+	acct.VaultPath = vaultPath
+	acct.MaskedKey = maskedKey
 
 	if err := s.accountManager.RegisterAccount(acct); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
@@ -861,7 +894,62 @@ func (s *Server) createAccount(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"id": req.ID, "name": req.Name})
+	c.JSON(http.StatusCreated, gin.H{
+		"id":          req.ID,
+		"name":        req.Name,
+		"environment": req.Environment,
+		"masked_key":  maskedKey,
+	})
+}
+
+// hydrateAccounts rebuilds in-memory accounts and their adapters from the
+// database. For accounts with per-account credentials (vault_path) it decrypts
+// and rebuilds a dedicated Alpaca adapter; otherwise it falls back to the
+// shared registry/env adapter. Idempotent: accounts already registered are
+// skipped.
+func (s *Server) hydrateAccounts(ctx context.Context) {
+	if s.repo == nil || s.accountManager == nil {
+		return
+	}
+	dbAccounts, err := s.repo.ListAccounts(ctx)
+	if err != nil {
+		return
+	}
+	for _, dba := range dbAccounts {
+		if _, err := s.accountManager.GetAccount(dba.ID); err == nil {
+			continue
+		}
+
+		var adapter broker.Adapter
+		if dba.VaultPath != "" && strings.EqualFold(dba.BrokerType, "alpaca") && s.vault != nil {
+			if data, verr := s.vault.Load(dba.VaultPath); verr == nil && data["api_key"] != "" && data["api_secret"] != "" {
+				baseURL := "https://paper-api.alpaca.markets"
+				if dba.Environment == "live" {
+					baseURL = "https://api.alpaca.markets"
+				}
+				adapter = alpaca.NewAdapterWithCredentials(data["api_key"], data["api_secret"], baseURL)
+			}
+		}
+		if adapter == nil && s.brokerRegistry != nil {
+			adapter, _ = s.brokerRegistry.Get(dba.BrokerType)
+		}
+		if adapter == nil {
+			adapter = s.adapter
+		}
+		if adapter == nil {
+			continue
+		}
+
+		acct := broker.NewManagedAccount(dba.ID, dba.BrokerType, dba.Name, adapter)
+		acct.ApplyFromDBAccount(&dba)
+		if err := s.accountManager.RegisterAccount(acct); err != nil {
+			slog.Warn("failed to hydrate account", "account_id", dba.ID, "error", err, "component", "router")
+			continue
+		}
+		if s.liveEngine != nil {
+			s.liveEngine.RegisterAccountStrategies(dba.ID, nil)
+		}
+	}
 }
 
 func (s *Server) deleteAccount(c *gin.Context) {
@@ -1747,6 +1835,26 @@ func (s *Server) placeOrder(c *gin.Context) {
 	}
 	if orderReq.TimeInForce == "" {
 		orderReq.TimeInForce = broker.Day
+	}
+
+	// Dispatch preflight — a broker-state/reconciliation guard (duplicate
+	// opens, closes with no position, insufficient buying power) that runs
+	// before RiskPipeline/PlaceOrder. Fail-open when no adapter resolves.
+	preflightAdapter := s.adapter
+	if s.accountManager != nil {
+		id := req.AccountID
+		if id == "" {
+			id = s.accountManager.GetDefaultAccountID()
+		}
+		if id != "" {
+			if acct, err := s.accountManager.GetAccount(id); err == nil {
+				preflightAdapter = acct.Adapter()
+			}
+		}
+	}
+	if pr := broker.Preflight(c.Request.Context(), preflightAdapter, orderReq); pr.Skip {
+		c.JSON(http.StatusConflict, gin.H{"skipped": true, "reason": pr.Reason})
+		return
 	}
 
 	var resp *broker.OrderResponse

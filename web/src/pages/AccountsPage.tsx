@@ -17,6 +17,9 @@ import type { Account, CreateAccountRequest } from '../types/api'
 const accountSchema = z.object({
   name: z.string().min(1, 'Account name is required').max(64),
   broker_type: z.string().min(1),
+  environment: z.string().optional(),
+  api_key: z.string().optional(),
+  api_secret: z.string().optional(),
   is_default: z.boolean(),
 })
 
@@ -40,7 +43,7 @@ export default function AccountsPage() {
     formState: { errors, isSubmitting },
   } = useForm<AccountFormData>({
     resolver: zodResolver(accountSchema),
-    defaultValues: { name: '', broker_type: 'paper', is_default: false },
+    defaultValues: { name: '', broker_type: 'paper', environment: 'paper', api_key: '', api_secret: '', is_default: false },
   })
 
   const fetchAll = useCallback(async () => {
@@ -76,6 +79,9 @@ export default function AccountsPage() {
         name: form.name,
         broker_type: form.broker_type,
         is_default: form.is_default,
+        environment: form.environment,
+        api_key: form.api_key,
+        api_secret: form.api_secret,
       }
       await accounts.create(data)
       setMsg(t('accounts:accountCreated', 'Account "{{name}}" created', { name: form.name }))
@@ -162,6 +168,21 @@ export default function AccountsPage() {
                 <input type="checkbox" {...register('is_default')} />
                 {t('accounts:setAsDefault', 'Set as default')}
               </label>
+              <Controller
+                name="environment"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value || 'paper'} onValueChange={field.onChange}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paper">Paper</SelectItem>
+                      <SelectItem value="live">Live</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <Input type="password" placeholder={t('accounts:apiKey', 'API Key (optional)')} {...register('api_key')} />
+              <Input type="password" placeholder={t('accounts:apiSecret', 'API Secret (optional)')} {...register('api_secret')} />
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? t('accounts:creating', 'Creating...') : t('accounts:create', 'Create')}
@@ -193,6 +214,8 @@ export default function AccountsPage() {
                 <TableRow>
                   <TableHead>{t('accounts:table:name', 'Name')}</TableHead>
                   <TableHead>{t('accounts:table:broker', 'Broker')}</TableHead>
+                  <TableHead>{t('accounts:table:environment', 'Environment')}</TableHead>
+                  <TableHead>{t('accounts:table:key', 'Key')}</TableHead>
                   <TableHead>{t('accounts:table:default', 'Default')}</TableHead>
                   <TableHead>{t('accounts:table:balance', 'Balance')}</TableHead>
                   <TableHead>{t('accounts:table:equity', 'Equity')}</TableHead>
@@ -207,6 +230,8 @@ export default function AccountsPage() {
                   <TableRow key={a.id}>
                     <TableCell className="font-semibold">{a.label || a.id}</TableCell>
                     <TableCell>{a.broker_type}</TableCell>
+                    <TableCell>{a.environment || 'paper'}</TableCell>
+                    <TableCell>{a.masked_key || '—'}</TableCell>
                     <TableCell>{a.is_default ? <Badge>{t('accounts:defaultAccount', 'Default')}</Badge> : '—'}</TableCell>
                     <TableCell>${a.balance?.toFixed(2) ?? '--'}</TableCell>
                     <TableCell>${a.equity?.toFixed(2) ?? '--'}</TableCell>

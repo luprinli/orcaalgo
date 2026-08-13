@@ -18,9 +18,25 @@ func NewCredentialHandler(repo *db.Repository, vault risk.VaultProvider) *Creden
 }
 
 func (h *CredentialHandler) ListCredentials(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"credentials": []interface{}{},
-	})
+	if h.repo == nil {
+		c.JSON(http.StatusOK, gin.H{"credentials": []interface{}{}})
+		return
+	}
+	providers, err := h.repo.ListProviders(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	out := make([]gin.H, 0, len(providers))
+	for _, p := range providers {
+		out = append(out, gin.H{
+			"provider_id": p.ID,
+			"name":        p.Name,
+			"type":        p.Type,
+			"driver":      p.Driver,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"credentials": out})
 }
 
 func (h *CredentialHandler) StoreCredential(c *gin.Context) {
@@ -45,18 +61,29 @@ func (h *CredentialHandler) StoreCredential(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"id":         "credential-uuid",
+		"id":         vaultPath,
 		"vault_path": vaultPath,
 		"stored":     true,
 	})
 }
 
 func (h *CredentialHandler) RotateCredential(c *gin.Context) {
-	id := c.Param("id")
+	id := c.Param("id") // vault-path suffix (providerID/keyLabel)
+	path := "providers/" + id
+	existing, err := h.vault.Load(path)
+	if err != nil || existing["api_key"] == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "credential not found"})
+		return
+	}
+	newPath := path + "_rotated"
+	if err := h.vault.Store(newPath, existing); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rotate credential"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"id":       id,
 		"rotated":  true,
-		"new_path": "providers/alpaca/algo_key_v2",
+		"new_path": newPath,
 	})
 }
 

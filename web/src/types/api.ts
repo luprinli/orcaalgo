@@ -435,6 +435,8 @@ export interface Account {
   label: string
   firm: string
   broker_type: string
+  environment: string
+  masked_key: string
   type: string
   is_default: boolean
   halted: boolean
@@ -450,6 +452,9 @@ export interface CreateAccountRequest {
   broker_type: string
   prop_firm_profile_id?: string
   is_default?: boolean
+  environment?: string
+  api_key?: string
+  api_secret?: string
 }
 
 export interface PropFirmProfile {

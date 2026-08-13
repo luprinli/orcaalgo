@@ -10,6 +10,9 @@ type Account struct {
 	UserID            string                 `json:"user_id"`
 	BrokerType        string                 `json:"broker_type"`
 	Name              string                 `json:"name"`
+	Environment       string                 `json:"environment"`
+	VaultPath         string                 `json:"-"`
+	MaskedKey         string                 `json:"masked_key"`
 	PropFirmProfileID string                 `json:"prop_firm_profile_id"`
 	Balance           float64                `json:"balance"`
 	Equity            float64                `json:"equity"`
@@ -34,12 +37,14 @@ type AccountPosition struct {
 
 func (r *Repository) InsertAccount(ctx context.Context, a *Account) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO accounts (id, user_id, broker_type, name, prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())
+		`INSERT INTO accounts (id, user_id, broker_type, name, environment, vault_path, masked_key, prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, now(), now())
 		 ON CONFLICT (id) DO UPDATE SET
-		     broker_type=$3, name=$4, prop_firm_profile_id=$5, balance=$6, equity=$7,
-		     daily_pnl=$8, high_water_mark=$9, is_default=$10, metadata=$11, updated_at=now()`,
-		a.ID, a.UserID, a.BrokerType, a.Name, a.PropFirmProfileID, a.Balance, a.Equity,
+		     broker_type=$3, name=$4, environment=$5, vault_path=$6, masked_key=$7,
+		     prop_firm_profile_id=$8, balance=$9, equity=$10,
+		     daily_pnl=$11, high_water_mark=$12, is_default=$13, metadata=$14, updated_at=now()`,
+		a.ID, a.UserID, a.BrokerType, a.Name, a.Environment, a.VaultPath, a.MaskedKey,
+		a.PropFirmProfileID, a.Balance, a.Equity,
 		a.DailyPnL, a.HighWaterMark, a.IsDefault, a.Metadata,
 	)
 	return err
@@ -48,9 +53,10 @@ func (r *Repository) InsertAccount(ctx context.Context, a *Account) error {
 func (r *Repository) GetAccount(ctx context.Context, id string) (*Account, error) {
 	var a Account
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, COALESCE(user_id, ''), broker_type, name, prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
+		`SELECT id, COALESCE(user_id, ''), broker_type, name, COALESCE(environment, 'paper'), COALESCE(vault_path, ''), COALESCE(masked_key, ''), prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
 		 FROM accounts WHERE id=$1`, id,
-	).Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.PropFirmProfileID, &a.Balance, &a.Equity,
+	).Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.Environment, &a.VaultPath, &a.MaskedKey,
+		&a.PropFirmProfileID, &a.Balance, &a.Equity,
 		&a.DailyPnL, &a.HighWaterMark, &a.IsDefault, &a.Metadata, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
@@ -73,7 +79,7 @@ func (r *Repository) GetDefaultAccount(ctx context.Context) (*Account, error) {
 
 func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, COALESCE(user_id, ''), broker_type, name, prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
+		`SELECT id, COALESCE(user_id, ''), broker_type, name, COALESCE(environment, 'paper'), COALESCE(vault_path, ''), COALESCE(masked_key, ''), prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
 		 FROM accounts ORDER BY is_default DESC, name ASC`,
 	)
 	if err != nil {
@@ -84,7 +90,8 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 	var accounts []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.PropFirmProfileID, &a.Balance, &a.Equity,
+		if err := rows.Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.Environment, &a.VaultPath, &a.MaskedKey,
+			&a.PropFirmProfileID, &a.Balance, &a.Equity,
 			&a.DailyPnL, &a.HighWaterMark, &a.IsDefault, &a.Metadata, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			continue
 		}
@@ -94,7 +101,7 @@ func (r *Repository) ListAccounts(ctx context.Context) ([]Account, error) {
 }
 
 func (r *Repository) ListAccountsByUser(ctx context.Context, userID string) ([]Account, error) {
-	query := `SELECT id, COALESCE(user_id, ''), broker_type, name, prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
+	query := `SELECT id, COALESCE(user_id, ''), broker_type, name, COALESCE(environment, 'paper'), COALESCE(vault_path, ''), COALESCE(masked_key, ''), prop_firm_profile_id, balance, equity, daily_pnl, high_water_mark, is_default, metadata, created_at, updated_at
 		 FROM accounts`
 	args := []interface{}{}
 	if userID != "" {
@@ -112,7 +119,8 @@ func (r *Repository) ListAccountsByUser(ctx context.Context, userID string) ([]A
 	var accounts []Account
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.PropFirmProfileID, &a.Balance, &a.Equity,
+		if err := rows.Scan(&a.ID, &a.UserID, &a.BrokerType, &a.Name, &a.Environment, &a.VaultPath, &a.MaskedKey,
+			&a.PropFirmProfileID, &a.Balance, &a.Equity,
 			&a.DailyPnL, &a.HighWaterMark, &a.IsDefault, &a.Metadata, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			continue
 		}
