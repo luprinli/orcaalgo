@@ -277,6 +277,35 @@ export interface TradeDetail extends TradeSummary {
   highest_price: number
 }
 
+export interface TradeDistribution {
+  total_trades: number
+  winning_trades: number
+  losing_trades: number
+  win_rate_pct: number
+  avg_trade_pnl: number
+  median_trade_pnl: number
+  avg_trade_pnl_pct: number
+  median_trade_pnl_pct: number
+  best_trade: number
+  worst_trade: number
+  avg_trade_duration_hours: number
+  median_trade_duration_hours: number
+  avg_winning_pnl: number
+  avg_losing_pnl: number
+  unique_tickers: number
+}
+
+export interface LLMKey {
+  id: number
+  user_id: string
+  provider: string
+  base_url: string
+  model: string
+  masked_suffix: string
+  created_at?: string
+  updated_at?: string
+}
+
 export interface DailyReturn {
   date: string
   return_pct: number

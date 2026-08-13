@@ -360,3 +360,71 @@ func TestVaR_ReturnsAsPct(t *testing.T) {
 		t.Errorf("VaR should be negative, got %f", v)
 	}
 }
+
+func TestComputeTradeDistribution_Empty(t *testing.T) {
+	c := NewCalculator(0.05)
+	d := c.ComputeTradeDistribution(nil)
+	if d.TotalTrades != 0 || d.UniqueTickers != 0 {
+		t.Errorf("empty distribution should be zero-valued, got %+v", d)
+	}
+}
+
+func TestComputeTradeDistribution_WinLossSplit(t *testing.T) {
+	c := NewCalculator(0.05)
+	trades := []TradeSummary{
+		{Symbol: "SPY", PnL: 100, PnLPct: 1.0, HoldDuration: 60},
+		{Symbol: "QQQ", PnL: -50, PnLPct: -0.5, HoldDuration: 30},
+		{Symbol: "IWM", PnL: 150, PnLPct: 1.5, HoldDuration: 90},
+		{Symbol: "SPY", PnL: -25, PnLPct: -0.25, HoldDuration: 15},
+	}
+	d := c.ComputeTradeDistribution(trades)
+	if d.TotalTrades != 4 || d.WinningTrades != 2 || d.LosingTrades != 2 {
+		t.Errorf("win/loss split wrong: %+v", d)
+	}
+	if math.Abs(d.WinRatePct-50.0) > 1e-9 {
+		t.Errorf("WinRatePct = %f, want 50", d.WinRatePct)
+	}
+	// avg PnL = (100 - 50 + 150 - 25) / 4 = 43.75
+	if math.Abs(d.AvgTradePnL-43.75) > 1e-9 {
+		t.Errorf("AvgTradePnL = %f, want 43.75", d.AvgTradePnL)
+	}
+	// median of sorted [-50, -25, 100, 150] = ( -25 + 100 ) / 2 = 37.5
+	if math.Abs(d.MedianTradePnL-37.5) > 1e-9 {
+		t.Errorf("MedianTradePnL = %f, want 37.5", d.MedianTradePnL)
+	}
+	if math.Abs(d.BestTrade-150.0) > 1e-9 || math.Abs(d.WorstTrade+50.0) > 1e-9 {
+		t.Errorf("best/worst wrong: best=%f worst=%f", d.BestTrade, d.WorstTrade)
+	}
+	if math.Abs(d.AvgWinningPnL-125.0) > 1e-9 || math.Abs(d.AvgLosingPnL+37.5) > 1e-9 {
+		t.Errorf("avg win/loss wrong: win=%f loss=%f", d.AvgWinningPnL, d.AvgLosingPnL)
+	}
+	// durations in minutes -> hours: [1.0, 0.5, 1.5, 0.25]
+	if math.Abs(d.AvgTradeDurationHours-0.8125) > 1e-9 {
+		t.Errorf("AvgTradeDurationHours = %f, want 0.8125", d.AvgTradeDurationHours)
+	}
+	if d.UniqueTickers != 3 {
+		t.Errorf("UniqueTickers = %d, want 3", d.UniqueTickers)
+	}
+}
+
+func TestComputeTradeDistribution_MedianOdd(t *testing.T) {
+	c := NewCalculator(0.05)
+	trades := []TradeSummary{
+		{Symbol: "A", PnL: 10},
+		{Symbol: "B", PnL: 20},
+		{Symbol: "C", PnL: 30},
+	}
+	d := c.ComputeTradeDistribution(trades)
+	if math.Abs(d.MedianTradePnL-20.0) > 1e-9 {
+		t.Errorf("MedianTradePnL = %f, want 20", d.MedianTradePnL)
+	}
+}
+
+func TestComputeTradeDistribution_NoDuration(t *testing.T) {
+	c := NewCalculator(0.05)
+	trades := []TradeSummary{{Symbol: "A", PnL: 10}}
+	d := c.ComputeTradeDistribution(trades)
+	if d.AvgTradeDurationHours != 0 || d.MedianTradeDurationHrs != 0 {
+		t.Errorf("zero-duration trades should yield 0 duration metrics, got %+v", d)
+	}
+}

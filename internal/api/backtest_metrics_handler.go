@@ -15,6 +15,53 @@ import (
 	"github.com/lee-econ/orca-core/internal/metrics"
 )
 
+// loadBacktestTrades unmarshals and normalises the trades of every result row
+// for a backtest id into metrics.TradeSummary. It is the single place the raw
+// backtest.Trade JSON is converted, so the metrics, trades and drill-down
+// handlers do not each re-implement the mapping.
+func (s *Server) loadBacktestTrades(ctx context.Context, id string) ([]metrics.TradeSummary, error) {
+	results, err := s.repo.GetBacktestResults(ctx, id)
+	if err != nil || len(results) == 0 {
+		return nil, errors.New("no backtest results found")
+	}
+
+	var allTrades []metrics.TradeSummary
+	for _, res := range results {
+		if res.Trades == nil {
+			continue
+		}
+		var rawTrades []backtest.Trade
+		if err := json.Unmarshal(res.Trades, &rawTrades); err != nil {
+			continue
+		}
+		for i, bt := range rawTrades {
+			holdDur := 0.0
+			if !bt.EntryTime.IsZero() && !bt.ExitTime.IsZero() {
+				holdDur = bt.ExitTime.Sub(bt.EntryTime).Minutes()
+			}
+			allTrades = append(allTrades, metrics.TradeSummary{
+				ID:           strconv.Itoa(i),
+				Symbol:       bt.Symbol,
+				Side:         bt.Side,
+				Quantity:     bt.Quantity,
+				EntryPrice:   bt.EntryPrice,
+				ExitPrice:    bt.ExitPrice,
+				PnL:          bt.PnL,
+				PnLPct:       bt.PnLPct,
+				EntryTime:    bt.EntryTime,
+				ExitTime:     bt.ExitTime,
+				HoldDuration: holdDur,
+				MAE:          bt.MAE,
+				MFE:          bt.MFE,
+				StrategyID:   bt.StrategyID,
+				ExitReason:   bt.ExitReason,
+				Commission:   bt.BrokerFee,
+			})
+		}
+	}
+	return allTrades, nil
+}
+
 func (s *Server) getBacktestMetrics(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -35,51 +82,28 @@ func (s *Server) getBacktestMetrics(c *gin.Context) {
 	}
 
 	var allEquity []metrics.MetricEquityPoint
-	var allTrades []metrics.TradeSummary
-
 	for _, res := range results {
-		if res.EquityCurve != nil {
-			var rawEquity []backtest.EquityPoint
-			if err := json.Unmarshal(res.EquityCurve, &rawEquity); err == nil {
-				for _, p := range rawEquity {
-					allEquity = append(allEquity, metrics.MetricEquityPoint{
-						Timestamp: p.Time,
-						Equity:    p.Value,
-						Balance:   p.Value,
-						Drawdown:  0,
-					})
-				}
-			}
+		if res.EquityCurve == nil {
+			continue
 		}
-		if res.Trades != nil {
-			var rawTrades []backtest.Trade
-			if err := json.Unmarshal(res.Trades, &rawTrades); err == nil {
-				for i, bt := range rawTrades {
-					holdDur := 0.0
-					if !bt.EntryTime.IsZero() && !bt.ExitTime.IsZero() {
-						holdDur = bt.ExitTime.Sub(bt.EntryTime).Minutes()
-					}
-					allTrades = append(allTrades, metrics.TradeSummary{
-						ID:           strconv.Itoa(i),
-						Symbol:       bt.Symbol,
-						Side:         bt.Side,
-						Quantity:     bt.Quantity,
-						EntryPrice:   bt.EntryPrice,
-						ExitPrice:    bt.ExitPrice,
-						PnL:          bt.PnL,
-						PnLPct:       bt.PnLPct,
-						EntryTime:    bt.EntryTime,
-						ExitTime:     bt.ExitTime,
-						HoldDuration: holdDur,
-MAE:          bt.MAE,
-MFE:          bt.MFE,
-						StrategyID:   bt.StrategyID,
-						ExitReason:   bt.ExitReason,
-						Commission:   bt.BrokerFee,
-					})
-				}
-			}
+		var rawEquity []backtest.EquityPoint
+		if err := json.Unmarshal(res.EquityCurve, &rawEquity); err != nil {
+			continue
 		}
+		for _, p := range rawEquity {
+			allEquity = append(allEquity, metrics.MetricEquityPoint{
+				Timestamp: p.Time,
+				Equity:    p.Value,
+				Balance:   p.Value,
+				Drawdown:  0,
+			})
+		}
+	}
+
+	allTrades, err := s.loadBacktestTrades(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
 	}
 
 	calc := metrics.NewCalculator(0.05)
@@ -105,6 +129,21 @@ MFE:          bt.MFE,
 	snapshot.TotalCommission = totalCommission
 
 	c.JSON(200, snapshot)
+}
+
+func (s *Server) getBacktestTradeDistribution(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "missing backtest ID"})
+		return
+	}
+	trades, err := s.loadBacktestTrades(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+	calc := metrics.NewCalculator(0.05)
+	c.JSON(200, calc.ComputeTradeDistribution(trades))
 }
 
 func (s *Server) getBacktestEquity(c *gin.Context) {
@@ -198,8 +237,8 @@ func (s *Server) getBacktestTrades(c *gin.Context) {
 				ExitReason:       bt.ExitReason,
 				Commission:       bt.BrokerFee,
 				HMMRegime:        bt.HMMRegime,
-				StopPrice:        bt.StopPrice.Float64(),
-				TakePrice:        bt.TakePrice.Float64(),
+				StopPrice:        bt.StopPrice,
+				TakePrice:        bt.TakePrice,
 				SlippageMidBps:   bt.SlippageMidBps,
 				SlippageLastBps:  bt.SlippageLastBps,
 				AdverseSelection: bt.AdverseSelection,
@@ -291,8 +330,8 @@ func (s *Server) getBacktestTradeDetail(c *gin.Context) {
 				ExitReason:       bt.ExitReason,
 				Commission:       bt.BrokerFee,
 				HMMRegime:        bt.HMMRegime,
-				StopPrice:        bt.StopPrice.Float64(),
-				TakePrice:        bt.TakePrice.Float64(),
+				StopPrice:        bt.StopPrice,
+				TakePrice:        bt.TakePrice,
 				SlippageMidBps:   bt.SlippageMidBps,
 				SlippageLastBps:  bt.SlippageLastBps,
 				AdverseSelection: bt.AdverseSelection,

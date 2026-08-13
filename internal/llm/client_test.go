@@ -52,6 +52,36 @@ func TestNewClient_UnknownProvider(t *testing.T) {
 	}
 }
 
+func TestNewClientWithKey_UsesPassedKeyAndBaseURL(t *testing.T) {
+	c := NewClientWithKey(ProviderOpenAI, "sk-byok", "https://proxy.example.com/v1")
+	if c == nil {
+		t.Fatal("Expected non-nil client")
+	}
+	if c.apiKey != "sk-byok" {
+		t.Errorf("Expected sk-byok, got %s", c.apiKey)
+	}
+	if c.baseURL != "https://proxy.example.com/v1" {
+		t.Errorf("Expected custom base URL, got %s", c.baseURL)
+	}
+}
+
+func TestNewClientWithKey_DefaultBaseURL(t *testing.T) {
+	c := NewClientWithKey(ProviderAnthropic, "sk-ant-byok", "")
+	if c.baseURL != "https://api.anthropic.com" {
+		t.Errorf("Expected default anthropic base URL, got %s", c.baseURL)
+	}
+}
+
+func TestNewClientWithKey_EmptyKeyAllowed(t *testing.T) {
+	c := NewClientWithKey(ProviderOllama, "", "")
+	if c.apiKey != "" {
+		t.Errorf("Expected empty key (Ollama is keyless), got %s", c.apiKey)
+	}
+	if c.baseURL != "http://localhost:11434" {
+		t.Errorf("Expected ollama base URL, got %s", c.baseURL)
+	}
+}
+
 func TestChatRequest_Defaults(t *testing.T) {
 	req := &ChatRequest{
 		Model:       "gpt-4",

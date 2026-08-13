@@ -193,6 +193,53 @@ func (c *Calculator) ProfitFactor(trades []TradeSummary) float64 {
 	return grossProfit / grossLoss
 }
 
+// ComputeTradeDistribution derives the per-trade distribution of a backtest's
+// trades. It is pure over the input and independent of the equity curve, so it
+// can be unit-tested without a database. HoldDuration is expected in minutes.
+func (c *Calculator) ComputeTradeDistribution(trades []TradeSummary) TradeDistribution {
+	d := TradeDistribution{TotalTrades: len(trades)}
+	if len(trades) == 0 {
+		return d
+	}
+
+	pnls := make([]float64, 0, len(trades))
+	pnlPcts := make([]float64, 0, len(trades))
+	durations := make([]float64, 0, len(trades))
+	var wins, losses []float64
+	tickers := make(map[string]struct{}, len(trades))
+
+	for _, t := range trades {
+		pnls = append(pnls, t.PnL)
+		pnlPcts = append(pnlPcts, t.PnLPct)
+		if t.HoldDuration > 0 {
+			durations = append(durations, t.HoldDuration/60.0)
+		}
+		tickers[t.Symbol] = struct{}{}
+		if t.PnL > 0 {
+			d.WinningTrades++
+			wins = append(wins, t.PnL)
+		} else if t.PnL < 0 {
+			d.LosingTrades++
+			losses = append(losses, t.PnL)
+		}
+	}
+
+	d.WinRatePct = float64(d.WinningTrades) / float64(len(trades)) * 100.0
+	d.AvgTradePnL = average(pnls)
+	d.MedianTradePnL = median(pnls)
+	d.AvgTradePnlPct = average(pnlPcts)
+	d.MedianTradePnlPct = median(pnlPcts)
+	d.BestTrade = maxValue(pnls)
+	d.WorstTrade = minValue(pnls)
+	d.AvgTradeDurationHours = average(durations)
+	d.MedianTradeDurationHrs = median(durations)
+	d.AvgWinningPnL = average(wins)
+	d.AvgLosingPnL = average(losses)
+	d.UniqueTickers = len(tickers)
+
+	return d
+}
+
 func (c *Calculator) WinRate(trades []TradeSummary) float64 {
 	if len(trades) == 0 {
 		return 0
@@ -362,6 +409,50 @@ func average(values []float64) float64 {
 		sum += v
 	}
 	return sum / float64(len(values))
+}
+
+func median(values []float64) float64 {
+	filtered := make([]float64, 0, len(values))
+	for _, v := range values {
+		if !math.IsNaN(v) && !math.IsInf(v, 0) {
+			filtered = append(filtered, v)
+		}
+	}
+	if len(filtered) == 0 {
+		return 0
+	}
+	sort.Float64s(filtered)
+	mid := len(filtered) / 2
+	if len(filtered)%2 == 0 {
+		return (filtered[mid-1] + filtered[mid]) / 2.0
+	}
+	return filtered[mid]
+}
+
+func maxValue(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	m := values[0]
+	for _, v := range values[1:] {
+		if v > m {
+			m = v
+		}
+	}
+	return m
+}
+
+func minValue(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	m := values[0]
+	for _, v := range values[1:] {
+		if v < m {
+			m = v
+		}
+	}
+	return m
 }
 
 func stddev(values []float64, mean float64) float64 {

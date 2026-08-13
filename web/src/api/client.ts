@@ -4,7 +4,7 @@ import type {
   DeployStrategyRequest, DeployStrategyResponse, PreflightResponse,
   StrategyValidationRequest, StrategyValidationResponse,
   BacktestRequest, BacktestResponse, BacktestMetrics,
-  EquityPoint, TradeSummary, TradeDetail, DailyReturn, MonthlyReturn, RollingMetric,
+  EquityPoint, TradeSummary, TradeDetail, TradeDistribution, DailyReturn, MonthlyReturn, RollingMetric, LLMKey,
   RegimeStat, OptimizationFootprint, WalkForwardResponse, LiveComparisonResponse,
   RiskStatus, PlaceOrderRequest, Order, Position, Account, CreateAccountRequest,
   CandleResponse, LiveMetrics, BacktestHistoryEntry, AppSettings,
@@ -201,6 +201,8 @@ export const backtests = {
     get<{ trades: TradeSummary[] }>(`/api/v1/backtests/${id}/trades?page=${page}&limit=${limit}`),
   tradeDetail: (id: string, tradeId: string) =>
     get<TradeDetail>(`/api/v1/backtests/${id}/trades/${tradeId}`),
+  tradeDistribution: (id: string) =>
+    get<TradeDistribution>(`/api/v1/backtests/${id}/trade-distribution`),
   dailyReturns: (id: string) => get<DailyReturn[]>(`/api/v1/backtests/${id}/daily-returns`),
   monthlyReturns: (id: string) => get<MonthlyReturn[]>(`/api/v1/backtests/${id}/monthly-returns`),
   optimization: (id: string) => get<OptimizationFootprint>(`/api/v1/backtests/${id}/optimization`),
@@ -325,6 +327,13 @@ export const settings = {
   testNotification: () => post<{ success: boolean; message: string }>('/api/v1/settings/notifications/test'),
   testLLM: (provider: string, apiKey: string, baseUrl: string, model: string) =>
     post<{ reachable: boolean; response: string }>('/api/v1/llm/test', { provider, api_key: apiKey, base_url: baseUrl, model }),
+}
+
+export const llm = {
+  listKeys: () => get<{ keys: LLMKey[] }>('/api/v1/llm/keys'),
+  addKey: (data: { provider: string; api_key: string; base_url?: string; model?: string }) =>
+    post<{ provider: string; masked_suffix: string }>('/api/v1/llm/keys', data),
+  deleteKey: (provider: string) => del<{ deleted: boolean }>(`/api/v1/llm/keys/${provider}`),
 }
 
 export const calibrate = {

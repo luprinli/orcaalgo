@@ -22,7 +22,6 @@ import (
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/email"
 	"github.com/lee-econ/orca-core/internal/engine"
-	"github.com/lee-econ/orca-core/internal/llm"
 	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/notify"
 	"github.com/lee-econ/orca-core/internal/propfirm"
@@ -54,6 +53,7 @@ type Server struct {
 	providerHandler     *ProviderHandler
 	symbolHandler       *SymbolHandler
 	credentialHandler   *CredentialHandler
+	llmHandler          *LLMHandler
 	authHandler         *AuthHandler
 	webhookHandler      *WebhookHandler
 	adminHandler        *AdminHandler
@@ -108,6 +108,7 @@ func NewServer(vault risk.VaultProvider, adapter broker.Adapter, ks *risk.KillSw
 		s.providerHandler = NewProviderHandler(repo, vault, hub, brokerReg)
 		s.symbolHandler = NewSymbolHandler(repo)
 		s.credentialHandler = NewCredentialHandler(repo, vault)
+		s.llmHandler = NewLLMHandler(repo, vault)
 		s.webhookHandler = NewWebhookHandlerWithAdapter(adapter)
 		s.adminHandler = NewAdminHandler(repo)
 		s.backtestEngine = backtest.NewEngine(&backtestRepoAdapter{repo})
@@ -197,6 +198,7 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/equity", s.getBacktestEquity)
 		protected.GET("/backtests/:id/trades", s.getBacktestTrades)
 		protected.GET("/backtests/:id/trades/:tradeId", s.getBacktestTradeDetail)
+		protected.GET("/backtests/:id/trade-distribution", s.getBacktestTradeDistribution)
 		protected.GET("/backtests/:id/daily-returns", s.getBacktestDailyReturns)
 		protected.GET("/backtests/:id/monthly-returns", s.getBacktestMonthlyReturns)
 		protected.GET("/backtests/:id/optimization", s.getBacktestOptimization)
@@ -221,10 +223,12 @@ func (s *Server) registerRoutes() {
 		protected.DELETE("/orders", s.cancelAllOrders)
 		protected.GET("/orders", s.listOrders)
 
-		protected.POST("/llm/test", s.testLLM)
-
 		// Start-timing (entry-date sensitivity) analysis (R4)
 		protected.POST("/backtests/start-timing", s.submitStartTiming)
+	}
+
+	if s.llmHandler != nil {
+		s.llmHandler.RegisterRoutes(protected)
 	}
 
 	if s.providerHandler != nil {
@@ -1843,32 +1847,6 @@ func (s *Server) cancelAllOrders(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"cancelled": true})
 }
-
-func (s *Server) testLLM(c *gin.Context) {
-	var req struct {
-		Provider string `json:"provider"`
-		APIKey   string `json:"api_key"`
-		BaseURL  string `json:"base_url"`
-		Model    string `json:"model"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	client := llm.NewClient(llm.Provider(req.Provider))
-	resp, err := client.Chat(&llm.ChatRequest{
-		Model:    req.Model,
-		Messages: []llm.Message{{Role: "user", Content: "ping"}},
-		MaxTokens: 5,
-	})
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"reachable": false, "error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"reachable": true, "model": req.Model, "response": resp.Choices[0].Message.Content})
-}
-
 
 func (s *Server) twoFAValidator() func(username, code string) bool {
 	return func(username, code string) bool {

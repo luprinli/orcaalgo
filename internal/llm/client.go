@@ -49,21 +49,35 @@ type Client struct {
 }
 
 func NewClient(provider Provider) *Client {
-	key := os.Getenv(string(provider) + "_API_KEY")
-	baseURL := ""
-	switch provider {
-	case ProviderOpenAI:
-		baseURL = "https://api.openai.com/v1"
-	case ProviderAnthropic:
-		baseURL = "https://api.anthropic.com"
-	case ProviderOllama:
-		baseURL = "http://localhost:11434"
+	return NewClientWithKey(provider, os.Getenv(string(provider)+"_API_KEY"), "")
+}
+
+// NewClientWithKey builds a client with an explicit API key and base URL
+// (BYOK). An empty base URL falls back to the provider default. This is the
+// constructor used for per-user keys; NewClient remains the env-var fallback
+// for self-hosted/default deployments.
+func NewClientWithKey(provider Provider, key, baseURL string) *Client {
+	if baseURL == "" {
+		baseURL = defaultBaseURL(provider)
 	}
 	return &Client{
 		provider:   provider,
 		apiKey:     key,
 		baseURL:    baseURL,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
+	}
+}
+
+func defaultBaseURL(provider Provider) string {
+	switch provider {
+	case ProviderOpenAI:
+		return "https://api.openai.com/v1"
+	case ProviderAnthropic:
+		return "https://api.anthropic.com"
+	case ProviderOllama:
+		return "http://localhost:11434"
+	default:
+		return ""
 	}
 }
 

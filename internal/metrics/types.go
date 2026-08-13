@@ -28,6 +28,28 @@ type PerformanceSnapshot struct {
 	TotalCommission float64  `json:"total_commission,omitempty"`
 }
 
+// TradeDistribution summarises the per-trade distribution of a backtest's
+// executed trades (median/avg PnL, best/worst, holding duration, win/loss
+// split, breadth). It complements PerformanceSnapshot's risk ratios with the
+// trade-level shape of returns.
+type TradeDistribution struct {
+	TotalTrades            int     `json:"total_trades"`
+	WinningTrades          int     `json:"winning_trades"`
+	LosingTrades           int     `json:"losing_trades"`
+	WinRatePct             float64 `json:"win_rate_pct"`
+	AvgTradePnL            float64 `json:"avg_trade_pnl"`
+	MedianTradePnL         float64 `json:"median_trade_pnl"`
+	AvgTradePnlPct         float64 `json:"avg_trade_pnl_pct"`
+	MedianTradePnlPct      float64 `json:"median_trade_pnl_pct"`
+	BestTrade              float64 `json:"best_trade"`
+	WorstTrade             float64 `json:"worst_trade"`
+	AvgTradeDurationHours  float64 `json:"avg_trade_duration_hours"`
+	MedianTradeDurationHrs float64 `json:"median_trade_duration_hours"`
+	AvgWinningPnL          float64 `json:"avg_winning_pnl"`
+	AvgLosingPnL           float64 `json:"avg_losing_pnl"`
+	UniqueTickers          int     `json:"unique_tickers"`
+}
+
 type MetricEquityPoint struct {
 	Timestamp time.Time `json:"timestamp"`
 	Equity    float64   `json:"equity"`
@@ -53,8 +75,8 @@ type TradeSummary struct {
 	ExitReason       string      `json:"exit_reason"`
 	Commission       float64     `json:"commission"`
 	HMMRegime        int8        `json:"hmm_regime"`
-	StopPrice        float64     `json:"stop_price"`
-	TakePrice        float64     `json:"take_price"`
+	StopPrice        types.Price `json:"stop_price"`
+	TakePrice        types.Price `json:"take_price"`
 	SlippageMidBps   float64     `json:"slippage_mid_bps"`
 	SlippageLastBps  float64     `json:"slippage_last_bps"`
 	AdverseSelection bool        `json:"adverse_selection"`

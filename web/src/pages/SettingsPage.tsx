@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { settings } from '../api/client'
-import type { AppSettings } from '../types/api'
+import { settings, llm } from '../api/client'
+import type { AppSettings, LLMKey } from '../types/api'
 import { PageHeader } from '../components/layout'
 import { Button } from '../components/ui/button'
 import { Badge } from '../components/ui/badge'
@@ -384,6 +384,19 @@ function LLMTab({
   const { t } = useTranslation()
   const [testing, setTesting] = useState(false)
   const [testMsg, setTestMsg] = useState('')
+  const [keys, setKeys] = useState<LLMKey[]>([])
+  const [savingKey, setSavingKey] = useState(false)
+
+  const loadKeys = useCallback(async () => {
+    try {
+      const res = await llm.listKeys()
+      setKeys(res.keys ?? [])
+    } catch {
+      setKeys([])
+    }
+  }, [])
+
+  useEffect(() => { loadKeys() }, [loadKeys])
 
   const updateLLM = (patch: Partial<FullSettings['llm']>) =>
     setCfg(p => applySection(p, 'llm', patch))
@@ -457,6 +470,52 @@ function LLMTab({
                 onChange={e => updateLLM({ temperature: parseFloat(e.target.value) })}
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('llm:storedKeys', 'Stored API Keys (BYOK)')}</CardTitle>
+          <CardDescription>
+            {t('llm:storedKeysDesc', 'Keys are encrypted at rest and shown masked. One key per provider.')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {keys.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('llm:noKeys', 'No stored keys. Save your key below.')}</p>
+          ) : (
+            <div className="space-y-2">
+              {keys.map(k => (
+                <div key={k.provider} className="flex items-center justify-between border rounded p-2">
+                  <div className="text-sm">
+                    <span className="font-medium">{k.provider}</span>
+                    <span className="text-muted-foreground ml-2">{k.masked_suffix}</span>
+                    {k.model && <span className="text-muted-foreground ml-2 text-xs">{k.model}</span>}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={async () => { try { await llm.deleteKey(k.provider); await loadKeys() } catch (e) { setTestMsg(e instanceof Error ? e.message : 'Delete failed') } }}>
+                    {t('common:delete', 'Delete')}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={savingKey || !cfg.llm.api_key}
+              onClick={async () => {
+                setSavingKey(true)
+                try {
+                  await llm.addKey({ provider: cfg.llm.provider, api_key: cfg.llm.api_key, base_url: cfg.llm.endpoint, model: cfg.llm.model })
+                  await loadKeys()
+                } catch (e) {
+                  setTestMsg(e instanceof Error ? e.message : 'Save failed')
+                } finally { setSavingKey(false) }
+              }}
+            >
+              {savingKey ? 'Saving...' : 'Save Key'}
+            </Button>
           </div>
         </CardContent>
       </Card>

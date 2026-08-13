@@ -69,6 +69,7 @@ reports/
 
 # Reference projects (extracted archives)
 .hftbacktest-master/
+docs/stratcraft-master.zip
 
 # Backups
 tmp/
