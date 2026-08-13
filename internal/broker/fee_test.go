@@ -78,3 +78,35 @@ func TestDefaultBrokerageFee_HasAllFields(t *testing.T) {
 		t.Error("TakerFeeBps should be positive")
 	}
 }
+
+func TestCalculateHoldingFee_Basic(t *testing.T) {
+	f := DefaultBrokerageFee()
+	// $10,000 notional held 1 year at 0.08% expense ratio = $8.
+	fee := f.CalculateHoldingFee(10000.0, 0.0008, 1.0)
+	if fee < 7.9 || fee > 8.1 {
+		t.Errorf("Holding fee should be ~8.0, got %f", fee)
+	}
+}
+
+func TestCalculateHoldingFee_ZeroAndNegative(t *testing.T) {
+	f := DefaultBrokerageFee()
+	if fee := f.CalculateHoldingFee(0, 0.001, 1.0); fee != 0 {
+		t.Errorf("Zero notional should return 0, got %f", fee)
+	}
+	if fee := f.CalculateHoldingFee(10000, 0.001, 0); fee != 0 {
+		t.Errorf("Zero yearsHeld should return 0, got %f", fee)
+	}
+	if fee := f.CalculateHoldingFee(10000, -0.001, 1.0); fee != 0 {
+		t.Errorf("Negative ratio should return 0, got %f", fee)
+	}
+	if fee := f.CalculateHoldingFee(-10000, 0.001, 1.0); fee != 0 {
+		t.Errorf("Negative notional should return 0, got %f", fee)
+	}
+}
+
+func TestCalculateHoldingFee_Disabled(t *testing.T) {
+	f := BrokerageFeeConfig{Enabled: false}
+	if fee := f.CalculateHoldingFee(10000, 0.001, 1.0); fee != 0 {
+		t.Errorf("Disabled config should return 0, got %f", fee)
+	}
+}

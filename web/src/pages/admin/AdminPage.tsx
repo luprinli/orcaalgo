@@ -15,7 +15,7 @@ import AlertsTab from './AlertsTab'
 
 export default function AdminPage() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<'health' | 'users' | 'audit' | 'errors' | 'email' | 'seed' | 'models' | 'reconciliation' | 'dataValidate' | 'infrastructure' | 'alerts'>('health')
+  const [tab, setTab] = useState<'health' | 'users' | 'audit' | 'errors' | 'email' | 'seed' | 'models' | 'reconciliation' | 'dataValidate' | 'infrastructure' | 'alerts' | 'jobs' | 'corporate'>('health')
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const [health, setHealth] = useState<any>(null)
   const [systemHealth, setSystemHealth] = useState<any>(null)
@@ -41,6 +41,10 @@ export default function AdminPage() {
   const [reconDate, setReconDate] = useState(new Date().toISOString().slice(0, 10))
   const [reconResult, setReconResult] = useState<Record<string, unknown> | null>(null)
   const [dataValResult, setDataValResult] = useState<any>(null)
+  const [jobs, setJobs] = useState<{ name: string; schedule: string; last_run?: string; last_error?: string }[]>([])
+  const [corpActions, setCorpActions] = useState<{ ticker: string; action_date: string; split_ratio: number; cash_dividend: number }[]>([])
+  const [corpForm, setCorpForm] = useState({ symbol: '', action_date: '', split_ratio: '1.0', cash_dividend: '0' })
+  const [modelList, setModelList] = useState<{ model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; created_at: string }[]>([])
 
   const fetchHealth = useCallback(async () => {
     setLoading(true)
@@ -148,6 +152,8 @@ export default function AdminPage() {
 		dataValidate: t('admin:dataValidate', 'Data Quality'),
 		infrastructure: 'Infrastructure',
 		alerts: 'Alerts',
+		jobs: 'Jobs',
+		corporate: 'Corporate Actions',
 	}
 
   return (
@@ -158,7 +164,7 @@ export default function AdminPage() {
 
       <Tabs value={tab} onValueChange={(v) => { setTab(v as typeof tab); setMsg('') }} className="w-full">
         <TabsList className="mb-4 flex-wrap">
-          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate', 'infrastructure', 'alerts'] as const).map(mt => (
+          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate', 'infrastructure', 'alerts', 'jobs', 'corporate'] as const).map(mt => (
             <TabsTrigger key={mt} value={mt}>{tabLabels[mt]}</TabsTrigger>
           ))}
         </TabsList>
@@ -413,6 +419,96 @@ export default function AdminPage() {
             <Input placeholder="Model Type" value={latestType} onChange={e => setLatestType(e.target.value)} />
             <Button variant="outline" onClick={async () => { try { const r = await models.latest(latestType); setLatestResult(r) } catch (e) { setMsg(String(e)) } }}>Get Latest</Button>
             {latestResult && <pre className="text-xs bg-muted p-2 rounded">{JSON.stringify(latestResult, null, 2)}</pre>}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Registered Models</CardTitle>
+            <Button variant="outline" onClick={async () => { try { const r = await models.list(); setModelList(r.models ?? []) } catch (e) { setMsg(String(e)) } }}>Refresh</Button>
+          </CardHeader>
+          <CardContent>
+            {modelList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No models registered.</p>
+            ) : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Type</TableHead><TableHead>Hash</TableHead><TableHead>Brier</TableHead><TableHead>ROC AUC</TableHead><TableHead>Created</TableHead></TableRow></TableHeader>
+                <TableBody>{modelList.map(m => (
+                  <TableRow key={m.model_hash}>
+                    <TableCell>{m.model_name}</TableCell>
+                    <TableCell>{m.model_type}</TableCell>
+                    <TableCell className="text-xs">{m.model_hash.slice(0, 12)}</TableCell>
+                    <TableCell className="tabular-nums">{m.brier_score?.toFixed(4)}</TableCell>
+                    <TableCell className="tabular-nums">{m.roc_auc?.toFixed(4)}</TableCell>
+                    <TableCell className="text-xs">{m.created_at?.slice(0, 10)}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="jobs">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Background Jobs</CardTitle>
+            <Button variant="outline" onClick={async () => { try { const r = await admin.jobs(); setJobs(r.jobs ?? []) } catch (e) { setMsg(String(e)) } }}>Refresh</Button>
+          </CardHeader>
+          <CardContent>
+            {jobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No jobs registered.</p>
+            ) : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Job</TableHead><TableHead>Schedule</TableHead><TableHead>Last Run</TableHead><TableHead>Last Error</TableHead><TableHead /></TableRow></TableHeader>
+                <TableBody>{jobs.map(j => (
+                  <TableRow key={j.name}>
+                    <TableCell>{j.name}</TableCell>
+                    <TableCell className="text-xs">{j.schedule}</TableCell>
+                    <TableCell className="text-xs">{j.last_run ? new Date(j.last_run).toLocaleString() : '—'}</TableCell>
+                    <TableCell className={`text-xs ${j.last_error ? 'text-trading-danger' : 'text-muted-foreground'}`}>{j.last_error ?? '—'}</TableCell>
+                    <TableCell><Button variant="outline" size="sm" onClick={async () => { try { await admin.runJob(j.name); setMsg(`Ran ${j.name}`); const r = await admin.jobs(); setJobs(r.jobs ?? []) } catch (e) { setMsg(String(e)) } }}>Run</Button></TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="corporate">
+        <Card className="mb-4">
+          <CardHeader><CardTitle>Add Corporate Action</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-3 max-w-[480px]">
+            <div className="grid grid-cols-2 gap-2">
+              <Input placeholder="Symbol" value={corpForm.symbol} onChange={e => setCorpForm(f => ({ ...f, symbol: e.target.value }))} />
+              <Input type="date" value={corpForm.action_date} onChange={e => setCorpForm(f => ({ ...f, action_date: e.target.value }))} />
+              <Input placeholder="Split Ratio (e.g. 0.1 for 10:1)" type="number" step="0.0001" value={corpForm.split_ratio} onChange={e => setCorpForm(f => ({ ...f, split_ratio: e.target.value }))} />
+              <Input placeholder="Cash Dividend" type="number" step="0.0001" value={corpForm.cash_dividend} onChange={e => setCorpForm(f => ({ ...f, cash_dividend: e.target.value }))} />
+            </div>
+            <Button onClick={async () => { try { await admin.upsertCorporateAction({ symbol: corpForm.symbol, action_date: corpForm.action_date, split_ratio: parseFloat(corpForm.split_ratio), cash_dividend: parseFloat(corpForm.cash_dividend) }); setMsg('Corporate action saved'); setCorpForm({ symbol: '', action_date: '', split_ratio: '1.0', cash_dividend: '0' }); const r = await admin.corporateActions(); setCorpActions(r.corporate_actions ?? []) } catch (e) { setMsg(String(e)) } }}>Save</Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Corporate Actions</CardTitle>
+            <Button variant="outline" onClick={async () => { try { const r = await admin.corporateActions(); setCorpActions(r.corporate_actions ?? []) } catch (e) { setMsg(String(e)) } }}>Refresh</Button>
+          </CardHeader>
+          <CardContent>
+            {corpActions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No corporate actions recorded.</p>
+            ) : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Ticker</TableHead><TableHead>Date</TableHead><TableHead>Split Ratio</TableHead><TableHead>Cash Dividend</TableHead></TableRow></TableHeader>
+                <TableBody>{corpActions.map((a, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{a.ticker}</TableCell>
+                    <TableCell>{a.action_date?.slice(0, 10)}</TableCell>
+                    <TableCell className="tabular-nums">{a.split_ratio}</TableCell>
+                    <TableCell className="tabular-nums">{a.cash_dividend}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
       </TabsContent>

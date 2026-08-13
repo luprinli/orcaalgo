@@ -45,7 +45,7 @@ Settings:
   System (/settings)         → SettingsPage — 4 tabs (Trading, Webhooks, Notifications, LLM)
   Integrations (/integrations) → Brokers, Providers & Symbols, Credentials
   Accounts (/accounts)       → Trading accounts + Prop Firm profiles
-  Admin (/admin)             → 9-tab admin: Health, Users, Audit, Errors, Email, Seed, ML Models, Reconciliation, Data Quality
+  Admin (/admin)             → 11-tab admin: Health, Users, Audit, Errors, Email, Seed, ML Models, Reconciliation, Data Quality, Jobs, Corporate Actions
   Emergency (/emergency)     → Mobile-friendly kill-switch (no auth required)
 ```
 
@@ -67,7 +67,7 @@ Still accessible via redirect: `/2fa`, `/propfirm`
 | **CalibratePage** | `/calibrate` | Brier score decomposition, bin stats table, calibration audit runner |
 | **AttributionPage** | `/attribution` | PnL attribution by side/price/edge with Wilson confidence intervals |
 | **SettingsPage** | `/settings` | 4 tabs: Trading (risk params + general), Webhooks, Notifications, LLM |
-| **AdminPage** | `/admin` | 9-tab admin panel: System Health, Users, Audit Log, Error Logs, Email Test, Seed Data, ML Models, Reconciliation, Data Quality. Runtime metrics card added |
+| **AdminPage** | `/admin` | 11-tab admin panel: System Health, Users, Audit Log, Error Logs, Email Test, Seed Data, ML Models (list + register + compare), Reconciliation, Data Quality, Jobs (list + run), Corporate Actions (list + record splits/dividends). Runtime metrics card added |
 | **EmergencyPage** | `/emergency` | Standalone no-auth mobile kill-switch page |
 | **LoginPage** | `/` (unauthenticated) | JWT login with loading state, password visibility toggle, validation, forgot password link, register link |
 | **RegisterPage** | `/register` | New user registration |
@@ -98,7 +98,7 @@ Still accessible via redirect: `/2fa`, `/propfirm`
 
 ### Backtest (`src/components/backtest/`)
 - `OverviewTab` — regime stats, warnings card
-- `TradesTab` — filterable by month, paginated trade list
+- `TradesTab` — filterable by month, paginated trade list, click-to-drill-down (key levels + append-only change history)
 - `OptimizationTab` — optimization footprint display
 - `ComparisonTab` — life vs backtest comparison
 - `MatrixResultsPanel` — streaming results table with sort/filter + "View" detail links

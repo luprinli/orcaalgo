@@ -296,3 +296,41 @@ Key changes agents must preserve:
 - **All 17 matrix strategies are IR-backed.** `configs/strategies/*.gkr.yaml` (18 files) all pass `orca validate`. New strategies require a `.gkr.yaml` before entering the matrix.
 
 Remaining follow-ups (documented, non-blocking): none — API walk-forward wiring, the `rsi_divergence` orphan, and the pairs-runner cointegration proxy have all been resolved. The one open item is a **fresh matrix re-run against real stooq data** (the dev seed's 2-decimal intraday rounding limits grid/ORB realism; see the audit report §11).
+
+## Benchmark-Driven Enhancements (2026-08-13)
+
+Post-benchmark remediation of `docs/StratCraft Benchmark 2026-08-13.md` (cross-system feature benchmark vs. the StratCraft reference) is complete. All 12 recommendations (R1–R12) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
+
+### Anti-overfit scoring (`orca/scoring/`)
+
+- **Layered parameter scoring** (`param_score.py`): percentile-rank core (Sharpe/Calmar/return, blended with verify-window metrics via geometric mean) × exponential drawdown penalty × neighbourhood-stability score (plateau preference, neutral below `min_pool_for_stability=8`) × balance penalty (asymmetric train→validation CAGR degradation). Pure dict-in/dict-out — unit-testable without DB/API.
+- **Template scoring** (`template_score.py`): strategy-family ranking across multiple periods with length/recency weighting and a verification multiplier (0.8×–1.2×) from the best param row's verify metrics.
+- **Ticker split** (`ticker_split.py`): deterministic SHA-256 train/validation split (`SPY`/`QQQ` forced to validation). Stable across processes.
+- **CLI**: `orca score-params <rows.json>` and `orca score-templates <periods.json> [--verify ...]`. The statistical gates (Bonferroni/BH multiple-testing + walk-forward) remain in `orca/sizing/promotion_gate.py`; the new scoring is the *plateau/balance/cross-sectional* layer those gates do not cover.
+
+### Trade drill-down (R10)
+
+- `backtest.Trade.Changes` is an append-only `[]TradeChange` (`{timestamp, field, from, to, reason}`). Recorded via the single `addChange` helper (`trade_change.go`) at entry, initial stop/target set, trailing-stop ratchets, and both exit paths. Serialized into `backtest_results.trades` JSONB — do not mutate a trade outside `addChange` or the change log will desync from field state.
+- `GET /backtests/:id/trades/:tradeId` returns `metrics.TradeDetail` (full `TradeSummary` + changes + reconstructed `lowest_price`/`highest_price` from MAE/MFE). Frontend `TradesTab` rows are clickable → drill-down panel.
+
+### Backtest/live parity & cost modeling
+
+- **ETF expense-ratio modeling (R12)**. `config.ExpenseRatioForTicker`/`ExpenseRatioForAssetClass` map `equity_etf`/`bond_etf`/`commodity_etf` → annual ratios; `broker.BrokerageFeeConfig.CalculateHoldingFee` charges `notional × ratio × yearsHeld`. Wired into **both** engine close paths via the shared `holdingExpenseFee` helper — do not charge expense ratio a second time anywhere.
+- **Engine-vs-live comparison (R6)**. `backtest.ComputeImpliedComparison` (implied slippage, penetration, expense gap) and `MaxEquityDivergencePct` in `live_comparison.go`. The `/backtests/:id/live-comparison` handler now returns honest zero-values (not placeholder constants) when no live trades are linked.
+- **Start-timing analysis (R4)**. `backtest.RunStartTiming` + pure `GenerateStartTimingWindows`; `POST /backtests/start-timing`.
+- **Dispatch summary + limit-fill probability (R11)**. `notify.LimitFillProbability` (uses stdlib `math.Erfc` — no hand-rolled erf), `CalculateCashImpact`, `BuildDispatchSummary` in `dispatch_summary.go`.
+
+### Admin/ops endpoints (R3, R5, R7, R8, R9)
+
+- **Corporate actions (R3)**. `db.UpsertCorporateAction` + `db.ListCorporateActions`; `GET/POST /admin/corporate-actions`; Admin "Corporate Actions" tab.
+- **ML model list (R5)**. `ml.ListModels`; `GET /models`; Admin "ML Models" list table.
+- **Job scheduler (R7)**. `scheduler.ListJobs` + `RunJobNow` (thread-safe `lastRun` map); `GET /admin/jobs`, `POST /admin/jobs/run`; Admin "Jobs" tab. The `Server` now holds the scheduler via `SetScheduler`.
+- **Backtest-cache admin (R8)**. `db.Export/Import/PruneBacktestCache`; `GET /admin/backtest-cache/export`, `POST .../import`, `POST .../prune`.
+- **DB backup/restore (R9)**. `GET /admin/database/backup` (`pg_dump`), `POST /admin/database/restore` (`psql`).
+
+### Preserve these invariants
+
+- **Fee/expense parity**: `holdingExpenseFee` (backtest) is the only place the holding cost is computed. If the paper/live broker gains holding-cost accounting, reuse `BrokerageFeeConfig.CalculateHoldingFee` rather than re-deriving it.
+- **No reimplemented math**: limit-fill probability uses Go stdlib `math.Erfc`; Kelly/Brier/Platt/Wilson/EWMA remain Python-only (HP #1).
+- **Backward compatibility**: all new endpoints are additive; no existing route, schema, or response shape was changed. The `Trade.Changes` field is additive to the serialized trade JSON.
+- **Frontend parity**: every backend change has a matching client method (`web/src/api/client.ts`) and Admin tab or detail panel.

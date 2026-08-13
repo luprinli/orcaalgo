@@ -170,3 +170,31 @@ func SecondaryTicker(ticker string) string {
 	}
 	return u.Pairs[ticker]
 }
+
+// expenseRatioByAssetClass maps a universe asset class to its annual expense
+// ratio (fraction of notional per year). Equities, forex, crypto and index
+// instruments carry zero explicit expense ratio: their cash price already
+// reflects any underlying cost structure. ETF/trust instruments that deduct an
+// expense ratio from NAV are modelled explicitly so long-hold backtests do not
+// understate holding costs (cross-system benchmark parity).
+var expenseRatioByAssetClass = map[string]float64{
+	"equity_etf":    0.0008, // broad equity ETF (SPY/QQQ/IWM)
+	"bond_etf":      0.0010, // bond ETF (TLT)
+	"commodity_etf": 0.0040, // commodity trust (GLD)
+}
+
+// ExpenseRatioForAssetClass returns the annual expense ratio for an asset class,
+// or 0 when the class carries no explicit holding cost.
+func ExpenseRatioForAssetClass(assetClass string) float64 {
+	return expenseRatioByAssetClass[assetClass]
+}
+
+// ExpenseRatioForTicker resolves a canonical ticker to its annual expense ratio
+// via the universe config, returning 0 for unknown tickers or non-ETF classes.
+func ExpenseRatioForTicker(ticker string) float64 {
+	sym, ok := SymbolByTicker(ticker)
+	if !ok {
+		return 0
+	}
+	return ExpenseRatioForAssetClass(sym.AssetClass)
+}

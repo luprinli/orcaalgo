@@ -28,6 +28,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/propfirm"
 	"github.com/lee-econ/orca-core/internal/reactive"
 	"github.com/lee-econ/orca-core/internal/risk"
+	"github.com/lee-econ/orca-core/internal/scheduler"
 	"github.com/lee-econ/orca-core/internal/security"
 	"github.com/lee-econ/orca-core/internal/types"
 	"github.com/lee-econ/orca-core/internal/universe"
@@ -73,6 +74,7 @@ type Server struct {
 	orchestratorHandler    *OrchestratorHandler
 	strategyStatusHandler  *StrategyStatusHandler
 	monitoringHandler      *MonitoringHandler
+	scheduler              *scheduler.Scheduler
 	dataSource            string
 	environment           string
 }
@@ -194,6 +196,7 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/metrics", s.getBacktestMetrics)
 		protected.GET("/backtests/:id/equity", s.getBacktestEquity)
 		protected.GET("/backtests/:id/trades", s.getBacktestTrades)
+		protected.GET("/backtests/:id/trades/:tradeId", s.getBacktestTradeDetail)
 		protected.GET("/backtests/:id/daily-returns", s.getBacktestDailyReturns)
 		protected.GET("/backtests/:id/monthly-returns", s.getBacktestMonthlyReturns)
 		protected.GET("/backtests/:id/optimization", s.getBacktestOptimization)
@@ -219,6 +222,9 @@ func (s *Server) registerRoutes() {
 		protected.GET("/orders", s.listOrders)
 
 		protected.POST("/llm/test", s.testLLM)
+
+		// Start-timing (entry-date sensitivity) analysis (R4)
+		protected.POST("/backtests/start-timing", s.submitStartTiming)
 	}
 
 	if s.providerHandler != nil {
@@ -293,6 +299,14 @@ func (s *Server) registerRoutes() {
 
 		s.strategyStatusHandler = NewStrategyStatusHandler(s.repo)
 		s.strategyStatusHandler.RegisterRoutes(v1)
+	}
+
+	// Scheduler job admin (R7) — list and manually trigger background jobs.
+	adminJobs := v1.Group("/admin/jobs")
+	adminJobs.Use(middleware.AuthMiddleware())
+	{
+		adminJobs.GET("", s.listJobs)
+		adminJobs.POST("/run", s.runJob)
 	}
 
 	s.router.GET("/ws", func(c *gin.Context) {
@@ -376,6 +390,12 @@ func (s *Server) SetNotifyManager(mgr *notify.Manager) {
 
 func (s *Server) SetAuditHandler(h *AuditHandler) {
 	s.auditHandler = h
+}
+
+// SetScheduler wires the background scheduler so its jobs can be listed and
+// triggered manually from the admin UI.
+func (s *Server) SetScheduler(sc *scheduler.Scheduler) {
+	s.scheduler = sc
 }
 
 func (s *Server) SetDataSourceHandler(h *DataSourceHandler) {
@@ -1443,6 +1463,91 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		"equity_curve":  result.EquityCurve,
 		"regime_stats":  result.RegimeStats,
 	})
+}
+
+// listJobs returns the registered scheduler jobs with their schedules and
+// last-run status.
+func (s *Server) listJobs(c *gin.Context) {
+	if s.scheduler == nil {
+		c.JSON(http.StatusOK, gin.H{"jobs": []gin.H{}})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"jobs": s.scheduler.ListJobs()})
+}
+
+// runJob triggers a scheduler job by name immediately.
+func (s *Server) runJob(c *gin.Context) {
+	if s.scheduler == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "scheduler not available"})
+		return
+	}
+	var req struct {
+		Name string `json:"name" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := s.scheduler.RunJobNow(c.Request.Context(), req.Name); err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ran": req.Name})
+}
+
+// submitStartTiming runs the entry-date sensitivity sweep for a strategy.
+func (s *Server) submitStartTiming(c *gin.Context) {
+	var req struct {
+		StrategyID    string   `json:"strategy_id" binding:"required"`
+		Symbols       []string `json:"symbols" binding:"required"`
+		StartDate     string   `json:"start_date" binding:"required"`
+		EndDate       string   `json:"end_date" binding:"required"`
+		HorizonMonths int      `json:"horizon_months"`
+		StepWeeks     int      `json:"step_weeks"`
+		Capital       float64  `json:"capital"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if s.backtestEngine == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "backtest engine not available"})
+		return
+	}
+	startDate, err := time.Parse("2006-01-02", req.StartDate)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_date, use YYYY-MM-DD"})
+		return
+	}
+	endDate, err := time.Parse("2006-01-02", req.EndDate)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_date, use YYYY-MM-DD"})
+		return
+	}
+	if req.Capital <= 0 {
+		req.Capital = 100000.0
+	}
+	ds := s.dataSource
+	if ds == "" {
+		ds = "stooq"
+	}
+
+	samples, err := s.backtestEngine.RunStartTiming(c.Request.Context(), backtest.StartTimingConfig{
+		StrategyID:     req.StrategyID,
+		Symbols:        req.Symbols,
+		StartDate:      startDate,
+		EndDate:        endDate,
+		HorizonMonths:  req.HorizonMonths,
+		StepWeeks:      req.StepWeeks,
+		InitialCapital: req.Capital,
+		DataSource:     ds,
+		Timeframe:      "1d",
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"strategy_id": req.StrategyID, "samples": samples})
 }
 
 func (s *Server) getBacktestRegimeStats(c *gin.Context) {

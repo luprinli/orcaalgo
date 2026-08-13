@@ -19,10 +19,22 @@ func NewModelHandler(repo *db.Repository) *ModelHandler {
 func (h *ModelHandler) RegisterRoutes(router *gin.RouterGroup) {
 	models := router.Group("/models")
 	{
+		models.GET("", h.ListModels)
 		models.POST("/register", h.RegisterModel)
 		models.GET("/compare", h.CompareModel)
 		models.GET("/latest/:type", h.GetLatestModel)
 	}
+}
+
+// ListModels returns all registered models, newest first.
+func (h *ModelHandler) ListModels(c *gin.Context) {
+	ctx := c.Request.Context()
+	records, err := ml.ListModels(ctx, h.repo.Pool())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"models": records})
 }
 
 type registerModelReq struct {

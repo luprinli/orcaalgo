@@ -1,35 +1,44 @@
 package scheduler
 
 import (
+	"context"
 	"testing"
-
-	"github.com/lee-econ/orca-core/internal/monitor"
-	"github.com/lee-econ/orca-core/internal/risk"
 )
 
-func TestScheduler_Registration(t *testing.T) {
-	vault := &risk.EnvVault{}
-	tg := monitor.NewTelegramBot()
-	s := NewScheduler(vault, tg)
+func TestListJobs_And_RunJobNow(t *testing.T) {
+	s := NewScheduler(nil, nil)
+	ran := false
+	s.jobs = append(s.jobs, Job{
+		Name:     "test_job",
+		Schedule: "0 0 * * *",
+		Run: func(ctx context.Context) error {
+			ran = true
+			return nil
+		},
+	})
 
-	if len(s.jobs) != 0 {
-		t.Error("expected empty jobs list initially")
+	jobs := s.ListJobs()
+	if len(jobs) != 1 || jobs[0].Name != "test_job" {
+		t.Fatalf("expected one test_job, got %+v", jobs)
 	}
 
-	s.RegisterKeyRotationJob()
-	if len(s.jobs) != 1 {
-		t.Errorf("expected 1 job, got %d", len(s.jobs))
+	if err := s.RunJobNow(context.Background(), "test_job"); err != nil {
+		t.Fatalf("RunJobNow returned error: %v", err)
+	}
+	if !ran {
+		t.Error("job did not run")
 	}
 
-	s.RegisterDailyHealthJob()
-	if len(s.jobs) != 2 {
-		t.Errorf("expected 2 jobs, got %d", len(s.jobs))
+	// Last-run status should now be populated.
+	jobs = s.ListJobs()
+	if jobs[0].LastRun.IsZero() {
+		t.Error("last run should be recorded")
 	}
+}
 
-	if s.jobs[0].Name != "key_rotation_check" {
-		t.Errorf("expected 'key_rotation_check', got %q", s.jobs[0].Name)
-	}
-	if s.jobs[1].Name != "daily_health" {
-		t.Errorf("expected 'daily_health', got %q", s.jobs[1].Name)
+func TestRunJobNow_UnknownJob(t *testing.T) {
+	s := NewScheduler(nil, nil)
+	if err := s.RunJobNow(context.Background(), "does_not_exist"); err == nil {
+		t.Error("expected error for unknown job")
 	}
 }

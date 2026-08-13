@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -131,6 +133,19 @@ func (h *AdminHandler) RegisterRoutes(router *gin.RouterGroup) {
 		admin.PUT("/users/:id/disable", h.DisableUser)
 		admin.PUT("/users/:id/enable", h.EnableUser)
 		admin.PUT("/users/:id/reset-password", h.AdminResetPassword)
+
+		// Corporate actions (R3)
+		admin.GET("/corporate-actions", h.ListCorporateActions)
+		admin.POST("/corporate-actions", h.UpsertCorporateAction)
+
+		// Backtest cache administration (R8)
+		admin.GET("/backtest-cache/export", h.ExportBacktestCache)
+		admin.POST("/backtest-cache/import", h.ImportBacktestCache)
+		admin.POST("/backtest-cache/prune", h.PruneBacktestCache)
+
+		// Database backup/restore (R9)
+		admin.GET("/database/backup", h.BackupDatabase)
+		admin.POST("/database/restore", h.RestoreDatabase)
 	}
 }
 
@@ -414,4 +429,167 @@ func (h *AdminHandler) GetErrorLogs(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"errors": result})
+}
+
+// ListCorporateActions returns corporate actions for a symbol (or all symbols
+// when no `symbol` query param is provided).
+func (h *AdminHandler) ListCorporateActions(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	symbol := c.Query("symbol")
+	actions, err := h.repo.ListCorporateActions(c.Request.Context(), symbol)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"corporate_actions": actions})
+}
+
+// UpsertCorporateAction records (or updates) a split/dividend event for a symbol.
+func (h *AdminHandler) UpsertCorporateAction(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	var req struct {
+		Symbol       string  `json:"symbol" binding:"required"`
+		ActionDate   string  `json:"action_date" binding:"required"`
+		SplitRatio   float64 `json:"split_ratio"`
+		CashDividend float64 `json:"cash_dividend"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	actionDate, err := time.Parse("2006-01-02", req.ActionDate)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action_date must be YYYY-MM-DD"})
+		return
+	}
+	if req.SplitRatio <= 0 {
+		req.SplitRatio = 1.0
+	}
+	if err := h.repo.UpsertCorporateAction(c.Request.Context(), req.Symbol, db.CorporateAction{
+		ActionDate:   actionDate,
+		SplitRatio:   req.SplitRatio,
+		CashDividend: req.CashDividend,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"upserted": true, "symbol": req.Symbol, "action_date": req.ActionDate})
+}
+
+// ExportBacktestCache returns every cached backtest result row as JSON.
+func (h *AdminHandler) ExportBacktestCache(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	results, err := h.repo.ExportBacktestCache(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"count": len(results), "results": results})
+}
+
+// ImportBacktestCache imports cached result rows, skipping duplicates.
+func (h *AdminHandler) ImportBacktestCache(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	var req struct {
+		Results []db.BacktestResultRecord `json:"results"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	inserted, err := h.repo.ImportBacktestCache(c.Request.Context(), req.Results)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"inserted": inserted, "skipped": len(req.Results) - inserted})
+}
+
+// PruneBacktestCache deletes cached result rows older than a cutoff date.
+func (h *AdminHandler) PruneBacktestCache(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	var req struct {
+		OlderThan string `json:"older_than" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	olderThan, err := time.Parse("2006-01-02", req.OlderThan)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "older_than must be YYYY-MM-DD"})
+		return
+	}
+	removed, err := h.repo.PruneBacktestCache(c.Request.Context(), olderThan)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"removed": removed})
+}
+
+// BackupDatabase streams a pg_dump of the configured database as a SQL download.
+func (h *AdminHandler) BackupDatabase(c *gin.Context) {
+	cfg := db.DefaultConfig()
+	cmd := exec.CommandContext(c.Request.Context(), "pg_dump",
+		"--host", cfg.Host,
+		"--port", strconv.Itoa(cfg.Port),
+		"--username", cfg.User,
+		"--no-owner", "--no-privileges",
+		cfg.Database,
+	)
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+cfg.Password)
+	output, err := cmd.Output()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "pg_dump failed: " + err.Error()})
+		return
+	}
+	c.Header("Content-Disposition", `attachment; filename="orca-backup.sql"`)
+	c.Data(http.StatusOK, "application/sql", output)
+}
+
+// RestoreDatabase applies a SQL dump via psql.
+func (h *AdminHandler) RestoreDatabase(c *gin.Context) {
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "multipart 'file' field required"})
+		return
+	}
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	defer f.Close()
+
+	cfg := db.DefaultConfig()
+	cmd := exec.CommandContext(c.Request.Context(), "psql",
+		"--host", cfg.Host,
+		"--port", strconv.Itoa(cfg.Port),
+		"--username", cfg.User,
+		"--dbname", cfg.Database,
+		"--quiet",
+	)
+	cmd.Env = append(os.Environ(), "PGPASSWORD="+cfg.Password)
+	cmd.Stdin = f
+	if out, err := cmd.CombinedOutput(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "psql restore failed: " + err.Error(), "detail": string(out)})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"restored": true})
 }

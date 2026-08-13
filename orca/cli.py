@@ -1246,5 +1246,70 @@ def backfill_sentiment_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("score-params")
+def score_params_cmd(
+    rows_json: str = typer.Argument(..., help="Path to JSON array of cached backtest parameter rows"),
+    json_output: bool = typer.Option(False, "--json", help="Output scored rows as JSON"),
+) -> None:
+    """Score cached parameter rows with the layered anti-overfit composite.
+
+    Rows are a JSON array of dicts with keys: parameters, sharpe_ratio,
+    calmar_ratio, total_return, trades, max_drawdown_ratio, plus optional
+    verify_* and balance_* metrics. Prints rows sorted by final_score desc.
+    """
+    import json as _json
+
+    from orca.scoring.param_score import score_backtest_parameters
+
+    with open(rows_json, encoding="utf-8") as fh:
+        rows = _json.load(fh)
+    scored = score_backtest_parameters(rows)
+
+    if json_output:
+        typer.echo(_json.dumps(scored, indent=2, default=str))
+        return
+    for r in scored:
+        typer.echo(
+            f"score={r['final_score']:.4f} core={r['core_score']:.4f} "
+            f"stability={r['stability_score']:.3f} ddPenalty={r['drawdown_penalty']:.3f} "
+            f"balance={r['balance_penalty']:.3f} sharpe={r['sharpe_ratio']:.3f} "
+            f"trades={r['trades']} params={r['parameters']}"
+        )
+
+
+@app.command("score-templates")
+def score_templates_cmd(
+    periods_json: str = typer.Argument(..., help="Path to JSON array of per-period template results"),
+    verify_json: str = typer.Option("", "--verify", help="Optional per-template verification metrics JSON"),
+    json_output: bool = typer.Option(False, "--json", help="Output template scores as JSON"),
+) -> None:
+    """Rank strategy templates across periods with a verification multiplier.
+
+    ``periods_json`` is a JSON array of dicts with keys: template, period_months,
+    age_days, training_cagr, validation_cagr, validation_max_drawdown_pct, trades.
+    """
+    import json as _json
+
+    from orca.scoring.template_score import compute_template_scores
+
+    with open(periods_json, encoding="utf-8") as fh:
+        periods = _json.load(fh)
+    verify: dict | None = None
+    if verify_json:
+        with open(verify_json, encoding="utf-8") as fh:
+            verify = _json.load(fh)
+    scores = compute_template_scores(periods, template_verify=verify)
+
+    if json_output:
+        typer.echo(_json.dumps(scores, indent=2, default=str))
+        return
+    for s in scores:
+        typer.echo(
+            f"{s['template']:<24} final={s['final_score_100']:3d} "
+            f"base={s['base_score']:.4f} verifyMult={s['verification_multiplier']:.3f} "
+            f"periods={s['n_periods']}"
+        )
+
+
 if __name__ == "__main__":
     app()

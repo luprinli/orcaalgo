@@ -1078,7 +1078,7 @@ function DetailView({ id, setView, t: tFn }: { id: string; setView: (v: HubView,
               <TabsTrigger value="optimization" className="text-xs">Optimization</TabsTrigger>
             </TabsList>
             <TabsContent value="overview"><OverviewTab regimeStats={regimeStats} /></TabsContent>
-            <TabsContent value="trades"><TradesTab trades={trades} filteredTrades={filteredTrades} filteredMonth={filteredMonth} onClearFilter={() => setFilteredMonth(null)} /></TabsContent>
+            <TabsContent value="trades"><TradesTab backtestId={id} trades={trades} filteredTrades={filteredTrades} filteredMonth={filteredMonth} onClearFilter={() => setFilteredMonth(null)} /></TabsContent>
             <TabsContent value="optimization"><OptimizationTab optimization={optimization} /></TabsContent>
           </Tabs>
         </CardContent>

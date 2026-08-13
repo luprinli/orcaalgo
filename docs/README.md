@@ -8,12 +8,9 @@ Architecture specifications, technical references, and operations guides.
 
 | File | Content |
 |------|---------|
-| `Synthetic Data Generation Best Practices 2026-08-11.md` | Data generation methodology, 5-minute base resampling, validation checklist |
-| `Backtest Readiness Audit matrix_results (7) 2026-08-12.md` | Backtest matrix audit — prior-issue resolution, anomaly catalog, prioritized enhancements (E1–E15), and post-audit implementation status |
-| `Data Quality Fix Plan 2026-08-12.md` | Dev-seed synthetic generator fix plan (2-decimal rounding → full fixed-point unconstrained GBM, aligned with `stooq_synthetic.py`) |
+| `StratCraft Benchmark 2026-08-13.md` | Cross-system feature benchmark (StratCraft vs. OrcaAlgo) — structured catalog, comparison matrix, and the 12 implemented recommendations |
 | `grafana/` | Grafana monitoring dashboard setup, JWT authentication, and CI validation documents |
 | `runbooks/` | Operational runbooks: startup/shutdown, kill-switch, database migrations, incident response |
-| `archive/` | Archived audit reports and historical assessments |
 
 ## Operational Runbooks
 

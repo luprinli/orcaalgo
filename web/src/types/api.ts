@@ -263,6 +263,20 @@ export interface TradeSummary {
   adverse_selection: boolean
 }
 
+export interface TradeChange {
+  timestamp: string
+  field: string
+  from?: string
+  to?: string
+  reason?: string
+}
+
+export interface TradeDetail extends TradeSummary {
+  changes: TradeChange[]
+  lowest_price: number
+  highest_price: number
+}
+
 export interface DailyReturn {
   date: string
   return_pct: number

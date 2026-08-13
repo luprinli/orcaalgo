@@ -77,6 +77,27 @@ result = kelly_with_attenuators(p=0.60, price=0.50, side="yes")
 print(f"Allocation: {result.final_allocation:.2%}")  # 0.50%
 ```
 
+### `orca/scoring/` — Anti-Overfit Parameter & Template Scoring
+
+Layered anti-overfit scoring that complements the walk-forward + multiple-testing gates with the plateau/balance/cross-sectional checks they do not cover.
+
+| Module | Functions | Purpose |
+|--------|-----------|---------|
+| `param_score.py` | `score_backtest_parameters()`, `ParamScoreSettings` | Percentile-rank core × drawdown penalty × neighbourhood-stability (plateau preference) × balance penalty |
+| `template_score.py` | `compute_template_scores()`, `TemplateScoreSettings` | Strategy-family ranking across periods with verification multiplier (0.8×–1.2×) |
+| `ticker_split.py` | `split_tickers()`, `is_training_ticker()` | Deterministic SHA-256 train/validation ticker split (cross-sectional OOS) |
+
+```python
+from orca.scoring.param_score import score_backtest_parameters
+from orca.scoring.template_score import compute_template_scores
+from orca.scoring.ticker_split import split_tickers
+```
+
+```bash
+orca score-params rows.json              # Score cached parameter rows (anti-overfit composite)
+orca score-templates periods.json --verify verify.json
+```
+
 ### `orca/calibration/` — Quarterly Calibration Audit
 
 MECE calibration audit using Brier/Murphy decomposition, per-side segmentation, and Platt scaling.
@@ -192,6 +213,8 @@ orca build-regime-logs [--symbols ...]        # Infer regimes from candle data
 orca ingest-vix                                # Fetch historical VIX
 orca validate-data-integrity                   # Cross-pipeline data integrity
 orca backfill-sentiment [--limit N]            # Historical sentiment backfill
+orca score-params <rows.json>                  # Anti-overfit parameter scoring
+orca score-templates <periods.json> [--verify ...]  # Template-family ranking
 ```
 
 ## Dependencies
@@ -208,7 +231,7 @@ orca backfill-sentiment [--limit N]            # Historical sentiment backfill
 ## Testing
 
 ```bash
-pytest tests/ -v                    # 201 tests
+pytest tests/ -v                    # 616 tests
 pytest tests/guardian/ -v           # Critical path smoke tests
 pytest tests/adversarial/ -v        # Kill-switch resilience tests
 ```

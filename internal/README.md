@@ -64,6 +64,9 @@ Plugin registry pattern with `Adapter` interface.
 | `plausibility.go` | `FlagImplausibleCombos` — matrix plausibility gate (Sharpe/PF/WR ceilings, one-sided fills, sentinel PF, timeframe dedup), surfaced as `MatrixResult.Plausibility` |
 | `light_optimizer.go` | Per-strategy light optimizer with parameter sensitivity report (RunParameterSensitivity) |
 | `multi_metric_gate.go` | Multi-Metric Gate with Default/Lenient/Strict profiles, auto-applied via ApplyGate |
+| `live_comparison.go` | Engine-vs-live comparison: `ComputeImpliedComparison` (implied slippage/penetration/expense gap) + `MaxEquityDivergencePct` |
+| `start_timing.go` | Entry-date sensitivity: `RunStartTiming` + pure `GenerateStartTimingWindows` |
+| `trade_change.go` | Append-only trade lifecycle change log: `TradeChange` + `Trade.addChange` (entry/stop/target/trailing/exit) |
 | `parity_test.go` | Backtest-vs-replay parity: batch/streaming determinism, pipeline signal parity |
 
 **Strategy runners** (`internal/strategy/`):
@@ -106,9 +109,11 @@ PostgreSQL + TimescaleDB access via `pgx/v5`.
 | `repository.go` | Full CRUD: strategies (16 types), symbols, providers, trades, regime logs, candles |
 | `repository_candles.go` | Source+timeframe-aware candle loading: `LoadCandlesFiltered`, `LoadCandlesByTimeframeFiltered`, `SourceValues` (`stooq`→`stooq`/`stooq-resampled`/`stooq-calibrated`), source-priority `DISTINCT ON` loader, provenance (`source`/`generation_id`) on `Candle` |
 | `parameter_version_repo.go` | Parameter version CRUD: upsert, get active, list, activate, deactivate. Backed by `strategy_params_version` table |
+| `corporate_actions.go` | Corporate actions (splits/dividends): `UpsertCorporateAction`, `ListCorporateActions`, `LoadCorporateActions`, `ApplyCorporateActions` (cumulative adjustment factor) |
+| `backtest_cache_admin.go` | Backtest-cache administration: `ExportBacktestCache`, `ImportBacktestCache`, `PruneBacktestCache` |
 | `seeder.go` | Development seed data: strategies, symbols, regime logs |
 | `fixtures.go` | Fixtures: 16 strategies across 4 regimes, 17 Stooq symbols |
-| `migrations/` | 41 SQL migration files (golang-migrate compatible). Latest: `000041_source_bar_identity` (candles unique key includes `source`) |
+| `migrations/` | 42 SQL migration files (golang-migrate compatible). Latest: `000042_corporate_actions` (splits/dividends + cumulative adjustment) |
 
 ### `internal/propfirm/` — Prop Firm Profiles
 
@@ -122,7 +127,7 @@ Vendor-agnostic profile system. Single `Profile` struct supports FTMO, TopStep, 
 
 | File | Purpose |
 |------|---------|
-| `scheduler.go` | Goroutine-based scheduler: VIX fetch (60s), sentiment fetch (3600s), WebSocket risk broadcast (5s), key rotation, daily reset, parameter reoptimization |
+| `scheduler.go` | Goroutine-based scheduler: VIX fetch (60s), sentiment fetch (3600s), WebSocket risk broadcast (5s), key rotation, daily reset, parameter reoptimization. Exposes `ListJobs()` + `RunJobNow()` for the admin UI |
 | `reoptimization.go` | Degradation-triggered daily re-optimization: OOS Sharpe drop >20% or >90d age → light optimizer → version save/activate |
 
 ### `internal/monitor/` — Monitoring & Telemetry
@@ -141,7 +146,20 @@ Vendor-agnostic profile system. Single `Profile` struct supports FTMO, TopStep, 
 | `config.go` | YAML config loader with env override |
 | `strategy_config.go` | Strategy params loader |
 | `feature_flags.go` | Feature flag system |
-| `universe.go` | Canonical 18-symbol universe + pairs map (`Tickers`, `SecondaryTicker`, `TickerToStooq`/`TickerToYahoo`) loaded from `configs/universe.json` |
+| `universe.go` | Canonical 18-symbol universe + pairs map (`Tickers`, `SecondaryTicker`, `TickerToStooq`/`TickerToYahoo`) loaded from `configs/universe.json`, plus `ExpenseRatioForTicker`/`ExpenseRatioForAssetClass` for ETF holding-cost modeling |
+
+### `internal/notify/` — Notification & Dispatch Summaries
+
+| File | Purpose |
+|------|---------|
+| `manager.go` | Multi-channel notifier manager (Telegram, email, WebSocket push) with event routing |
+| `dispatch_summary.go` | Order-dispatch summary: `LimitFillProbability` (stdlib `math.Erfc`), `EstimateSigmaRolling`, `CalculateCashImpact`, `BuildDispatchSummary` |
+
+### `internal/ml/` — ML Model Registry & Inference
+
+| File | Purpose |
+|------|---------|
+| `model_registry.go` | ML model registry: `RegisterModel`, `GetModel`, `GetLatestModel`, `ListModels`, `VerifyModelHash` |
 
 ### `internal/universe/` — Symbol Universe
 

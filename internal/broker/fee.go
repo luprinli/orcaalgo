@@ -1,5 +1,7 @@
 package broker
 
+import "math"
+
 // BrokerageFeeConfig is the single source of truth for commission/fee calculations
 // shared by the backtest engine and paper broker (R3 — docs/backtest_live_parity_audit.md).
 type BrokerageFeeConfig struct {
@@ -76,6 +78,22 @@ func (f BrokerageFeeConfig) CalculateFeeForAssetClass(assetClass string, quantit
 // per-ticker asset classification.
 func (f BrokerageFeeConfig) CalculateFeeForSymbol(symbol string, quantity float64, price float64) float64 {
 	return f.CalculateFeeForAssetClass(AssetClassForSymbol(symbol), quantity, price)
+}
+
+// CalculateHoldingFee computes the time-proportional holding cost (e.g. an ETF
+// expense ratio) for a position of `notional` held for `yearsHeld` years at the
+// given annual `expenseRatio`. It returns 0 for negative, non-finite, or
+// zero-valued inputs (no negative fees, no division-by-zero). This is applied to
+// long positions only; shorts have no expense-ratio analogue in this model.
+func (f BrokerageFeeConfig) CalculateHoldingFee(notional, expenseRatio, yearsHeld float64) float64 {
+	if !f.Enabled || notional <= 0 || expenseRatio <= 0 || yearsHeld <= 0 {
+		return 0
+	}
+	holding := notional * expenseRatio * yearsHeld
+	if math.IsNaN(holding) || math.IsInf(holding, 0) || holding < 0 {
+		return 0
+	}
+	return holding
 }
 
 // AssetClassForSymbol classifies a ticker into a coarse asset class for fee and

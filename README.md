@@ -1,6 +1,6 @@
 ﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
-**Version**: 1.3.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 17 matrix strategies (18 `.gkr.yaml` configs) · **Migrations**: 40
+**Version**: 1.4.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 17 matrix strategies (18 `.gkr.yaml` configs) · **Migrations**: 42
 
 A high-performance algorithmic trading platform purpose-built for **prop firm challenge compliance** (FTMO, TopStep, E8, TFT). Uses a multi-language architecture: **Go** for orchestration and execution, **Python** for strategy IR and canonical mathematics, and **React + TypeScript** for real-time dashboards.
 
@@ -53,6 +53,10 @@ orca attribute --since 90d
 ## Backtest Readiness (2026-08-12)
 
 The matrix backtest pipeline has been remediated per `docs/Backtest Readiness Audit matrix_results (7) 2026-08-12.md`: data loading is source+timeframe aware (`stooq` intraday + `yahoo` daily), the synthetic fallback no longer silently contaminates real-data runs, unknown tickers error, daily-loss/drawdown metrics are computed per-day and ungated for deterministic fields, all 17 matrix strategies are IR-backed (18 validated `.gkr.yaml` configs), and `backtest.FlagImplausibleCombos` gates implausible matrix outputs. A fresh matrix re-run against the seeded 18-symbol database is the remaining verification step before parameter selection or deployment.
+
+## StratCraft Benchmark Remediation (2026-08-13)
+
+All 12 recommendations from the cross-system benchmark (`docs/StratCraft Benchmark 2026-08-13.md`) are implemented: layered anti-overfit parameter scoring + template scoring + ticker split (`orca/scoring/`), trade drill-down with append-only change history, corporate-actions admin, start-timing analysis, ML model listing, job-scheduler web UI, backtest-cache export/import/prune, DB backup/restore, engine-vs-live implied-cost comparison, order-dispatch summary with limit-fill probability, and ETF expense-ratio modeling in backtest fees. See `AGENTS.md` → "Benchmark-Driven Enhancements (2026-08-13)" for the full invariants.
 
 ## Key Features
 
@@ -183,6 +187,8 @@ The matrix backtest pipeline has been remediated per `docs/Backtest Readiness Au
 | `GET` | `/api/v1/backtests/:id` | Get backtest run (summary + full metrics) |
 | `GET` | `/api/v1/backtests/:id/equity` | Backtest equity curve |
 | `GET` | `/api/v1/backtests/:id/trades` | Backtest trades (paginated) |
+| `GET` | `/api/v1/backtests/:id/trades/:tradeId` | Trade drill-down (change history + MAE/MFE levels) |
+| `POST` | `/api/v1/backtests/start-timing` | Entry-date sensitivity (start-timing) analysis |
 | `GET` | `/api/v1/backtests/:id/monthly-returns` | Monthly returns |
 | `GET` | `/api/v1/backtests/:id/regime-stats` | Regime-stratified stats |
 | `GET` | `/api/v1/backtests/:id/optimization` | Optimization footprint |
@@ -200,6 +206,11 @@ The matrix backtest pipeline has been remediated per `docs/Backtest Readiness Au
 | `GET` | `/api/v1/universe/current` | Current symbol universe |
 | `GET` | `/api/v1/settings` | User settings management |
 | `GET` | `/api/v1/admin/users` | User management (admin) |
+| `GET` | `/api/v1/models` | List registered ML models |
+| `GET`/`POST` | `/api/v1/admin/jobs` · `/api/v1/admin/jobs/run` | List and manually trigger scheduler jobs |
+| `GET`/`POST` | `/api/v1/admin/corporate-actions` | List/record corporate actions (splits/dividends) |
+| `GET`/`POST` | `/api/v1/admin/backtest-cache/*` | Backtest-cache export/import/prune |
+| `GET`/`POST` | `/api/v1/admin/database/backup` · `/restore` | Database backup (`pg_dump`) / restore (`psql`) |
 | `GET` | `/ws` | WebSocket connection |
 
 ### WebSocket Events
@@ -265,6 +276,8 @@ orca ingest-vix                       # Fetch historical VIX from Yahoo ^VIX
 orca validate-data-integrity          # Cross-pipeline data integrity validation
 orca backfill-sentiment [--limit N]   # Backfill sentiment from Alternative.me Fear & Greed Index
 orca hmm-train --since 3650d          # Train HMM on historical data
+orca score-params <rows.json>         # Anti-overfit parameter scoring (plateau/balance/verify)
+orca score-templates <periods.json>   # Template-family ranking with verification multiplier
 ```
 
 ## CI/CD Pipeline
@@ -282,9 +295,8 @@ orca hmm-train --since 3650d          # Train HMM on historical data
 
 ## Documentation
 
-- [Senior Quantitative Audit Report 2026-08-02](docs/archive/Senior%20Quantitative%20Audit%20Report%202026-08-02.md) — Full implementation audit: 8 phases, 16 strategies, backtest-live parity, regime activation matrix, risk hardening, walk-forward automation
+- [StratCraft Benchmark 2026-08-13](docs/StratCraft%20Benchmark%202026-08-13.md) — Cross-system feature benchmark (StratCraft vs. OrcaAlgo) and the 12 implemented recommendations
 - [Tech Stack Constitution](AGENTS.md) — Language boundaries, 18 hard prohibitions, cross-language integration rules
-- [Synthetic Data Best Practices](docs/Synthetic%20Data%20Generation%20Best%20Practices%202026-08-11.md) — Data generation methodology and validation
 - [Grafana Setup](docs/grafana/README.md) — Monitoring dashboard setup and CI validation
 - [Runbooks](docs/runbooks/README.md) — Operational runbooks (startup/shutdown, kill-switch, migrations, incident response)
 - [Strategy Configs](configs/strategies/) — GKR IR strategy definitions
@@ -295,4 +307,4 @@ Proprietary. All rights reserved.
 
 ---
 
-*OrcaAlgo v1.3.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware data pipelines, ML-enhanced signal gating, VIX BIGINT storage, block bootstrap Monte Carlo, multiple testing correction, real intraday data (stooq 1h/5m + calibrated synthetic gap-fill, 18-symbol prop-firm universe, 6 timeframes), and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*
+*OrcaAlgo v1.4.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware data pipelines, ML-enhanced signal gating, VIX BIGINT storage, block bootstrap Monte Carlo, multiple testing correction, layered anti-overfit scoring, trade drill-down with change history, real intraday data (stooq 1h/5m + calibrated synthetic gap-fill, 18-symbol prop-firm universe, 6 timeframes), and comprehensive test coverage (Go: 28 packages, Python: 616 tests, TypeScript: 228 unit + 49 e2e)*

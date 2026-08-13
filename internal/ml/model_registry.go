@@ -58,3 +58,24 @@ func VerifyModelHash(ctx context.Context, pool *pgxpool.Pool, expectedHash strin
 	_, err := GetModel(ctx, pool, expectedHash)
 	return err == nil, err
 }
+
+// ListModels returns all registered models, newest first.
+func ListModels(ctx context.Context, pool *pgxpool.Pool) ([]ModelRecord, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT model_hash, model_type, model_name, brier_score, roc_auc, metadata_json, created_at::text
+		 FROM ml_models ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("model registry list: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ModelRecord
+	for rows.Next() {
+		var r ModelRecord
+		if err := rows.Scan(&r.ModelHash, &r.ModelType, &r.ModelName, &r.BrierScore, &r.ROCAUC, &r.Metadata, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

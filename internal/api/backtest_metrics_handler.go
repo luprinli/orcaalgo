@@ -221,6 +221,109 @@ func (s *Server) getBacktestTrades(c *gin.Context) {
 	c.JSON(200, gin.H{"trades": allTrades[start:end], "total": total})
 }
 
+// getBacktestTradeDetail returns the full drill-down for a single trade: all
+// summary fields plus the append-only change history and the reconstructed
+// lowest/highest excursion prices (MAE/MFE levels).
+func (s *Server) getBacktestTradeDetail(c *gin.Context) {
+	id := c.Param("id")
+	tradeID := c.Param("tradeId")
+	if id == "" || tradeID == "" {
+		c.JSON(400, gin.H{"error": "missing backtest ID or trade ID"})
+		return
+	}
+	idx, err := strconv.Atoi(tradeID)
+	if err != nil || idx < 0 {
+		c.JSON(400, gin.H{"error": "invalid trade ID"})
+		return
+	}
+
+	results, err := s.repo.GetBacktestResults(c.Request.Context(), id)
+	if err != nil || len(results) == 0 {
+		c.JSON(404, gin.H{"error": "no backtest results found"})
+		return
+	}
+
+	for _, res := range results {
+		if res.Trades == nil {
+			continue
+		}
+		var rawTrades []backtest.Trade
+		if err := json.Unmarshal(res.Trades, &rawTrades); err != nil {
+			continue
+		}
+		if idx >= len(rawTrades) {
+			continue
+		}
+		bt := rawTrades[idx]
+		holdDur := 0.0
+		if !bt.EntryTime.IsZero() && !bt.ExitTime.IsZero() {
+			holdDur = bt.ExitTime.Sub(bt.EntryTime).Minutes()
+		}
+		low, high := lowestHighestPrice(bt)
+
+		changes := make([]metrics.TradeChange, 0, len(bt.Changes))
+		for _, ch := range bt.Changes {
+			changes = append(changes, metrics.TradeChange{
+				Timestamp: ch.Timestamp,
+				Field:     ch.Field,
+				From:      ch.From,
+				To:        ch.To,
+				Reason:    ch.Reason,
+			})
+		}
+
+		c.JSON(200, metrics.TradeDetail{
+			TradeSummary: metrics.TradeSummary{
+				ID:               strconv.Itoa(idx),
+				Symbol:           bt.Symbol,
+				Side:             bt.Side,
+				Quantity:         bt.Quantity,
+				EntryPrice:       bt.EntryPrice,
+				ExitPrice:        bt.ExitPrice,
+				PnL:              bt.PnL,
+				PnLPct:           bt.PnLPct,
+				EntryTime:        bt.EntryTime,
+				ExitTime:         bt.ExitTime,
+				HoldDuration:     holdDur,
+				MAE:              bt.MAE,
+				MFE:              bt.MFE,
+				StrategyID:       bt.StrategyID,
+				ExitReason:       bt.ExitReason,
+				Commission:       bt.BrokerFee,
+				HMMRegime:        bt.HMMRegime,
+				StopPrice:        bt.StopPrice.Float64(),
+				TakePrice:        bt.TakePrice.Float64(),
+				SlippageMidBps:   bt.SlippageMidBps,
+				SlippageLastBps:  bt.SlippageLastBps,
+				AdverseSelection: bt.AdverseSelection,
+			},
+			Changes:      changes,
+			LowestPrice:  low,
+			HighestPrice: high,
+		})
+		return
+	}
+
+	c.JSON(404, gin.H{"error": "trade not found"})
+}
+
+// lowestHighestPrice reconstructs the absolute lowest and highest price the
+// trade reached, from the MAE/MFE percentages and the entry price.
+func lowestHighestPrice(bt backtest.Trade) (low, high float64) {
+	entry := bt.EntryPrice.Float64()
+	if entry <= 0 {
+		return 0, 0
+	}
+	if bt.Side == "BUY" {
+		low = entry * (1 - bt.MAE/100.0)
+		high = entry * (1 + bt.MFE/100.0)
+	} else {
+		low = entry * (1 - bt.MFE/100.0)
+		high = entry * (1 + bt.MAE/100.0)
+	}
+	return low, high
+}
+
 func (s *Server) getBacktestDailyReturns(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {

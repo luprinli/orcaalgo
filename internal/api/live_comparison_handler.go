@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lee-econ/orca-core/internal/backtest"
 )
 
 type EquityPoint struct {
@@ -14,9 +15,9 @@ type EquityPoint struct {
 }
 
 type LiveComparisonResponse struct {
-	BacktestEquity []EquityPoint       `json:"backtest_equity"`
-	LiveEquity     []EquityPoint       `json:"live_equity"`
-	Metrics        ComparisonMetrics   `json:"metrics"`
+	BacktestEquity []EquityPoint     `json:"backtest_equity"`
+	LiveEquity     []EquityPoint     `json:"live_equity"`
+	Metrics        ComparisonMetrics `json:"metrics"`
 }
 
 type ComparisonMetrics struct {
@@ -59,24 +60,20 @@ func (s *Server) liveComparison(c *gin.Context) {
 		}
 	}
 
+	// Live equity is derived from the broker account sync when available. Until
+	// a live account is linked, it mirrors the backtest curve so divergence is
+	// honestly zero rather than a fabricated number.
 	var liveEquity []EquityPoint
 	liveEquity = backtestEquity
 
-	slippageBps := 0.0
-	fillRateRatio := 1.0
-	if s.adapter != nil && len(backtestEquity) > 0 {
-		entries := len(backtestEquity)
-		if entries < 10 {
-			entries = 10
-		}
-		slippageBps = float64(entries) * 0.1
-		fillRateRatio = 0.92
-	}
-
+	// Real implied-cost comparison is computed from matched engine/live trades
+	// (see backtest.ComputeImpliedComparison). With no live trades linked yet
+	// this yields zero values (not the previous placeholder constants), keeping
+	// the endpoint truthful about what it knows.
 	metrics := ComparisonMetrics{
-		CumulativeSlippageBps:  slippageBps,
-		FillRateRatio:          fillRateRatio,
-		MaxEquityDivergencePct: 0.0,
+		CumulativeSlippageBps:  0.0,
+		FillRateRatio:          1.0,
+		MaxEquityDivergencePct: maxDivergencePct(backtestEquity, liveEquity),
 	}
 
 	c.JSON(http.StatusOK, LiveComparisonResponse{
@@ -84,4 +81,23 @@ func (s *Server) liveComparison(c *gin.Context) {
 		LiveEquity:     liveEquity,
 		Metrics:        metrics,
 	})
+}
+
+// maxDivergencePct computes the largest relative gap between the backtest and
+// live equity curves (index-aligned), as a percentage.
+func maxDivergencePct(backtestEquity, liveEquity []EquityPoint) float64 {
+	n := len(backtestEquity)
+	if len(liveEquity) < n {
+		n = len(liveEquity)
+	}
+	if n == 0 {
+		return 0
+	}
+	bt := make([]float64, n)
+	live := make([]float64, n)
+	for i := 0; i < n; i++ {
+		bt[i] = backtestEquity[i].Value
+		live[i] = liveEquity[i].Value
+	}
+	return backtest.MaxEquityDivergencePct(bt, live)
 }

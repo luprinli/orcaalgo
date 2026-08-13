@@ -60,6 +60,26 @@ type TradeSummary struct {
 	AdverseSelection bool        `json:"adverse_selection"`
 }
 
+// TradeChange is a single append-only mutation in a trade's lifecycle, exposed
+// for the trade drill-down view.
+type TradeChange struct {
+	Timestamp time.Time `json:"timestamp"`
+	Field     string    `json:"field"`
+	From      string    `json:"from,omitempty"`
+	To        string    `json:"to,omitempty"`
+	Reason    string    `json:"reason,omitempty"`
+}
+
+// TradeDetail extends TradeSummary with the full drill-down data: the append-only
+// change history and the reconstructed lowest/highest excursion prices (which
+// mark the MAE/MFE levels alongside entry/stop/target).
+type TradeDetail struct {
+	TradeSummary
+	Changes      []TradeChange `json:"changes"`
+	LowestPrice  float64       `json:"lowest_price"`
+	HighestPrice float64       `json:"highest_price"`
+}
+
 type DailyReturn struct {
 	Date      time.Time `json:"date"`
 	ReturnPct float64   `json:"return_pct"`

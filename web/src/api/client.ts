@@ -4,7 +4,7 @@ import type {
   DeployStrategyRequest, DeployStrategyResponse, PreflightResponse,
   StrategyValidationRequest, StrategyValidationResponse,
   BacktestRequest, BacktestResponse, BacktestMetrics,
-  EquityPoint, TradeSummary, DailyReturn, MonthlyReturn, RollingMetric,
+  EquityPoint, TradeSummary, TradeDetail, DailyReturn, MonthlyReturn, RollingMetric,
   RegimeStat, OptimizationFootprint, WalkForwardResponse, LiveComparisonResponse,
   RiskStatus, PlaceOrderRequest, Order, Position, Account, CreateAccountRequest,
   CandleResponse, LiveMetrics, BacktestHistoryEntry, AppSettings,
@@ -199,13 +199,21 @@ export const backtests = {
   equity: (id: string) => get<EquityPoint[]>(`/api/v1/backtests/${id}/equity`),
   trades: (id: string, page = 1, limit = 100) =>
     get<{ trades: TradeSummary[] }>(`/api/v1/backtests/${id}/trades?page=${page}&limit=${limit}`),
+  tradeDetail: (id: string, tradeId: string) =>
+    get<TradeDetail>(`/api/v1/backtests/${id}/trades/${tradeId}`),
   dailyReturns: (id: string) => get<DailyReturn[]>(`/api/v1/backtests/${id}/daily-returns`),
   monthlyReturns: (id: string) => get<MonthlyReturn[]>(`/api/v1/backtests/${id}/monthly-returns`),
   optimization: (id: string) => get<OptimizationFootprint>(`/api/v1/backtests/${id}/optimization`),
   walkForward: (id: string) =>
     request<WalkForwardResponse>('GET', `/api/v1/backtests/${id}/walk-forward`),
   regimeStats: (id: string) => get<RegimeStat[]>(`/api/v1/backtests/${id}/regime-stats`),
-  liveComparison: (id: string) => get<LiveComparisonResponse>(`/api/v1/backtests/${id}/live-comparison`),
+  liveComparison: (id: string) =>
+    get<LiveComparisonResponse>(`/api/v1/backtests/${id}/live-comparison`),
+  startTiming: (data: { strategy_id: string; symbols: string[]; start_date: string; end_date: string; horizon_months?: number; step_weeks?: number; capital?: number }) =>
+    post<{ strategy_id: string; samples: { start_date: string; end_date: string; total_return_pct: number; sharpe_ratio: number; max_drawdown: number; win_rate: number; num_trades: number }[] }>(
+      '/api/v1/backtests/start-timing',
+      data,
+    ),
   progress: (id: string) => get<{ progress: number; completed: number; total: number; status: string }>(`/api/v1/backtests/${id}/progress`),
   matrixResults: (batchId: string) => get<MatrixResultsResponse>(`/api/v1/backtests/matrix/${batchId}/results`),
   matrixResultsSince: (batchId: string, seq: number) =>
@@ -351,6 +359,42 @@ export const admin = {
   disableUser: (userId: string) => put<{ disabled: boolean }>(`/api/v1/admin/users/${userId}/disable`),
   testEmail: (config: Record<string, any>) => post<{ ok: boolean; error?: string }>('/api/v1/admin/email/test', config),
   saveEmailConfig: (config: Record<string, any>) => put<{ ok: boolean }>('/api/v1/admin/email/config', config),
+  corporateActions: (symbol?: string) =>
+    get<{ corporate_actions: { ticker: string; action_date: string; split_ratio: number; cash_dividend: number }[] }>(
+      `/api/v1/admin/corporate-actions${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`,
+    ),
+  upsertCorporateAction: (data: { symbol: string; action_date: string; split_ratio?: number; cash_dividend?: number }) =>
+    post<{ upserted: boolean }>('/api/v1/admin/corporate-actions', data),
+  backtestCacheExport: () => get<{ count: number; results: unknown[] }>('/api/v1/admin/backtest-cache/export'),
+  backtestCacheImport: (results: unknown[]) =>
+    post<{ inserted: number; skipped: number }>('/api/v1/admin/backtest-cache/import', { results }),
+  backtestCachePrune: (olderThan: string) =>
+    post<{ removed: number }>('/api/v1/admin/backtest-cache/prune', { older_than: olderThan }),
+  dbBackup: async (): Promise<Blob> => {
+    const token = getToken()
+    const res = await fetch('/api/v1/admin/database/backup', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error('Backup failed')
+    return res.blob()
+  },
+  dbRestore: async (file: File) => {
+    const token = getToken()
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch('/api/v1/admin/database/restore', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    return res.json() as Promise<{ restored: boolean }>
+  },
+  jobs: () => get<{ jobs: { name: string; schedule: string; last_run?: string; last_error?: string }[] }>('/api/v1/admin/jobs'),
+  runJob: (name: string) => post<{ ran: string }>('/api/v1/admin/jobs/run', { name }),
 }
 
 export const indicators = {
@@ -394,6 +438,8 @@ export const signals = {
 }
 
 export const models = {
+  list: () =>
+    get<{ models: { model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; created_at: string }[] }>('/api/v1/models'),
   register: (data: { model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; metadata?: Record<string, unknown> }) =>
     post<{ registered: boolean; id: string }>('/api/v1/models/register', data),
   compare: (modelHash: string) =>

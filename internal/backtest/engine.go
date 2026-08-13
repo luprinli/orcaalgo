@@ -35,6 +35,17 @@ const (
 	minTradesForReliable = 20  // minimum trades for statistically meaningful metrics
 )
 
+// holdingExpenseFee computes the time-proportional holding cost (ETF expense
+// ratio) for a long position, so both trade-close paths in the engine charge the
+// same cost without duplicating the logic. Short positions return 0.
+func holdingExpenseFee(cfg BacktestConfig, symbol, side string, notional float64, entry, exit time.Time) float64 {
+	if side != "BUY" || entry.IsZero() || !exit.After(entry) {
+		return 0
+	}
+	yearsHeld := exit.Sub(entry).Hours() / 24.0 / 365.25
+	return cfg.BrokerFee.CalculateHoldingFee(notional, config.ExpenseRatioForTicker(symbol), yearsHeld)
+}
+
 type BacktestConfig struct {
 	StrategyID            string
 	Symbols               []string
@@ -180,6 +191,7 @@ type Trade struct {
 	AdverseSelection bool
 	MAE              float64
 	MFE              float64
+	Changes          []TradeChange `json:"changes,omitempty"`
 	lowestSinceEntry float64
 	highestSinceEntry float64
 }
@@ -738,7 +750,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				continue
 			}
 			if stop, ok := activeStops[sym]; ok && stop.StopType == StopLossTrail {
+				oldStop := stop.StopPrice.Float64()
 				UpdateTrailingStop(stop, candle)
+				if ot := openTrades[sym]; ot != nil && stop.StopPrice.Float64() != oldStop {
+					ot.addChange(candle.Time, "stop", fmt.Sprintf("%.2f", oldStop), fmt.Sprintf("%.2f", stop.StopPrice.Float64()), "trailing")
+				}
 			}
 
 			// ML dynamic exit: adjust stop based on exit urgency model
@@ -829,11 +845,12 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				ot.SlippageBps += simulatedExit.SlippageBps
 				ot.SlippageFillCount++
 
-				commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
-				brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, ot.EntryPrice.Float64()) +
-					config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, exitPrice)
+			commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
+			brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, ot.EntryPrice.Float64()) +
+				config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, exitPrice) +
+				holdingExpenseFee(config, ot.Symbol, ot.Side, ot.EntryPrice.Float64()*fillQty, ot.EntryTime, candle.Time)
 
-			if ot.Side == "BUY" {
+		if ot.Side == "BUY" {
 				ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
 			} else {
 				ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
@@ -843,13 +860,14 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			if clamped {
 				exitReason = "pnl_clamped"
 			}
-				ot.PnLPct = ot.PnL / config.InitialCapital * 100
-				ot.ExitPrice = types.PriceFromFloat(exitPrice)
-				ot.ExitTime = candle.Time
-				ot.Quantity = fillQty
-				ot.HMMRegime = regime
-				ot.ExitReason = exitReason
-				ot.BrokerFee = brokerFee
+			ot.PnLPct = ot.PnL / config.InitialCapital * 100
+			ot.ExitPrice = types.PriceFromFloat(exitPrice)
+			ot.ExitTime = candle.Time
+			ot.Quantity = fillQty
+			ot.HMMRegime = regime
+			ot.ExitReason = exitReason
+			ot.BrokerFee = brokerFee
+			ot.addChange(candle.Time, "exit", fmt.Sprintf("%.2f", ot.EntryPrice.Float64()), fmt.Sprintf("%.2f", exitPrice), exitReason)
 
 				entry := ot.EntryPrice.Float64()
 				if entry > 0 {
@@ -982,6 +1000,13 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				lowestSinceEntry:  entryPrice,
 				highestSinceEntry: entryPrice,
 			}
+			newTrade.addChange(candle.Time, "entry", "", fmt.Sprintf("%.2f", entryPrice), signal.Side)
+			if stopPrice > 0 {
+				newTrade.addChange(candle.Time, "stop", "", fmt.Sprintf("%.2f", stopPrice), "initial")
+			}
+			if takePrice > 0 {
+				newTrade.addChange(candle.Time, "target", "", fmt.Sprintf("%.2f", takePrice), "initial")
+			}
 			openTrades[candle.Symbol] = newTrade
 			pendingAS[candle.Symbol] = newTrade
 			}
@@ -1063,7 +1088,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		}
 		commission := ot.EntryPrice.Float64() * ot.Quantity * config.CommissionBps / 10000.0 * 2
 		brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, ot.EntryPrice.Float64()) +
-			config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, exitPrice)
+			config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, exitPrice) +
+			holdingExpenseFee(config, ot.Symbol, ot.Side, ot.EntryPrice.Float64()*ot.Quantity, ot.EntryTime, lastCandle.Time)
 	if ot.Side == "BUY" {
 		ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
 	} else {
@@ -1080,6 +1106,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		ot.ExitReason = exitReason
 		ot.EndOfData = true
 		ot.BrokerFee = brokerFee
+		ot.addChange(lastCandle.Time, "exit", fmt.Sprintf("%.2f", ot.EntryPrice.Float64()), fmt.Sprintf("%.2f", exitPrice), exitReason)
 
 		entry := ot.EntryPrice.Float64()
 		if entry > 0 {

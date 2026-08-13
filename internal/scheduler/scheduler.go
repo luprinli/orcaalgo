@@ -2,7 +2,9 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,6 +27,17 @@ type Scheduler struct {
 	jobs      []Job
 	ctx       context.Context
 	cancel    context.CancelFunc
+
+	mu        sync.RWMutex
+	lastRun   map[string]JobRunInfo
+}
+
+// JobRunInfo records the most recent manual/automatic execution of a job.
+type JobRunInfo struct {
+	Name      string    `json:"name"`
+	Schedule  string    `json:"schedule"`
+	LastRun   time.Time `json:"last_run,omitempty"`
+	LastError string    `json:"last_error,omitempty"`
 }
 
 type Job struct {
@@ -40,6 +53,7 @@ func NewScheduler(vault risk.VaultProvider, telegram *monitor.TelegramBot) *Sche
 		telegram: telegram,
 		ctx:      ctx,
 		cancel:   cancel,
+		lastRun:  make(map[string]JobRunInfo),
 	}
 }
 
@@ -51,6 +65,7 @@ func NewSchedulerWithFTMO(vault risk.VaultProvider, telegram *monitor.TelegramBo
 		ftmo:     ftmo,
 		ctx:      ctx,
 		cancel:   cancel,
+		lastRun:  make(map[string]JobRunInfo),
 	}
 }
 
@@ -169,6 +184,43 @@ func (s *Scheduler) runJob(job Job) {
 
 func (s *Scheduler) Stop() {
 	s.cancel()
+}
+
+// ListJobs returns the registered jobs with their schedules and last-run status.
+func (s *Scheduler) ListJobs() []JobRunInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]JobRunInfo, 0, len(s.jobs))
+	for _, job := range s.jobs {
+		info := JobRunInfo{Name: job.Name, Schedule: job.Schedule}
+		if lr, ok := s.lastRun[job.Name]; ok {
+			info.LastRun = lr.LastRun
+			info.LastError = lr.LastError
+		}
+		out = append(out, info)
+	}
+	return out
+}
+
+// RunJobNow triggers a job by name immediately (synchronously) and records the
+// outcome. Returns an error if the job is unknown.
+func (s *Scheduler) RunJobNow(ctx context.Context, name string) error {
+	for _, job := range s.jobs {
+		if job.Name != name {
+			continue
+		}
+		err := job.Run(ctx)
+		info := JobRunInfo{Name: job.Name, Schedule: job.Schedule, LastRun: time.Now()}
+		if err != nil {
+			info.LastError = err.Error()
+			slog.Error("manual job run failed", "job", job.Name, "error", err, "component", "scheduler")
+		}
+		s.mu.Lock()
+		s.lastRun[job.Name] = info
+		s.mu.Unlock()
+		return err
+	}
+	return fmt.Errorf("unknown job: %s", name)
 }
 
 // RegisterReoptimizationJob registers a daily parameter re-optimization check.
