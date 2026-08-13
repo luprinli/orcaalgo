@@ -2,12 +2,15 @@ package db
 
 import (
 	"math"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lee-econ/orca-core/internal/config"
+	"github.com/lee-econ/orca-core/internal/synthetic"
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -143,47 +146,29 @@ type BacktestResultSeed struct {
 	NumTrades    int
 }
 
+func symbolsFromUniverseConfig() []SymbolSeed {
+	u, err := config.Load()
+	if err != nil {
+		return nil
+	}
+	symbols := make([]SymbolSeed, 0, len(u.Symbols))
+	for _, s := range u.Symbols {
+		symbols = append(symbols, SymbolSeed{
+			Ticker:    s.Ticker,
+			Exchange:  s.Exchange,
+			AssetType: s.AssetClass,
+			TickSize:  s.TickSize,
+			LotSize:   s.LotSize,
+		})
+	}
+	return symbols
+}
+
 func GenerateSeedData() *SeedData {
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	candles := loadCandlesFromDataDir()
-	symbols := []SymbolSeed{
-		{Ticker: "EURUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "GBPUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "USDJPY", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.001, LotSize: 1000},
-		{Ticker: "USDCHF", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "AUDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "USDCAD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "NZDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000},
-		{Ticker: "US30", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-		{Ticker: "SPX500", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-		{Ticker: "NAS100", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-		{Ticker: "UK100", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-		{Ticker: "GER40", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-		{Ticker: "JPN225", Exchange: "STOOQ", AssetType: "index", TickSize: 1.0, LotSize: 1},
-		{Ticker: "XAUUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
-		{Ticker: "XAGUSD", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
-		{Ticker: "BTCUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
-		{Ticker: "ETHUSD", Exchange: "STOOQ", AssetType: "crypto", TickSize: 0.01, LotSize: 1},
-		{Ticker: "SPY", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "QQQ", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "AAPL", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "MSFT", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "GOOGL", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "META", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "AMZN", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "NVDA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "TSLA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "VOO", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "DIA", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "IWM", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "GLD", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "USO", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-		{Ticker: "CL", Exchange: "STOOQ", AssetType: "commodity", TickSize: 0.01, LotSize: 100},
-		{Ticker: "NQ", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-		{Ticker: "ES", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1},
-		{Ticker: "TLT", Exchange: "STOOQ", AssetType: "stock", TickSize: 0.01, LotSize: 1},
-	}
+	symbols := symbolsFromUniverseConfig()
 
 	return &SeedData{
 		AdminUsers: []AdminUserSeed{
@@ -547,84 +532,105 @@ func generateRegimeLogs(today time.Time, symbols []SymbolSeed) []RegimeLogSeed {
 	return logs
 }
 
+// sessionMinutes returns the trading session length in minutes for a symbol's
+// asset class. Forex and crypto trade continuously (24h); everything else uses
+// the regular US trading session (6.5h = 390 minutes).
+func sessionMinutes(assetClass string) int {
+	switch assetClass {
+	case "forex_major", "forex_minor", "crypto":
+		return 1440
+	default:
+		return 390
+	}
+}
+
 func generateSyntheticCandles(today time.Time, symbols []SymbolSeed) []CandleSeed {
-	basePrices := map[string]float64{
-		"SPY": 580, "QQQ": 480, "AAPL": 220, "MSFT": 440, "GOOGL": 180, "META": 560, "AMZN": 220,
-		"NVDA": 120, "TSLA": 250, "VOO": 530, "DIA": 420, "IWM": 210, "GLD": 220, "USO": 72,
-		"CL": 70, "NQ": 21000, "ES": 6000, "TLT": 88,
-		"EURUSD": 1.08, "GBPUSD": 1.28, "USDJPY": 148, "USDCHF": 0.88, "AUDUSD": 0.66,
-		"USDCAD": 1.36, "NZDUSD": 0.60, "XAUUSD": 2350, "XAGUSD": 28,
-		"BTCUSD": 68000, "ETHUSD": 3400, "US30": 41000, "SPX500": 5900,
-		"NAS100": 21000, "UK100": 8300, "GER40": 21000, "JPN225": 41000,
-	}
-	volMap := map[string]float64{
-		"SPY": 0.008, "QQQ": 0.012, "AAPL": 0.014, "MSFT": 0.011, "GOOGL": 0.013, "META": 0.016,
-		"AMZN": 0.015, "NVDA": 0.025, "TSLA": 0.028, "VOO": 0.008, "DIA": 0.007, "IWM": 0.012,
-		"GLD": 0.009, "USO": 0.015, "CL": 0.018, "NQ": 0.014, "ES": 0.009, "TLT": 0.008,
-		"EURUSD": 0.005, "GBPUSD": 0.006, "USDJPY": 0.007, "USDCHF": 0.005, "AUDUSD": 0.006,
-		"USDCAD": 0.005, "NZDUSD": 0.007, "XAUUSD": 0.010, "XAGUSD": 0.016,
-		"BTCUSD": 0.030, "ETHUSD": 0.035, "US30": 0.007, "SPX500": 0.008,
-		"NAS100": 0.012, "UK100": 0.008, "GER40": 0.010, "JPN225": 0.009,
-	}
+	// Full daily/intraday(1h/4h) window covers the default backtest range.
+	fullStart := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+	// Fine-grained timeframes (5m/15m/30m) are seeded for a recent window only,
+	// mirroring the real stooq pipeline coverage (5m real ≈ 5 months).
+	recentStart := today.AddDate(0, 0, -180)
+
+	// Timeframes keyed by bar length in minutes.
+	coarseTimeframes := map[string]int{"1h": 60, "4h": 240}
+	fineTimeframes := map[string]int{"5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240}
+
 	var out []CandleSeed
-	start := today.AddDate(0, 0, -400)
-	for _, sym := range symbols {
-		base, ok := basePrices[sym.Ticker]
-		if !ok { base = 100 }
-		vol, ok := volMap[sym.Ticker]
-		if !ok { vol = 0.01 }
-		price := base * (0.8 + 0.4*float64(sym.Ticker[0]%97)/97.0)
-		for d := start; !d.After(today); d = d.AddDate(0, 0, 1) {
-			if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday { continue }
-			drift := 0.0001
-			noise := (float64(int(d.Unix()/86400*int64(len(sym.Ticker))%200)-100) / 100.0) * vol
-			price *= 1.0 + drift + noise
-			high := price * (1.0 + vol*0.5)
-			low := price * (1.0 - vol*0.5)
-			open := low + (high-low)*(float64(int(d.Unix()/3600)%100)/100.0)
-			closeP := price
+	for si, sym := range symbols {
+		cal, ok := synthetic.ForTicker(sym.Ticker)
+		if !ok {
+			cal = synthetic.Calibration{BasePrice: 100, SigmaDaily: 0.01}
+		}
+		nSteps := sessionMinutes(sym.AssetType)
+		// Per-symbol deterministic RNG, decoupled from ticker length so symbols
+		// with equal-length tickers no longer receive identical shocks.
+		rng := rand.New(rand.NewPCG(42, uint64(si)+1))
+		price := cal.BasePrice
+
+		for d := fullStart; !d.After(today); d = d.AddDate(0, 0, 1) {
+			if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+				continue
+			}
+			open := price
+			closeP := price * (1.0 + cal.SigmaDaily*rng.NormFloat64())
+			price = closeP
+
+			path := synthetic.IntradayPath(rng, open, closeP, cal.SigmaDaily, nSteps)
+
+			// Daily OHLC is derived from the unconstrained intraday path (free to
+			// break open/close). Full fixed-point precision — no 2-decimal
+			// rounding anywhere.
+			dayHigh, dayLow := open, open
+			for _, p := range path {
+				if p > dayHigh {
+					dayHigh = p
+				}
+				if p < dayLow {
+					dayLow = p
+				}
+			}
+			dayVolume := 1000000 + float64(int(d.Unix()%10000))*100
 			out = append(out, CandleSeed{
 				Symbol: sym.Ticker, Time: d, Timeframe: "1d",
-				Open: types.PriceFromFloat(float64(int(open*100)) / 100),
-				High: types.PriceFromFloat(float64(int(high*100)) / 100),
-				Low:  types.PriceFromFloat(float64(int(low*100)) / 100),
-				Close: types.PriceFromFloat(float64(int(closeP*100)) / 100),
-				Volume: 1000000 + float64(int(d.Unix()%10000))*100,
+				Open: types.PriceFromFloat(open), High: types.PriceFromFloat(dayHigh),
+				Low: types.PriceFromFloat(dayLow), Close: types.PriceFromFloat(closeP),
+				Volume: dayVolume,
 			})
 
-			// Generate intraday sub-bars from the daily OHLC.
-			subBarCounts := map[string]int{"4h": 6, "1h": 24}
-			for tf, n := range subBarCounts {
-				step := closeP - open
-				dailyVol := vol / math.Sqrt(float64(n))
-				prev := open
-				barHi := prev
-				barLo := prev
-				for j := 0; j < n; j++ {
-					t := d.Add(time.Duration(j+1) * (24 * time.Hour / time.Duration(n)))
-					if t.Equal(d) { t = t.Add(time.Second) }
-					noise := (float64(int((d.Unix()+int64(j))*7)%200) - 100) / 100.0 * dailyVol
-					subClose := prev + step/float64(n) + noise*prev
-					if subClose > high { subClose = high*0.995 }
-					if subClose < low { subClose = low*1.005 }
-					subOpen := prev
-					subHigh := math.Max(subOpen, subClose) * (1.0 + dailyVol*0.3)
-					subLow := math.Min(subOpen, subClose) * (1.0 - dailyVol*0.3)
-					if subHigh > high { subHigh = high }
-					if subLow < low { subLow = low }
-					if subHigh < barHi { barHi = subHigh }
-					if subLow > barLo { barLo = subLow }
+			tfs := coarseTimeframes
+			if !d.Before(recentStart) {
+				tfs = fineTimeframes
+			}
+			volPerStep := dayVolume / float64(nSteps)
+			for tf, barMinutes := range tfs {
+				// ceil(nSteps/barMinutes) bars; the final bar may be partial (e.g.
+				// a 30-minute bar closes a 6.5h RTH session).
+				bpd := (nSteps + barMinutes - 1) / barMinutes
+				for j := 0; j < bpd; j++ {
+					start := j * barMinutes
+					end := start + barMinutes
+					if end > nSteps {
+						end = nSteps
+					}
+					seg := path[start:end]
+					bOpen := seg[0]
+					bHigh, bLow := seg[0], seg[0]
+					for _, p := range seg {
+						if p > bHigh {
+							bHigh = p
+						}
+						if p < bLow {
+							bLow = p
+						}
+					}
+					bClose := seg[len(seg)-1]
 					out = append(out, CandleSeed{
-						Symbol: sym.Ticker, Time: t, Timeframe: tf,
-						Open: types.PriceFromFloat(float64(int(subOpen*100)) / 100),
-						High: types.PriceFromFloat(float64(int(subHigh*100)) / 100),
-						Low:  types.PriceFromFloat(float64(int(subLow*100)) / 100),
-						Close: types.PriceFromFloat(float64(int(subClose*100)) / 100),
-						Volume: (1000000 + float64(int(d.Unix()%10000))*100) / float64(n),
+						Symbol: sym.Ticker, Time: d.Add(time.Duration(start) * time.Minute), Timeframe: tf,
+						Open: types.PriceFromFloat(bOpen), High: types.PriceFromFloat(bHigh),
+						Low: types.PriceFromFloat(bLow), Close: types.PriceFromFloat(bClose),
+						Volume: volPerStep * float64(len(seg)),
 					})
-					prev = subClose
 				}
-				_ = barHi; _ = barLo
 			}
 		}
 	}

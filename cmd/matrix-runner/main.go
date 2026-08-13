@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -12,15 +13,18 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/backtest"
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/db"
 )
 
 func main() {
 	optimize := flag.Bool("optimize", false, "Run light optimizer per combo and re-run with optimized params")
 	walkForward := flag.Bool("walk-forward", false, "Run walk-forward validation per combo (trainPct=0.66, nWindows=3)")
+	pipeline := flag.Bool("pipeline", false, "Wire the RiskPipeline for per-signal gating (default: inline sizing fallback, matching the frontend matrix)")
+	dataSource := flag.String("data-source", "stooq", "Data source for candles (stooq | yahoo | synthetic)")
 	flag.Parse()
 
-	cfg := db.Config{Host: "localhost", Port: 5432, User: "artisan", Password: "", Database: "artisan", SSLMode: "disable", PoolMax: 3, PoolMin: 1}
+	cfg := db.DefaultConfig()
 	repo, err := db.NewRepository(cfg)
 	if err != nil {
 		log.Fatalf("connect: %v", err)
@@ -37,10 +41,22 @@ func main() {
 	today := time.Now().UTC().Truncate(24 * time.Hour)
 	start := today.AddDate(-1, 0, 0)
 	end := today
+	// Honor explicit window overrides (set by scripts/run-matrix.ps1). Walk-
+	// forward needs a multi-year window, so MATRIX_START/MATRIX_END matter here.
+	if s := os.Getenv("MATRIX_START"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			start = t
+		}
+	}
+	if s := os.Getenv("MATRIX_END"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			end = t
+		}
+	}
 
-	symbols := envList("MATRIX_SYMBOLS", []string{"SPY", "QQQ", "AAPL", "MSFT", "GOOGL", "META", "AMZN", "NVDA", "TSLA", "VOO", "DIA", "IWM", "GLD", "USO", "CL", "NQ", "ES", "EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD", "XAUUSD", "XAGUSD", "BTCUSD", "ETHUSD", "US30", "SPX500", "NAS100", "UK100", "GER40", "JPN225", "TLT"})
-	strategies := envList("MATRIX_STRATEGIES", []string{"grid_trading", "trend_following", "session_scalp", "intraday_mr", "mean_reversion", "vwap_mr", "opening_range_breakout", "orb_15m", "pairs_trading", "volatility_harvesting", "dragon_trend", "volume_scalp", "vix_futures_carry", "ma_crossover", "rsi2_reversion", "rsi_divergence", "donchian_breakout", "keltner_macd", "ichimoku_cloud"})
-	timeframes := []string{"5m", "15m", "30m", "1h", "4h", "1d"}
+	symbols := envList("MATRIX_SYMBOLS", configDefaultTickers())
+	strategies := envList("MATRIX_STRATEGIES", configDefaultStrategies())
+	timeframes := configDefaultTimeframes()
 
 	total := len(strategies) * len(symbols) * len(timeframes)
 	fmt.Printf("Matrix: %d combos (%d strategies x %d symbols x %d timeframes)\n", total, len(strategies), len(symbols), len(timeframes))
@@ -62,7 +78,7 @@ func main() {
 	defer f.Close()
 	w := csv.NewWriter(f)
 
-	header := []string{"Strategy", "Symbol", "Tf", "Trades", "Wins", "Losses", "Sharpe", "Sortino", "MaxDD%", "Return%", "WinRate", "ProfitFactor", "AvgWin", "AvgLoss", "LongTrades", "ShortTrades", "LongWinRate", "ShortWinRate", "LongGrossPnL", "ShortGrossPnL", "LongPF", "ShortPF", "MFE", "MAE", "GatePassed", "Optimized", "TrainPct", "Params", "Reliable", "TotalFees", "AvgSlippageBps", "CalmarRatio", "CandleCount", "Status", "MtmMaxDD%", "MtmSharpe", "FirstCandle", "LastCandle", "SigAttempts", "SigPassed", "PipelineRej", "VolHaltRej", "MLRejected", "DeclaredBPD", "EffectiveBPD", "Warnings"}
+	header := []string{"Strategy", "Symbol", "Tf", "Trades", "Wins", "Losses", "Sharpe", "Sortino", "MaxDD%", "Return%", "WinRate", "ProfitFactor", "AvgWin", "AvgLoss", "LongTrades", "ShortTrades", "LongWinRate", "ShortWinRate", "LongGrossPnL", "ShortGrossPnL", "LongPF", "ShortPF", "MFE", "MAE", "GatePassed", "Optimized", "TrainPct", "Params", "Reliable", "TotalFees", "AvgSlippageBps", "CalmarRatio", "CandleCount", "Status", "MtmMaxDD%", "MtmSharpe", "FirstCandle", "LastCandle", "SigAttempts", "SigPassed", "PipelineRej", "VolHaltRej", "MLRejected", "DeclaredBPD", "EffectiveBPD", "Warnings", "DataGenID"}
 	if *walkForward {
 		header = append(header, "WfISSharpe", "WfOOSSharpe", "WfPassedWindows", "WfTotalWindows", "WfReturnPct")
 	}
@@ -78,7 +94,7 @@ func main() {
 				config := backtest.BacktestConfig{
 					StrategyID: s, Symbols: []string{sym},
 					StartDate: start, EndDate: end, InitialCapital: 100000,
-					Timeframe: tf, DataSource: "", SizingPercent: 0.05, KellyFraction: 0.50,
+					Timeframe: tf, DataSource: *dataSource, SizingPercent: 0.02, KellyFraction: 0.25,
 					WarmUpBars: 50,
 					ApplyGate:  true,
 					GateProfile: "research",
@@ -93,13 +109,15 @@ func main() {
 					if optResult != nil {
 						config.StrategyParams = optResult
 						optimized = true
-						params = fmt.Sprintf("%v", optResult)
+						params = jsonParams(optResult)
 					}
 				}
 
-				engine := backtest.NewEngine(dbAdapter)
+			engine := backtest.NewEngine(dbAdapter)
+			if *pipeline {
 				engine.WirePipeline()
-				result, err := engine.Run(ctx, config)
+			}
+			result, err := engine.Run(ctx, config)
 				n := atomic.AddInt64(&completed, 1)
 
 				if err != nil {
@@ -114,7 +132,7 @@ func main() {
 						fmt.Sprintf("error: %v", err),
 						"N/A", "N/A", "N/A", "N/A",
 						"0", "0", "0", "0", "0",
-						"N/A", "N/A", "",
+						"N/A", "N/A", "", "",
 					}
 					if *walkForward {
 						errRow = append(errRow, "N/A", "N/A", "0", "0", "N/A")
@@ -123,7 +141,7 @@ func main() {
 					continue
 				}
 
-				if *walkForward && (optimized || len(result.StrategyParams) > 0) {
+				if *walkForward && (optimized || len(result.StrategyParams) > 0 || (result.NumTrades >= 20 && result.SharpeRatio > 0)) {
 					wfConfig := config
 					if len(result.StrategyParams) > 0 {
 						wfConfig.StrategyParams = result.StrategyParams
@@ -139,9 +157,8 @@ func main() {
 					status = "zero_trades"
 				}
 
-				if !optimized && len(result.StrategyParams) > 0 {
-					optimized = true
-					params = fmt.Sprintf("%v", result.StrategyParams)
+				if params == "" && len(result.StrategyParams) > 0 {
+					params = jsonParams(result.StrategyParams)
 				}
 				gate := "false"
 				if result.MetricGateStatus != nil {
@@ -178,7 +195,7 @@ func main() {
 				row := []string{s, sym, tf,
 					fmt.Sprintf("%d", result.NumTrades), fmt.Sprintf("%d", result.NumWins), fmt.Sprintf("%d", result.NumLosses),
 					sharpe, sortino,
-					fmt.Sprintf("%.2f", result.MaxDrawdown*100), fmt.Sprintf("%.2f", result.TotalReturnPct),
+					fmt.Sprintf("%.2f", result.MaxDrawdown), fmt.Sprintf("%.2f", result.TotalReturnPct),
 					fmt.Sprintf("%.4f", result.WinRate), profitFactor,
 					fmt.Sprintf("%.2f", result.AvgWin), fmt.Sprintf("%.2f", result.AvgLoss),
 					fmt.Sprintf("%d", result.LongShort.LongTrades), fmt.Sprintf("%d", result.LongShort.ShortTrades),
@@ -190,7 +207,7 @@ func main() {
 					fmt.Sprintf("%.2f", result.TotalFees), fmt.Sprintf("%.4f", result.AvgSlippageBps),
 					fmt.Sprintf("%.4f", result.CalmarRatio), fmt.Sprintf("%d", result.CandleCount),
 					status,
-					fmt.Sprintf("%.2f", result.MtmMaxDrawdown*100),
+					fmt.Sprintf("%.2f", result.MtmMaxDrawdown),
 					fmt.Sprintf("%.4f", result.MtmSharpeRatio),
 					result.FirstCandleTime.Format("2006-01-02"),
 					result.LastCandleTime.Format("2006-01-02"),
@@ -202,6 +219,7 @@ func main() {
 					fmt.Sprintf("%.1f", result.DeclaredBarsPerDay),
 					fmt.Sprintf("%.1f", result.EffectiveBarsPerDay),
 					warningsStr,
+					result.DataGenerationID,
 				}
 
 				if *walkForward {
@@ -267,6 +285,31 @@ func runWalkForwardCombo(ctx context.Context, db backtest.Database, baseCfg back
 	return result
 }
 
+func configDefaultTickers() []string {
+	if u, err := config.Load(); err == nil {
+		tickers := make([]string, len(u.Symbols))
+		for i, s := range u.Symbols {
+			tickers[i] = s.Ticker
+		}
+		return tickers
+	}
+	return []string{"SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "IWM", "GLD", "TLT", "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "BTC-USD", "ETH-USD", "^_US", "^DAX"}
+}
+
+func configDefaultStrategies() []string {
+	if u, err := config.Load(); err == nil && len(u.Strategies) > 0 {
+		return u.Strategies
+	}
+	return []string{"grid_trading", "trend_following", "session_scalp", "intraday_mr", "vwap_mr", "opening_range_breakout", "orb_15m", "pairs_trading", "volatility_harvesting", "dragon_trend", "volume_scalp", "vix_futures_carry", "ma_crossover", "rsi2_reversion", "donchian_breakout", "keltner_macd", "ichimoku_cloud"}
+}
+
+func configDefaultTimeframes() []string {
+	if u, err := config.Load(); err == nil && len(u.Timeframes) > 0 {
+		return u.Timeframes
+	}
+	return []string{"5m", "15m", "30m", "1h", "4h", "1d"}
+}
+
 func envList(key string, defaults []string) []string {
 	if v := os.Getenv(key); v != "" {
 		var out []string
@@ -303,4 +346,15 @@ func trim(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// jsonParams serializes a params map as compact JSON so the `Params` CSV column
+// is machine-parseable. The CI Kelly scan (validate-matrix.ps1) matches the
+// JSON form `"kelly_fraction":0.25`; Go's `%v` map formatting would not.
+func jsonParams(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

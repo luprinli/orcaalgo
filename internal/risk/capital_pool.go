@@ -144,7 +144,12 @@ func (c *CapitalPoolManager) RequestCapital(ctx context.Context, req CapitalRequ
 	}
 
 	if c.state != nil {
-		if propfirm.DailyLossExceeded(c.state.StartingBalance, c.poolState.TotalBalance, p.MaxDailyLossPct) {
+		// Daily loss is measured from the day's opening balance (TotalBalance
+		// minus today's PnL), NOT from the inception StartingBalance — otherwise
+		// the check degrades into a cumulative-loss-from-inception halt and the
+		// daily reset becomes meaningless (parity with PropFirmEnforcer).
+		dayStart := c.poolState.TotalBalance - c.poolState.DailyPnL
+		if dayStart > 0 && propfirm.DailyLossExceeded(dayStart, c.poolState.TotalBalance, p.MaxDailyLossPct) {
 			return CapitalResult{ApprovedSize: 0, Reason: "daily_loss_limit"}
 		}
 	}

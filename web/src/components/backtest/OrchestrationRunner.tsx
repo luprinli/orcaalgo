@@ -16,11 +16,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../ui/select"
 import { FrictionToggle } from "../orchestration/FrictionToggle"
-import { orchestrator, strategies as strategiesApi } from "../../api/client"
+import { orchestrator, strategies as strategiesApi, symbols as symbolsApi } from "../../api/client"
 import OrchMatrixResultsPanel from "./OrchMatrixResultsPanel"
 import { useCacheStore } from "../../stores/cacheStore"
 import type { OrchestrationSubmitRequest, Strategy } from "../../types/api"
-import { SYMBOL_OPTIONS, TIMEFRAME_OPTIONS, POLL_INTERVALS } from "../../data/constants"
+import { TIMEFRAME_OPTIONS, POLL_INTERVALS } from "../../data/constants"
 
 interface StrategyRow {
   strategy_id: string
@@ -47,9 +47,10 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
         if (Array.isArray(parsed) && parsed.length > 0) return parsed as StrategyRow[]
       }
     } catch { /* ignore */ }
-    return [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }]
+    return [{ strategy_id: "", symbol: "", timeframe: "4h" }]
   })
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
+  const [availableSymbols, setAvailableSymbols] = useState<string[]>([])
   const [startDate, setStartDate] = useState("2024-01-01")
   const [endDate, setEndDate] = useState("2025-12-31")
   const [capital, setCapital] = useState("100000")
@@ -64,7 +65,7 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
   const [error, setError] = useState<string | null>(null)
   const [matrixMode, setMatrixMode] = useState(false)
   const [matrixSets, setMatrixSets] = useState<StrategyRow[][]>(() => [
-    [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }],
+    [{ strategy_id: "", symbol: "", timeframe: "4h" }],
   ])
   const [matrixResults, setMatrixResults] = useState<any[]>([])
   const [matrixTelemetry, setMatrixTelemetry] = useState<any>(null)
@@ -88,8 +89,19 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
       })
   }, [])
 
+  useEffect(() => {
+    cacheStore.fetchSymbols(() =>
+      (symbolsApi.list() as Promise<unknown>).then((r: unknown) => {
+        const data = r as { symbols?: { ticker: string }[] }
+        return (data.symbols || []).map((s: { ticker: string }) => s.ticker)
+      })
+    )
+      .then(syms => { if (syms.length > 0) setAvailableSymbols(syms) })
+      .catch(() => {})
+  }, [])
+
   const addRow = useCallback(() => {
-    setStrategyRows((prev) => [...prev, { strategy_id: "", symbol: "SPX500", timeframe: "4h" }])
+    setStrategyRows((prev) => [...prev, { strategy_id: "", symbol: "", timeframe: "4h" }])
   }, [])
 
   const removeRow = useCallback((index: number) => {
@@ -101,12 +113,13 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
   }, [])
 
   const fillRecommended = useCallback(() => {
+    const s = availableSymbols
     setStrategyRows([
-      { strategy_id: "grid_trading", symbol: "SPX500", timeframe: "4h" },
-      { strategy_id: "grid_trading", symbol: "JPN225", timeframe: "1h" },
-      { strategy_id: "rsi2_reversion", symbol: "JPN225", timeframe: "1h" },
+      { strategy_id: "grid_trading", symbol: s[0] || "", timeframe: "4h" },
+      { strategy_id: "grid_trading", symbol: s[1] || s[0] || "", timeframe: "1h" },
+      { strategy_id: "rsi2_reversion", symbol: s[0] || "", timeframe: "1h" },
     ])
-  }, [])
+  }, [availableSymbols])
 
   const handleSubmit = useCallback(async () => {
     setLoading(true)
@@ -195,11 +208,11 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
   }, [matrixSets, startDate, endDate, capital, rebalanceBars, kellyFraction, maxPositionPct, frictionModel])
 
   const addMatrixSet = useCallback(() => {
-    setMatrixSets(prev => [...prev, [{ strategy_id: "", symbol: "SPX500", timeframe: "4h" }]])
+    setMatrixSets(prev => [...prev, [{ strategy_id: "", symbol: "", timeframe: "4h" }]])
   }, [])
 
   const addMatrixRow = useCallback((setIdx: number) => {
-    setMatrixSets(prev => prev.map((set, i) => i === setIdx ? [...set, { strategy_id: "", symbol: "JPN225", timeframe: "1h" }] : set))
+    setMatrixSets(prev => prev.map((set, i) => i === setIdx ? [...set, { strategy_id: "", symbol: "", timeframe: "1h" }] : set))
   }, [])
 
   const removeMatrixRow = useCallback((setIdx: number, rowIdx: number) => {
@@ -235,7 +248,7 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
               <Select value={row.symbol} onValueChange={(v: string) => updateRow(index, "symbol", v)}>
                 <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {SYMBOL_OPTIONS.map((s) => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                  {availableSymbols.map((s) => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={row.timeframe} onValueChange={(v: string) => updateRow(index, "timeframe", v)}>
@@ -362,7 +375,7 @@ export default function OrchestrationRunner({ onSubmit, initialRows }: Orchestra
                     </Select>
                     <Select value={row.symbol} onValueChange={(v: string) => updateMatrixRow(setIdx, rowIdx, "symbol", v)}>
                       <SelectTrigger className="w-20 h-7 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{SYMBOL_OPTIONS.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}</SelectContent>
+                      <SelectContent>{availableSymbols.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}</SelectContent>
                     </Select>
                     <Select value={row.timeframe} onValueChange={(v: string) => updateMatrixRow(setIdx, rowIdx, "timeframe", v)}>
                       <SelectTrigger className="w-16 h-7 text-xs"><SelectValue /></SelectTrigger>

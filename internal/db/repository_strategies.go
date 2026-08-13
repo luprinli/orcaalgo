@@ -143,6 +143,25 @@ func (r *Repository) SeedSymbols(ctx context.Context) error {
 			return fmt.Errorf("seed symbol %s: %w", s.Ticker, err)
 		}
 	}
+	// Deactivate any active symbol whose (ticker, exchange) pair is not part of
+	// the canonical universe. This removes both stale tickers (e.g. legacy
+	// GOOGL/AMZN/ES/NQ/CL or misnamed BTCUSD/ETHUSD) and duplicate rows created
+	// by an earlier seed that used a different exchange label for the same ticker.
+	values := make([]string, 0, len(DefaultSymbols))
+	args := make([]interface{}, 0, len(DefaultSymbols)*2)
+	for i, s := range DefaultSymbols {
+		values = append(values, fmt.Sprintf("($%d, $%d)", i*2+1, i*2+2))
+		args = append(args, s.Ticker, s.Exchange)
+	}
+	query := fmt.Sprintf(
+		`UPDATE symbols SET is_active=false
+		 WHERE is_active=true
+		   AND (ticker, exchange) NOT IN (%s)`,
+		strings.Join(values, ", "),
+	)
+	if _, err := r.pool.Exec(ctx, query, args...); err != nil {
+		return fmt.Errorf("deactivate stale symbols: %w", err)
+	}
 	return nil
 }
 

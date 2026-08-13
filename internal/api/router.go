@@ -18,6 +18,7 @@ import (
 	"github.com/lee-econ/orca-core/internal/api/middleware"
 	"github.com/lee-econ/orca-core/internal/backtest"
 	"github.com/lee-econ/orca-core/internal/broker"
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/email"
 	"github.com/lee-econ/orca-core/internal/engine"
@@ -909,7 +910,7 @@ func (s *Server) submitOptimization(c *gin.Context) {
 		req.StepMonths = 3
 	}
 	if len(req.Symbols) == 0 {
-		req.Symbols = []string{"SPY"}
+		req.Symbols = configDefaultTickers()
 	}
 	if req.Capital <= 0 {
 		req.Capital = 100000
@@ -1063,8 +1064,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 
 	if req.Mode == "matrix" {
 		if len(req.StrategyIDs) == 0 {
-			req.StrategyIDs = []string{"intraday_mr", "opening_range_breakout", "trend_following",
-				"grid_trading", "session_scalp", "pairs_trading", "volatility_harvesting"}
+			req.StrategyIDs = configDefaultStrategies()
 		}
 		mc := backtest.MatrixBacktestConfig{
 			StrategyIDs:       req.StrategyIDs,
@@ -1783,44 +1783,51 @@ func (a *backtestRepoAdapter) LoadCandles(ctx context.Context, symbols []string,
 	if err != nil {
 		return nil, err
 	}
+	return convertRepoCandles(results), nil
+}
+
+func (a *backtestRepoAdapter) LoadCandlesFiltered(ctx context.Context, symbols []string, start, end time.Time, source string) ([][]backtest.Candle, error) {
+	if source == "synthetic" {
+		return generateSyntheticCandles(symbols, start, end, "1d")
+	}
+	results, err := a.repo.LoadCandlesFiltered(ctx, symbols, start, end, source)
+	if err != nil {
+		return nil, err
+	}
+	return convertRepoCandles(results), nil
+}
+
+func (a *backtestRepoAdapter) LoadCandlesTFFiltered(ctx context.Context, symbols []string, start, end time.Time, timeframe string, source string) ([][]backtest.Candle, error) {
+	if source == "synthetic" {
+		return generateSyntheticCandles(symbols, start, end, timeframe)
+	}
+	results, err := a.repo.LoadCandlesByTimeframeFiltered(ctx, symbols, start, end, timeframe, source)
+	if err != nil {
+		return nil, err
+	}
+	return convertRepoCandles(results), nil
+}
+
+func convertRepoCandles(results [][]db.Candle) [][]backtest.Candle {
 	out := make([][]backtest.Candle, len(results))
 	for i, row := range results {
 		out[i] = make([]backtest.Candle, len(row))
 		for j, c := range row {
 			out[i][j] = backtest.Candle{
-				Time:   c.Time,
-				Open:   c.Open,
-				High:   c.High,
-				Low:    c.Low,
-				Close:  c.Close,
-				Volume: c.Volume,
-				Symbol: c.Symbol,
+				Time:             c.Time,
+				Open:             c.Open,
+				High:             c.High,
+				Low:              c.Low,
+				Close:            c.Close,
+				Volume:           c.Volume,
+				Symbol:           c.Symbol,
+				AdjustmentFactor: c.AdjustmentFactor,
+				Source:           c.Source,
+				GenerationID:     c.GenerationID,
 			}
 		}
 	}
-	return out, nil
-}
-
-func (a *backtestRepoAdapter) LoadCandlesFiltered(ctx context.Context, symbols []string, start, end time.Time, source string) ([][]backtest.Candle, error) {
-	if source == "synthetic" {
-		return generateSyntheticCandles(symbols, start, end, "1d"), nil
-	}
-	candles, err := a.LoadCandles(ctx, symbols, start, end)
-	if err != nil || isEmptyCandleResult(candles) {
-		return generateSyntheticCandles(symbols, start, end, "1d"), nil
-	}
-	return candles, nil
-}
-
-func (a *backtestRepoAdapter) LoadCandlesTFFiltered(ctx context.Context, symbols []string, start, end time.Time, timeframe string, source string) ([][]backtest.Candle, error) {
-	if source == "synthetic" {
-		return generateSyntheticCandles(symbols, start, end, timeframe), nil
-	}
-	candles, err := a.LoadCandles(ctx, symbols, start, end)
-	if err != nil || isEmptyCandleResult(candles) {
-		return generateSyntheticCandles(symbols, start, end, timeframe), nil
-	}
-	return candles, nil
+	return out
 }
 
 func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end time.Time) ([]backtest.RegimeLog, error) {
@@ -1840,18 +1847,6 @@ func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end tim
 	return out, nil
 }
 
-func isEmptyCandleResult(candles [][]backtest.Candle) bool {
-	if len(candles) == 0 {
-		return true
-	}
-	for _, row := range candles {
-		if len(row) > 0 {
-			return false
-		}
-	}
-	return true
-}
-
 type assetClass int
 
 const (
@@ -1860,7 +1855,6 @@ const (
 	acCrypto
 	acCommodity
 	acIndex
-	acUnknown
 )
 
 type syntheticSymbolConfig struct {
@@ -1875,74 +1869,88 @@ type syntheticSymbolConfig struct {
 	LotSize    float64
 }
 
-func symbolConfig(sym string) syntheticSymbolConfig {
+func configDefaultTickers() []string {
+	if tickers, err := config.Tickers(); err == nil && len(tickers) > 0 {
+		return tickers
+	}
+	return []string{"SPY"}
+}
+
+func configDefaultStrategies() []string {
+	if u, err := config.Load(); err == nil && len(u.Strategies) > 0 {
+		return u.Strategies
+	}
+	return []string{"intraday_mr", "opening_range_breakout", "trend_following", "grid_trading"}
+}
+
+func symbolConfig(sym string) (syntheticSymbolConfig, bool) {
 	switch sym {
 	case "AAPL":
-		return syntheticSymbolConfig{acEquity, 185.0, 0.10, 0.28, 0.05, 0.0, 0.04, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 185.0, 0.10, 0.28, 0.05, 0.0, 0.04, 1.0, 0.01}, true
 	case "MSFT":
-		return syntheticSymbolConfig{acEquity, 420.0, 0.12, 0.26, 0.04, 0.0, 0.03, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 420.0, 0.12, 0.26, 0.04, 0.0, 0.03, 1.0, 0.01}, true
 	case "GOOGL":
-		return syntheticSymbolConfig{acEquity, 175.0, 0.09, 0.30, 0.06, 0.0, 0.04, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 175.0, 0.09, 0.30, 0.06, 0.0, 0.04, 1.0, 0.01}, true
 	case "AMZN":
-		return syntheticSymbolConfig{acEquity, 185.0, 0.11, 0.32, 0.05, 0.0, 0.05, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 185.0, 0.11, 0.32, 0.05, 0.0, 0.05, 1.0, 0.01}, true
 	case "NVDA":
-		return syntheticSymbolConfig{acEquity, 900.0, 0.18, 0.45, 0.08, 0.0, 0.06, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 900.0, 0.18, 0.45, 0.08, 0.0, 0.06, 1.0, 0.01}, true
 	case "META":
-		return syntheticSymbolConfig{acEquity, 510.0, 0.13, 0.35, 0.06, 0.0, 0.05, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 510.0, 0.13, 0.35, 0.06, 0.0, 0.05, 1.0, 0.01}, true
 	case "TSLA":
-		return syntheticSymbolConfig{acEquity, 250.0, 0.08, 0.50, 0.07, 0.0, 0.08, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 250.0, 0.08, 0.50, 0.07, 0.0, 0.08, 1.0, 0.01}, true
 	case "SPY", "VOO":
-		return syntheticSymbolConfig{acEquity, 520.0, 0.07, 0.18, 0.02, 0.0, 0.01, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 520.0, 0.07, 0.18, 0.02, 0.0, 0.01, 1.0, 0.01}, true
 	case "QQQ":
-		return syntheticSymbolConfig{acEquity, 450.0, 0.09, 0.22, 0.03, 0.0, 0.02, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 450.0, 0.09, 0.22, 0.03, 0.0, 0.02, 1.0, 0.01}, true
 	case "IWM":
-		return syntheticSymbolConfig{acEquity, 210.0, 0.05, 0.24, 0.04, 0.0, 0.03, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 210.0, 0.05, 0.24, 0.04, 0.0, 0.03, 1.0, 0.01}, true
 	case "DIA":
-		return syntheticSymbolConfig{acEquity, 400.0, 0.06, 0.17, 0.02, 0.0, 0.01, 1.0, 0.01}
+		return syntheticSymbolConfig{acEquity, 400.0, 0.06, 0.17, 0.02, 0.0, 0.01, 1.0, 0.01}, true
 	case "EURUSD":
-		return syntheticSymbolConfig{acForex, 1.08, 0.0, 0.075, 0.0, 0.03, 0.01, 0.50, 0.00001}
+		return syntheticSymbolConfig{acForex, 1.08, 0.0, 0.075, 0.0, 0.03, 0.01, 0.50, 0.00001}, true
 	case "GBPUSD":
-		return syntheticSymbolConfig{acForex, 1.27, 0.0, 0.085, 0.0, 0.03, 0.01, 0.50, 0.00001}
+		return syntheticSymbolConfig{acForex, 1.27, 0.0, 0.085, 0.0, 0.03, 0.01, 0.50, 0.00001}, true
 	case "USDJPY":
-		return syntheticSymbolConfig{acForex, 150.0, 0.0, 0.09, 0.0, 0.04, 0.02, 50.0, 0.001}
+		return syntheticSymbolConfig{acForex, 150.0, 0.0, 0.09, 0.0, 0.04, 0.02, 50.0, 0.001}, true
 	case "USDCAD":
-		return syntheticSymbolConfig{acForex, 1.36, 0.0, 0.07, 0.0, 0.04, 0.01, 0.50, 0.00001}
+		return syntheticSymbolConfig{acForex, 1.36, 0.0, 0.07, 0.0, 0.04, 0.01, 0.50, 0.00001}, true
 	case "AUDUSD":
-		return syntheticSymbolConfig{acForex, 0.66, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}
+		return syntheticSymbolConfig{acForex, 0.66, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}, true
 	case "NZDUSD":
-		return syntheticSymbolConfig{acForex, 0.61, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}
+		return syntheticSymbolConfig{acForex, 0.61, 0.0, 0.10, 0.0, 0.05, 0.02, 0.30, 0.00001}, true
 	case "USDCHF":
-		return syntheticSymbolConfig{acForex, 0.88, 0.0, 0.075, 0.0, 0.04, 0.01, 0.50, 0.00001}
-	case "BTCUSD":
-		return syntheticSymbolConfig{acCrypto, 65000.0, 0.15, 0.70, 0.05, 0.0, 0.12, 1.0, 0.01}
-	case "ETHUSD":
-		return syntheticSymbolConfig{acCrypto, 3500.0, 0.12, 0.85, 0.06, 0.0, 0.15, 1.0, 0.01}
+		return syntheticSymbolConfig{acForex, 0.88, 0.0, 0.075, 0.0, 0.04, 0.01, 0.50, 0.00001}, true
+	case "BTCUSD", "BTC-USD":
+		return syntheticSymbolConfig{acCrypto, 65000.0, 0.15, 0.70, 0.05, 0.0, 0.12, 1.0, 0.01}, true
+	case "ETHUSD", "ETH-USD":
+		return syntheticSymbolConfig{acCrypto, 3500.0, 0.12, 0.85, 0.06, 0.0, 0.15, 1.0, 0.01}, true
 	case "XAUUSD":
-		return syntheticSymbolConfig{acCommodity, 2350.0, 0.04, 0.16, 0.02, 0.01, 0.02, 500.0, 0.01}
+		return syntheticSymbolConfig{acCommodity, 2350.0, 0.04, 0.16, 0.02, 0.01, 0.02, 500.0, 0.01}, true
 	case "XAGUSD":
-		return syntheticSymbolConfig{acCommodity, 27.0, 0.03, 0.25, 0.02, 0.01, 0.04, 5.0, 0.001}
+		return syntheticSymbolConfig{acCommodity, 27.0, 0.03, 0.25, 0.02, 0.01, 0.04, 5.0, 0.001}, true
 	case "GLD":
-		return syntheticSymbolConfig{acCommodity, 180.0, 0.04, 0.15, 0.02, 0.01, 0.02, 50.0, 0.01}
+		return syntheticSymbolConfig{acCommodity, 180.0, 0.04, 0.15, 0.02, 0.01, 0.02, 50.0, 0.01}, true
 	case "USO":
-		return syntheticSymbolConfig{acCommodity, 78.0, 0.02, 0.28, 0.03, 0.02, 0.06, 10.0, 0.01}
+		return syntheticSymbolConfig{acCommodity, 78.0, 0.02, 0.28, 0.03, 0.02, 0.06, 10.0, 0.01}, true
 	case "TLT":
-		return syntheticSymbolConfig{acCommodity, 92.0, 0.01, 0.16, 0.01, 0.03, 0.02, 50.0, 0.01}
+		return syntheticSymbolConfig{acCommodity, 92.0, 0.01, 0.16, 0.01, 0.03, 0.02, 50.0, 0.01}, true
 	case "CL":
-		return syntheticSymbolConfig{acCommodity, 78.0, 0.03, 0.32, 0.03, 0.02, 0.08, 10.0, 0.01}
-	case "SPX500", "ES":
-		return syntheticSymbolConfig{acIndex, 5500.0, 0.07, 0.17, 0.02, 0.0, 0.01, 100.0, 0.01}
+		return syntheticSymbolConfig{acCommodity, 78.0, 0.03, 0.32, 0.03, 0.02, 0.08, 10.0, 0.01}, true
+	case "SPX500", "ES", "^_US":
+		return syntheticSymbolConfig{acIndex, 5500.0, 0.07, 0.17, 0.02, 0.0, 0.01, 100.0, 0.01}, true
 	case "NAS100", "NQ":
-		return syntheticSymbolConfig{acIndex, 20000.0, 0.09, 0.22, 0.03, 0.0, 0.02, 100.0, 0.01}
+		return syntheticSymbolConfig{acIndex, 20000.0, 0.09, 0.22, 0.03, 0.0, 0.02, 100.0, 0.01}, true
 	case "US30":
-		return syntheticSymbolConfig{acIndex, 40000.0, 0.06, 0.16, 0.02, 0.0, 0.01, 100.0, 0.01}
-	case "GER40":
-		return syntheticSymbolConfig{acIndex, 18500.0, 0.05, 0.19, 0.02, 0.0, 0.02, 100.0, 0.01}
+		return syntheticSymbolConfig{acIndex, 40000.0, 0.06, 0.16, 0.02, 0.0, 0.01, 100.0, 0.01}, true
+	case "GER40", "^DAX":
+		return syntheticSymbolConfig{acIndex, 18500.0, 0.05, 0.19, 0.02, 0.0, 0.02, 100.0, 0.01}, true
 	case "JPN225":
-		return syntheticSymbolConfig{acIndex, 39000.0, 0.04, 0.20, 0.02, 0.0, 0.02, 100.0, 0.01}
+		return syntheticSymbolConfig{acIndex, 39000.0, 0.04, 0.20, 0.02, 0.0, 0.02, 100.0, 0.01}, true
 	case "UK100":
-		return syntheticSymbolConfig{acIndex, 8200.0, 0.04, 0.16, 0.02, 0.0, 0.01, 10.0, 0.01}
+		return syntheticSymbolConfig{acIndex, 8200.0, 0.04, 0.16, 0.02, 0.0, 0.01, 10.0, 0.01}, true
 	default:
-		return syntheticSymbolConfig{acUnknown, 100.0, 0.05, 0.20, 0.02, 0.0, 0.02, 1.0, 0.01}
+		return syntheticSymbolConfig{}, false
 	}
 }
 
@@ -1967,15 +1975,18 @@ func barsPerTradingDay(tf string) int {
 	}
 }
 
-func generateSyntheticCandles(symbols []string, start, end time.Time, timeframe string) [][]backtest.Candle {
+func generateSyntheticCandles(symbols []string, start, end time.Time, timeframe string) ([][]backtest.Candle, error) {
 	barsPerDay := barsPerTradingDay(timeframe)
 	out := make([][]backtest.Candle, len(symbols))
 	for si, sym := range symbols {
-		cfg := symbolConfig(sym)
+		cfg, ok := symbolConfig(sym)
+		if !ok {
+			return nil, fmt.Errorf("synthetic data: no calibration config for symbol %q", sym)
+		}
 		rng := rand.New(rand.NewPCG(uint64(start.Unix())+uint64(si)*1000000, uint64(end.Unix())+uint64(si)*2000000))
 		out[si] = generateAssetPath(cfg, sym, start, end, barsPerDay, rng)
 	}
-	return out
+	return out, nil
 }
 
 func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Time, barsPerDay int, rng *rand.Rand) []backtest.Candle {
@@ -1992,7 +2003,6 @@ func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Ti
 	}
 	driftMult := [4]float64{1.5, 2.0, 0.5, -1.0}
 	volMult := [4]float64{1.0, 1.5, 2.5, 3.5}
-	mrMult := [4]float64{1.0, 0.5, 0.5, 0.1}
 	jumpMult := [4]float64{0.1, 0.3, 1.0, 1.5}
 	currentRegime := 0
 
@@ -2016,7 +2026,6 @@ func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Ti
 
 		regimeVolMult := volMult[currentRegime]
 		regimeDriftMult := driftMult[currentRegime]
-		regimeMRMult := mrMult[currentRegime]
 		regimeJumpMult := jumpMult[currentRegime]
 
 		shockMag := math.Abs(lastReturn)
@@ -2031,9 +2040,8 @@ func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Ti
 		}
 		dailyDrift := cfg.AnnDrift / 252.0 * regimeDriftMult
 		momentumTerm := cfg.Momentum * lastReturn
-		mrTerm := cfg.MRStrength * regimeMRMult * (cfg.BasePrice - price) / cfg.BasePrice
 		noise := randNorm(rng) * currentVol * regimeVolMult
-		ret := dailyDrift + momentumTerm + mrTerm + noise + jumpReturn
+		ret := dailyDrift + momentumTerm + noise + jumpReturn
 		if cfg.Class == acCrypto && math.Abs(ret/(currentVol*regimeVolMult)) > 2.5 {
 			ret *= 1.8
 		}
@@ -2045,6 +2053,10 @@ func generateAssetPath(cfg syntheticSymbolConfig, sym string, start, end time.Ti
 		if close < cfg.MinPrice {
 			close = cfg.MinPrice
 			open = close * (1.0 + math.Abs(randNorm(rng)*currentVol*0.5))
+		}
+		if close > cfg.BasePrice*1000 {
+			close = cfg.BasePrice * 1000
+			open = close * (1.0 - math.Abs(randNorm(rng)*currentVol*0.5))
 		}
 		dayRange := math.Abs(close-open) + math.Abs(randNorm(rng)*currentVol*0.8)
 		mid := (open + close) / 2.0
@@ -2074,25 +2086,13 @@ func expandIntraday(open, high, low, close, barVol float64, day time.Time, barsP
 		}}
 	}
 	bars := make([]backtest.Candle, barsPerDay)
-	highIdx := rng.IntN(barsPerDay)
-	lowIdx := rng.IntN(barsPerDay)
-	if highIdx == lowIdx {
-		lowIdx = (highIdx + barsPerDay/2) % barsPerDay
-	}
 	prices := make([]float64, barsPerDay+1)
 	prices[0] = open
-	baseVol := barVol * 0.5
 	for i := 1; i <= barsPerDay; i++ {
 		t := float64(i) / float64(barsPerDay)
 		drift := (close - open) * t
 		bridgeNoise := randNorm(rng) * math.Sqrt(t*(1.0-t)) * barVol
 		prices[i] = open + drift + bridgeNoise
-		if i-1 == highIdx && prices[i] < high {
-			prices[i] = high - math.Abs(randNorm(rng)*baseVol*0.1)
-		}
-		if i-1 == lowIdx && prices[i] > low {
-			prices[i] = low + math.Abs(randNorm(rng)*baseVol*0.1)
-		}
 	}
 	baseTime := time.Date(day.Year(), day.Month(), day.Day(), 9, 30, 0, 0, day.Location())
 	barDuration := time.Duration(390/barsPerDay) * time.Minute
@@ -2245,6 +2245,8 @@ func (s *Server) submitMatrix(c *gin.Context) {
 		GateProfile      string   `json:"gate_profile"`
 		SizingPercent    float64  `json:"sizing_percent"`
 		KellyFraction    float64  `json:"kelly_fraction"`
+		WirePipeline     bool     `json:"wire_pipeline"`
+		WalkForward      bool     `json:"walk_forward"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2290,6 +2292,8 @@ func (s *Server) submitMatrix(c *gin.Context) {
 		SizingPercent:     req.SizingPercent,
 		KellyFraction:     req.KellyFraction,
 		SkipLightOptimize: false,
+		WirePipeline:      req.WirePipeline,
+		WalkForward:       req.WalkForward,
 	}
 
 	dbAdapter := &backtestRepoAdapter{repo: s.repo}

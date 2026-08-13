@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "description": "Single source of truth for the OrcaAlgo prop-firm trading universe. Consumed by Go (internal/config) and Python (orca/config.py).",
+  "symbols": [
+    { "ticker": "SPY",    "exchange": "NYSE",   "asset_class": "equity_etf",    "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "spy.us",  "yahoo_ticker": "SPY",     "tiingo_ticker": "SPY",     "base_price": 580.0,   "sigma_daily": 0.008 },
+    { "ticker": "QQQ",    "exchange": "NASDAQ", "asset_class": "equity_etf",    "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "qqq.us",  "yahoo_ticker": "QQQ",     "tiingo_ticker": "QQQ",     "base_price": 480.0,   "sigma_daily": 0.012 },
+    { "ticker": "AAPL",   "exchange": "NASDAQ", "asset_class": "equity",        "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "aapl.us", "yahoo_ticker": "AAPL",    "tiingo_ticker": "AAPL",    "base_price": 220.0,   "sigma_daily": 0.014 },
+    { "ticker": "MSFT",   "exchange": "NASDAQ", "asset_class": "equity",        "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "msft.us", "yahoo_ticker": "MSFT",    "tiingo_ticker": "MSFT",    "base_price": 440.0,   "sigma_daily": 0.011 },
+    { "ticker": "NVDA",   "exchange": "NASDAQ", "asset_class": "equity",        "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "nvda.us", "yahoo_ticker": "NVDA",    "tiingo_ticker": "NVDA",    "base_price": 120.0,   "sigma_daily": 0.025 },
+    { "ticker": "TSLA",   "exchange": "NASDAQ", "asset_class": "equity",        "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "tsla.us", "yahoo_ticker": "TSLA",    "tiingo_ticker": "TSLA",    "base_price": 250.0,   "sigma_daily": 0.028 },
+    { "ticker": "IWM",    "exchange": "NYSE",   "asset_class": "equity_etf",    "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "iwm.us",  "yahoo_ticker": "IWM",     "tiingo_ticker": "IWM",     "base_price": 210.0,   "sigma_daily": 0.012 },
+    { "ticker": "GLD",    "exchange": "NYSE",   "asset_class": "commodity_etf", "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "gld.us",  "yahoo_ticker": "GLD",     "tiingo_ticker": "GLD",     "base_price": 220.0,   "sigma_daily": 0.009 },
+    { "ticker": "TLT",    "exchange": "NYSE",   "asset_class": "bond_etf",      "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "tlt.us",  "yahoo_ticker": "TLT",     "tiingo_ticker": "TLT",     "base_price": 88.0,    "sigma_daily": 0.008 },
+    { "ticker": "EURUSD", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.00001,  "lot_size": 1000, "stooq_ticker": "eurusd",  "yahoo_ticker": "EURUSD=X", "tiingo_ticker": "eurusd",  "base_price": 1.08,    "sigma_daily": 0.005 },
+    { "ticker": "GBPUSD", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.00001,  "lot_size": 1000, "stooq_ticker": "gbpusd",  "yahoo_ticker": "GBPUSD=X", "tiingo_ticker": "gbpusd",  "base_price": 1.28,    "sigma_daily": 0.006 },
+    { "ticker": "USDJPY", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.001,    "lot_size": 1000, "stooq_ticker": "usdjpy",  "yahoo_ticker": "USDJPY=X", "tiingo_ticker": "usdjpy",  "base_price": 148.0,   "sigma_daily": 0.007 },
+    { "ticker": "AUDUSD", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.00001,  "lot_size": 1000, "stooq_ticker": "audusd",  "yahoo_ticker": "AUDUSD=X", "tiingo_ticker": "audusd",  "base_price": 0.66,    "sigma_daily": 0.006 },
+    { "ticker": "USDCAD", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.00001,  "lot_size": 1000, "stooq_ticker": "usdcad",  "yahoo_ticker": "USDCAD=X", "tiingo_ticker": "usdcad",  "base_price": 1.36,    "sigma_daily": 0.005 },
+    { "ticker": "BTC-USD", "exchange": "CRYPTO", "asset_class": "crypto",       "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "btc.v",   "yahoo_ticker": "BTC-USD",  "tiingo_ticker": "btcusd",  "base_price": 68000.0, "sigma_daily": 0.030 },
+    { "ticker": "ETH-USD", "exchange": "CRYPTO", "asset_class": "crypto",       "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "eth.v",   "yahoo_ticker": "ETH-USD",  "tiingo_ticker": "ethusd",  "base_price": 3400.0,  "sigma_daily": 0.035 },
+    { "ticker": "^_US",   "exchange": "STOOQ",  "asset_class": "index_agg",     "tick_size": 0.25,     "lot_size": 1,    "stooq_ticker": "^spx",    "yahoo_ticker": "^GSPC",    "tiingo_ticker": "^spx",    "base_price": 5900.0,  "sigma_daily": 0.008 },
+    { "ticker": "^DAX",   "exchange": "STOOQ",  "asset_class": "index_eu",      "tick_size": 0.25,     "lot_size": 1,    "stooq_ticker": "^dax",    "yahoo_ticker": "^GDAXI",   "tiingo_ticker": "^dax",    "base_price": 21000.0, "sigma_daily": 0.010 }
+  ],
+  "strategies": [
+    "grid_trading", "trend_following", "session_scalp", "intraday_mr", "vwap_mr",
+    "opening_range_breakout", "orb_15m", "pairs_trading", "volatility_harvesting",
+    "dragon_trend", "volume_scalp", "vix_futures_carry", "ma_crossover",
+    "rsi2_reversion", "donchian_breakout", "keltner_macd", "ichimoku_cloud"
+  ],
+  "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"],
+  "data_sources": ["stooq", "yahoo"],
+  "pairs": {
+    "SPY": "QQQ",
+    "QQQ": "SPY",
+    "IWM": "SPY",
+    "AAPL": "MSFT",
+    "MSFT": "AAPL",
+    "NVDA": "QQQ",
+    "TSLA": "QQQ",
+    "GLD": "SPY",
+    "TLT": "SPY",
+    "EURUSD": "GBPUSD",
+    "GBPUSD": "EURUSD",
+    "AUDUSD": "EURUSD",
+    "USDCAD": "EURUSD",
+    "USDJPY": "EURUSD",
+    "BTC-USD": "ETH-USD",
+    "ETH-USD": "BTC-USD",
+    "^_US": "^DAX",
+    "^DAX": "^_US"
+  }
+}

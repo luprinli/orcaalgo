@@ -174,13 +174,13 @@ func TestOrchestrator_Run_SingleStrategy(t *testing.T) {
 		InitialCapital: 500000, RebalanceBars: 10, KellyFraction: 0.25,
 		MaxPositionPct: 0.05, FrictionModel: "idealized",
 	})
-	_ = o.AddStrategy("JPN225", "1h", "grid_trading")
+	_ = o.AddStrategy("JPN225", "1h", "vol_grid")
 	result, err := o.Run(context.Background())
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 	if len(result.Trades) < 1 {
-		t.Errorf("expected at least 1 trade with grid_trading on JPN225, got %d", len(result.Trades))
+		t.Errorf("expected at least 1 trade with vol_grid on JPN225, got %d", len(result.Trades))
 	}
 	if len(result.PoolEquity) < 2 {
 		t.Errorf("expected at least 2 equity points, got %d", len(result.PoolEquity))

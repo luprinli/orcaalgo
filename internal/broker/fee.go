@@ -47,3 +47,89 @@ func (f BrokerageFeeConfig) CalculateMakerFee(quantity float64, price float64) f
 	}
 	return fee
 }
+
+// CalculateFeeForAssetClass computes the per-leg fee using an asset-class-aware
+// schedule. Equity (and the default) uses the full retail schedule (per-share +
+// SEC + $1 minimum). Forex, crypto, futures, and commodity instruments use a
+// notional-bps schedule with no per-share fee, no SEC fee, and no $1 minimum,
+// because the "quantity" of those instruments is not a share count — applying
+// the equity schedule to them (e.g. ~3,000 "units" of EURUSD at $0.0035/share)
+// produces fees that are orders of magnitude above real market costs.
+func (f BrokerageFeeConfig) CalculateFeeForAssetClass(assetClass string, quantity float64, price float64) float64 {
+	if !f.Enabled {
+		return 0
+	}
+	notional := quantity * price
+	switch assetClass {
+	case "forex", "crypto", "futures", "commodity", "index":
+		fee := f.PerTradeFixed + notional*f.TakerFeeBps/10000.0
+		if fee < 0 {
+			return 0
+		}
+		return fee
+	default:
+		return f.CalculateFee(quantity, price)
+	}
+}
+
+// CalculateFeeForSymbol is CalculateFeeForAssetClass keyed by a coarse
+// per-ticker asset classification.
+func (f BrokerageFeeConfig) CalculateFeeForSymbol(symbol string, quantity float64, price float64) float64 {
+	return f.CalculateFeeForAssetClass(AssetClassForSymbol(symbol), quantity, price)
+}
+
+// AssetClassForSymbol classifies a ticker into a coarse asset class for fee and
+// slippage schedule selection. It is intentionally self-contained (no config
+// dependency) so it also handles legacy and non-universe tickers (e.g. futures
+// "ES"/"NQ"/"CL", metal "XAUUSD", crypto "BTCUSD"/"BTC-USD").
+func AssetClassForSymbol(symbol string) string {
+	switch {
+	case isForex(symbol):
+		return "forex"
+	case isCrypto(symbol):
+		return "crypto"
+	case isFutures(symbol):
+		return "futures"
+	case isCommodity(symbol):
+		return "commodity"
+	default:
+		return "equity"
+	}
+}
+
+func isForex(symbol string) bool {
+	switch symbol {
+	case "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD",
+		"USDEUR", "US30", "SPX500", "NAS100", "GER40", "UK100", "JPN225",
+		"^_US", "^DAX":
+		return true
+	}
+	return false
+}
+
+func isCrypto(symbol string) bool {
+	switch symbol {
+	case "BTCUSD", "ETHUSD", "BTC-USD", "ETH-USD", "SOLUSD", "XRPUSD",
+		"ADAUSD", "DOGEUSD", "LTCUSD", "BCHUSD", "DOTUSD", "LINKUSD",
+		"AVAXUSD", "MATICUSD", "TRXUSD", "UNIUSD":
+		return true
+	}
+	return false
+}
+
+func isFutures(symbol string) bool {
+	switch symbol {
+	case "ES", "NQ", "CL", "YM", "RTY", "GC", "SI", "HG", "NG",
+		"ZB", "ZN", "ZF", "6E", "6A", "6B", "6J", "6C", "6S", "6N":
+		return true
+	}
+	return false
+}
+
+func isCommodity(symbol string) bool {
+	switch symbol {
+	case "XAUUSD", "XAGUSD", "GLD", "SLV", "USO", "UNG":
+		return true
+	}
+	return false
+}

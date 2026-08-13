@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { strategies, accounts, orchestrator, strategyStatus } from '../../api/client'
+import { strategies, accounts, orchestrator, strategyStatus, symbols as symbolsApi } from '../../api/client'
 import type { DeployStrategyResponse, PreflightResponse, Strategy } from '../../types/api'
 import OrchestrationProgressBar from '../backtest/OrchestrationProgressBar'
 import { useOrchestrationPoll } from '../../hooks/useOrchestrationPoll'
@@ -15,13 +15,9 @@ interface Props {
   onDeployed: () => void
 }
 
-import { SYMBOL_OPTIONS, TIMEFRAME_OPTIONS } from '../../data/constants'
+import { TIMEFRAME_OPTIONS } from '../../data/constants'
 
 const GATES = { sharpeMin: 1.0, maxDDMax: 8.0, passProbMin: 80, profitFactorMin: 1.5 }
-const RECOMMENDED_SUPPLEMENTARY = [
-  { strategy_id: "grid_trading", symbol: "JPN225", timeframe: "1h" },
-  { strategy_id: "rsi2_reversion", symbol: "JPN225", timeframe: "1h" },
-]
 
 interface OrchRow {
   strategy_id: string
@@ -45,7 +41,7 @@ export default function PromoteToLiveWizard({
 
   const [orchMode, setOrchMode] = useState(false)
   const [orchRows, setOrchRows] = useState<OrchRow[]>(() => [
-    { strategy_id: strategyName, symbol: "SPX500", timeframe: "4h" },
+    { strategy_id: strategyName, symbol: "", timeframe: "4h" },
   ])
   const [orchRebalance, setOrchRebalance] = useState("20")
   const [orchKelly, setOrchKelly] = useState("0.25")
@@ -56,6 +52,7 @@ export default function PromoteToLiveWizard({
   const [orchFriction, setOrchFriction] = useState<"realistic" | "idealized">("realistic")
   const [orchMaxPct, setOrchMaxPct] = useState("2")
   const [availableStrategies, setAvailableStrategies] = useState<Strategy[]>([])
+  const [availableSymbols, setAvailableSymbols] = useState<string[]>([])
   const [orchRunId, setOrchRunId] = useState<string | null>(null)
   const [orchStartTs, setOrchStartTs] = useState(0)
 
@@ -83,6 +80,15 @@ export default function PromoteToLiveWizard({
       try {
         const r = await strategies.list()
         setAvailableStrategies(r.strategies ?? [])
+      } catch { /* optional */ }
+    })()
+  }, [])
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await symbolsApi.list() as unknown as { symbols?: { ticker: string }[] }
+        setAvailableSymbols((r.symbols ?? []).map(s => s.ticker))
       } catch { /* optional */ }
     })()
   }, [])
@@ -179,8 +185,13 @@ export default function PromoteToLiveWizard({
   }, [])
 
   const fillSupplementary = useCallback(() => {
-    setOrchRows(prev => [...prev, ...RECOMMENDED_SUPPLEMENTARY.filter(s => !prev.some(p => p.strategy_id === s.strategy_id))])
-  }, [])
+    const s = availableSymbols
+    const recommended = [
+      { strategy_id: "grid_trading", symbol: s[0] || "", timeframe: "1h" },
+      { strategy_id: "rsi2_reversion", symbol: s[0] || "", timeframe: "1h" },
+    ]
+    setOrchRows(prev => [...prev, ...recommended.filter(r => !prev.some(p => p.strategy_id === r.strategy_id))])
+  }, [availableSymbols])
 
   const showOrchDeployed = deployResult && orchMode
 
@@ -279,7 +290,7 @@ export default function PromoteToLiveWizard({
                         {!availableStrategies.some(s => s.id === strategyName) && <option value={strategyName}>{strategyName}</option>}
                       </select>
                       <select className="input" style={{ width: 80, fontSize: 12, padding: '2px 4px' }} value={row.symbol} onChange={(e) => updateOrchRow(i, 'symbol', e.target.value)}>
-                        {SYMBOL_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        {availableSymbols.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                       <select className="input" style={{ width: 60, fontSize: 12, padding: '2px 4px' }} value={row.timeframe} onChange={(e) => updateOrchRow(i, 'timeframe', e.target.value)}>
                         {TIMEFRAME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}

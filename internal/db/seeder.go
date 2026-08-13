@@ -132,7 +132,7 @@ func (s *Seeder) seedProviders(ctx context.Context, providers []BrokerProviderSe
 func (s *Seeder) seedStrategies(ctx context.Context, strategies []StrategySeed) error {
 	for _, st := range strategies {
 		if _, err := s.repo.pool.Exec(ctx,
-			"INSERT INTO strategies (name, type, parameters, enabled) VALUES ($1,$2,$3,$4) ON CONFLICT (name) DO NOTHING",
+			"INSERT INTO strategies (name, type, parameters, enabled, user_id) VALUES ($1,$2,$3,$4, COALESCE((SELECT id FROM users WHERE username='admin' LIMIT 1), (SELECT id FROM users LIMIT 1))) ON CONFLICT (name) DO NOTHING",
 			st.Name, st.Type, mustMarshalJSON(st.Parameters), st.Enabled); err != nil { return fmt.Errorf("strategy %s: %w", st.Name, err) }
 	}
 	return nil
@@ -204,8 +204,8 @@ func (s *Seeder) seedCandles(ctx context.Context, candles []CandleSeed) error {
 		batch := &pgx.Batch{}
 		for _, c := range candles[i:end] {
 			batch.Queue(
-				`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume)
-				 SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8
+				`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume, source)
+				 SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8, 'seed'
 				 WHERE EXISTS (SELECT 1 FROM symbols WHERE ticker=$2)`,
 				c.Time, c.Symbol, c.Timeframe, c.Open.Int64(), c.High.Int64(), c.Low.Int64(), c.Close.Int64(), int64(c.Volume))
 		}

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -47,67 +48,29 @@ func (f *StooqFileFetcher) FetchDailyMetrics(ctx context.Context, ticker string)
 }
 
 func (f *StooqFileFetcher) resolvePath(ticker string, timeframe string) (string, error) {
-	ticker = strings.ToUpper(ticker)
+	canonical := ResolveTicker(ticker)
 	base := "world"
 
 	var subdir string
-	fileName := strings.ToLower(ticker) + ".txt"
+	fileName := strings.ToLower(canonical) + ".txt"
 
-	switch {
-	case ticker == "EURUSD" || ticker == "GBPUSD" || ticker == "USDJPY" || ticker == "USDCHF" ||
-		ticker == "AUDUSD" || ticker == "USDCAD" || ticker == "NZDUSD" ||
-		ticker == "EURGBP" || ticker == "EURJPY" || ticker == "EURCHF" ||
-		ticker == "GBPJPY" || ticker == "GBPCHF" || ticker == "CHFJPY" ||
-		ticker == "AUDJPY" || ticker == "AUDNZD" || ticker == "AUDCHF" ||
-		ticker == "CADJPY" || ticker == "NZDJPY" || ticker == "NZDCHF" ||
-		ticker == "EURAUD" || ticker == "EURCAD" || ticker == "EURNZD" ||
-		ticker == "GBPAUD" || ticker == "GBPCAD" || ticker == "GBPNZD":
-		subdir = "currencies/major"
-
-	case ticker == "US30" || ticker == "^DJI":
-		fileName = "^dji.txt"
+	if s, ok := config.SymbolByTicker(canonical); ok {
+		if s.StooqTicker != "" {
+			fileName = s.StooqTicker + ".txt"
+		}
+		switch s.AssetClass {
+		case "forex_major":
+			subdir = "currencies/major"
+		case "crypto":
+			subdir = "cryptocurrencies"
+		case "index_agg", "index_eu":
+			subdir = "indices"
+		default:
+			subdir = "currencies/other"
+		}
+	} else if strings.HasPrefix(canonical, "^") {
 		subdir = "indices"
-	case ticker == "SPX500" || ticker == "^SPX" || ticker == "^GSPC":
-		fileName = "^spx.txt"
-		subdir = "indices"
-	case ticker == "NAS100" || ticker == "^NDQ" || ticker == "^IXIC":
-		fileName = "^ndq.txt"
-		subdir = "indices"
-	case ticker == "UK100" || ticker == "^FTSE":
-		fileName = "^ukx.txt"
-		subdir = "indices"
-	case ticker == "GER40" || ticker == "^DAX" || ticker == "^GDAXI":
-		fileName = "^dax.txt"
-		subdir = "indices"
-	case ticker == "JPN225" || ticker == "^NKX" || ticker == "^N225":
-		fileName = "^nkx.txt"
-		subdir = "indices"
-
-	case ticker == "BTCUSD" || ticker == "BTC":
-		fileName = "btc.v.txt"
-		subdir = "cryptocurrencies"
-	case ticker == "ETHUSD" || ticker == "ETH":
-		fileName = "eth.v.txt"
-		subdir = "cryptocurrencies"
-
-	case strings.HasPrefix(ticker, "^") && !strings.Contains(ticker, "XAU") && !strings.Contains(ticker, "XAG"):
-		fileName = strings.ToLower(ticker) + ".txt"
-		subdir = "indices"
-
-	case ticker == "XAUUSD":
-		fileName = "xauusd.txt"
-		subdir = "currencies/other"
-	case ticker == "XAGUSD":
-		fileName = "xagusd.txt"
-		subdir = "currencies/other"
-	case ticker == "USOIL":
-		fileName = "usoil.txt"
-		subdir = "currencies/other"
-	case ticker == "UKOIL":
-		fileName = "ukoil.txt"
-		subdir = "currencies/other"
-
-	default:
+	} else {
 		subdir = "currencies/other"
 	}
 

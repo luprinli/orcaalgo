@@ -54,11 +54,15 @@ type FillSimulator struct {
 	rng      *rand.Rand
 }
 
+// DefaultFillSeed is the fixed seed used by NewFillSimulator. Backtests are
+// reproducibility-critical: two runs of the same combination must produce
+// identical fills (and therefore identical Sharpe/Sortino/return). Wall-clock
+// seeding is available opt-in via NewFillSimulatorWithSeed when a caller
+// explicitly wants non-deterministic fills.
+const DefaultFillSeed = int64(42)
+
 func NewFillSimulator(model SlippageModel) *FillSimulator {
-	return &FillSimulator{
-		model: model,
-		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
-	}
+	return NewFillSimulatorWithSeed(model, DefaultFillSeed)
 }
 
 func NewFillSimulatorWithSeed(model SlippageModel, seed int64) *FillSimulator {

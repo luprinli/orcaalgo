@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/lee-econ/orca-core/internal/config"
 )
 
 type StooqImporter struct {
@@ -24,22 +25,21 @@ func NewStooqImporter(pool *pgxpool.Pool, fetcher *StooqFileFetcher, logger *slo
 }
 
 func (s *StooqImporter) EnsureSchema(ctx context.Context) error {
-	var hasConstraint bool
-	_ = s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname='candles_symbol_timeframe_time_unique')`,
-	).Scan(&hasConstraint)
+	// Drop the legacy source-less unique constraint so each provenance retains
+	// its own bars: source is part of the bar identity. The source-inclusive
+	// constraint below replaces it (and supersedes the migration 000041 index).
+	_, _ = s.pool.Exec(ctx,
+		`ALTER TABLE candles DROP CONSTRAINT IF EXISTS candles_symbol_timeframe_time_unique`,
+	)
 
-	if !hasConstraint {
-		s.logger.InfoContext(ctx, "ensure_schema_adding_constraint")
-		_, err := s.pool.Exec(ctx,
-			`ALTER TABLE candles ADD CONSTRAINT IF NOT EXISTS candles_symbol_timeframe_time_unique UNIQUE (symbol_id, timeframe, time)`,
-		)
-		if err != nil {
-			s.logger.WarnContext(ctx, "ensure_schema_constraint_failed", "error", err)
-		}
+	_, err := s.pool.Exec(ctx,
+		`ALTER TABLE candles ADD CONSTRAINT IF NOT EXISTS candles_symbol_timeframe_time_source_unique UNIQUE (symbol_id, timeframe, time, source)`,
+	)
+	if err != nil {
+		s.logger.WarnContext(ctx, "ensure_schema_constraint_failed", "error", err)
 	}
 
-	_, err := s.pool.Exec(ctx, `ALTER TABLE candles ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'seed'`)
+	_, err = s.pool.Exec(ctx, `ALTER TABLE candles ADD COLUMN IF NOT EXISTS source VARCHAR(32) NOT NULL DEFAULT 'seed'`)
 	if err != nil {
 		s.logger.WarnContext(ctx, "ensure_schema_column_failed", "error", err)
 	}
@@ -220,7 +220,10 @@ func (s *StooqImporter) bulkUpsert(ctx context.Context, symbolID int32, ticker, 
 			_, execErr := s.pool.Exec(ctx,
 				`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume, source)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'stooq')
-			 ON CONFLICT DO NOTHING`,
+			 ON CONFLICT (symbol_id, timeframe, time, source) DO UPDATE SET
+			   open_raw=EXCLUDED.open_raw, high_raw=EXCLUDED.high_raw,
+			   low_raw=EXCLUDED.low_raw, close_raw=EXCLUDED.close_raw,
+			   volume=EXCLUDED.volume`,
 				c.Time, symbolID, timeframe, openRaw, highRaw, lowRaw, closeRaw, volume,
 			)
 			if execErr == nil {
@@ -238,35 +241,17 @@ func (s *StooqImporter) bulkUpsert(ctx context.Context, symbolID int32, ticker, 
 }
 
 func assetTypeForTicker(ticker string) string {
-	switch {
-	case ticker == "BTCUSD" || ticker == "ETHUSD":
-		return "crypto"
-	case ticker == "US30" || ticker == "SPX500" || ticker == "NAS100" ||
-		ticker == "UK100" || ticker == "GER40" || ticker == "JPN225":
-		return "index"
-	case ticker == "XAUUSD" || ticker == "XAGUSD" || ticker == "USOIL" || ticker == "UKOIL":
-		return "commodity"
-	default:
-		return "forex"
+	if s, ok := config.SymbolByTicker(ticker); ok {
+		return s.AssetClass
 	}
+	return "forex"
 }
 
 func tickSizeForTicker(ticker string) float64 {
-	switch {
-	case ticker == "USDJPY":
-		return 0.001
-	case ticker == "BTCUSD":
-		return 0.01
-	case ticker == "ETHUSD":
-		return 0.01
-	case ticker == "US30" || ticker == "SPX500" || ticker == "NAS100" ||
-		ticker == "UK100" || ticker == "GER40" || ticker == "JPN225":
-		return 1.0
-	case ticker == "XAUUSD" || ticker == "XAGUSD":
-		return 0.01
-	default:
-		return 0.00001
+	if s, ok := config.SymbolByTicker(ticker); ok {
+		return s.TickSize
 	}
+	return 0.00001
 }
 
 func FindDataDirectory() string {
@@ -325,42 +310,30 @@ func (r *ImportResult) Summary() string {
 }
 
 func MapOrcaToStooqSymbols() []string {
-	return []string{
-		"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "USDCAD", "NZDUSD",
-		"US30", "SPX500", "NAS100", "UK100", "GER40", "JPN225",
-		"XAUUSD", "XAGUSD",
-		"BTCUSD", "ETHUSD",
+	tickers, err := config.Tickers()
+	if err != nil {
+		return nil
 	}
+	return tickers
 }
 
 func StooqFileName(orcaTicker string) string {
-	mapping := map[string]string{
-		"EURUSD": "eurusd.txt", "GBPUSD": "gbpusd.txt", "USDJPY": "usdjpy.txt",
-		"USDCHF": "usdchf.txt", "AUDUSD": "audusd.txt", "USDCAD": "usdcad.txt",
-		"NZDUSD": "nzdusd.txt",
-		"US30": "^dji.txt", "SPX500": "^spx.txt", "NAS100": "^ndq.txt",
-		"UK100": "^ukx.txt", "GER40": "^dax.txt", "JPN225": "^nkx.txt",
-		"XAUUSD": "xauusd.txt", "XAGUSD": "xagusd.txt",
-		"BTCUSD": "btc.v.txt", "ETHUSD": "eth.v.txt",
-	}
-	if f, ok := mapping[orcaTicker]; ok {
-		return f
+	if s, ok := config.SymbolByTicker(orcaTicker); ok && s.StooqTicker != "" {
+		return s.StooqTicker + ".txt"
 	}
 	return strings.ToLower(orcaTicker) + ".txt"
 }
 
 func StooqSubdir(orcaTicker string) string {
-	switch {
-	case orcaTicker == "EURUSD" || orcaTicker == "GBPUSD" || orcaTicker == "USDJPY" ||
-		orcaTicker == "USDCHF" || orcaTicker == "AUDUSD" || orcaTicker == "USDCAD" ||
-		orcaTicker == "NZDUSD":
-		return "currencies/major"
-	case orcaTicker == "US30" || orcaTicker == "SPX500" || orcaTicker == "NAS100" ||
-		orcaTicker == "UK100" || orcaTicker == "GER40" || orcaTicker == "JPN225":
-		return "indices"
-	case orcaTicker == "BTCUSD" || orcaTicker == "ETHUSD":
-		return "cryptocurrencies"
-	default:
-		return "currencies/other"
+	if s, ok := config.SymbolByTicker(orcaTicker); ok {
+		switch s.AssetClass {
+		case "forex_major":
+			return "currencies/major"
+		case "crypto":
+			return "cryptocurrencies"
+		case "index_agg", "index_eu":
+			return "indices"
+		}
 	}
+	return "currencies/other"
 }

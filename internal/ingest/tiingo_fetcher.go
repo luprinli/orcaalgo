@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -112,32 +113,11 @@ func (f *TiingoDataFetcher) FetchDailyMetrics(ctx context.Context, ticker string
 }
 
 func (f *TiingoDataFetcher) resolveSymbol(ticker string) string {
-	switch ticker {
-	case "EURUSD":
-		return "eurusd"
-	case "GBPUSD":
-		return "gbpusd"
-	case "USDJPY":
-		return "usdjpy"
-	case "USDCHF":
-		return "usdchf"
-	case "AUDUSD":
-		return "audusd"
-	case "USDCAD":
-		return "usdcad"
-	case "NZDUSD":
-		return "nzdusd"
-	case "XAUUSD":
-		return "xauusd"
-	case "XAGUSD":
-		return "xagusd"
-	case "BTCUSD":
-		return "btcusd"
-	case "ETHUSD":
-		return "ethusd"
-	default:
-		return ticker
+	canonical := ResolveTicker(ticker)
+	if s, ok := config.SymbolByTicker(canonical); ok && s.TiingoTicker != "" {
+		return s.TiingoTicker
 	}
+	return canonical
 }
 
 type tiingoCandle struct {

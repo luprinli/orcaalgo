@@ -60,7 +60,8 @@ Plugin registry pattern with `Adapter` interface.
 | `walk_forward.go` | Rolling window train/test with PassedCompliance tracking |
 | `optimized_walk_forward.go` | Parameter optimization with IVS robustness, optimized params applied to OOS test |
 | `monte_carlo.go` | Go→Python subprocess for Monte Carlo pass-probability |
-| `batch_runner.go` | Matrix backtest orchestrator with Warnings and GatePassed propagation |
+| `batch_runner.go` | Matrix backtest orchestrator with Warnings, GatePassed, TotalFees/AvgSlippageBps/CalmarRatio/CandleCount, GrossReturnPct, and provenance (DataSource/EngineVersion) propagation |
+| `plausibility.go` | `FlagImplausibleCombos` — matrix plausibility gate (Sharpe/PF/WR ceilings, one-sided fills, sentinel PF, timeframe dedup), surfaced as `MatrixResult.Plausibility` |
 | `light_optimizer.go` | Per-strategy light optimizer with parameter sensitivity report (RunParameterSensitivity) |
 | `multi_metric_gate.go` | Multi-Metric Gate with Default/Lenient/Strict profiles, auto-applied via ApplyGate |
 | `parity_test.go` | Backtest-vs-replay parity: batch/streaming determinism, pipeline signal parity |
@@ -79,7 +80,7 @@ Plugin registry pattern with `Adapter` interface.
 | `pairs_runner.go` | Pairs Trading | Cointegration spread, cached hedge ratio, p-value validity check |
 | `vix_futures_carry_runner.go` | VIX Futures Carry | Contango proxy via spot VIX, fade mean-reversion, max hold exit |
 | `volume_scalp_runner.go` | Volume Scalp | Volume-confirmed breakout (V > avg × 2), session range |
-| `registry.go` | Strategy Registry | Factory table with 16 registered strategies (14 active) |
+| `registry.go` | Strategy Registry | Factory table with 17 registered strategies |
 
 ### `internal/risk/` — Risk Management
 
@@ -103,10 +104,11 @@ PostgreSQL + TimescaleDB access via `pgx/v5`.
 | File | Purpose |
 |------|---------|
 | `repository.go` | Full CRUD: strategies (16 types), symbols, providers, trades, regime logs, candles |
+| `repository_candles.go` | Source+timeframe-aware candle loading: `LoadCandlesFiltered`, `LoadCandlesByTimeframeFiltered`, `SourceValues` (`stooq`→`stooq`/`stooq-resampled`/`stooq-calibrated`), source-priority `DISTINCT ON` loader, provenance (`source`/`generation_id`) on `Candle` |
 | `parameter_version_repo.go` | Parameter version CRUD: upsert, get active, list, activate, deactivate. Backed by `strategy_params_version` table |
 | `seeder.go` | Development seed data: strategies, symbols, regime logs |
 | `fixtures.go` | Fixtures: 16 strategies across 4 regimes, 17 Stooq symbols |
-| `migrations/` | 39 SQL migration files (golang-migrate compatible). Latest: `000039_vix_bigint` (VIX DOUBLE PRECISION → BIGINT, scale 10000) |
+| `migrations/` | 41 SQL migration files (golang-migrate compatible). Latest: `000041_source_bar_identity` (candles unique key includes `source`) |
 
 ### `internal/propfirm/` — Prop Firm Profiles
 
@@ -139,6 +141,7 @@ Vendor-agnostic profile system. Single `Profile` struct supports FTMO, TopStep, 
 | `config.go` | YAML config loader with env override |
 | `strategy_config.go` | Strategy params loader |
 | `feature_flags.go` | Feature flag system |
+| `universe.go` | Canonical 18-symbol universe + pairs map (`Tickers`, `SecondaryTicker`, `TickerToStooq`/`TickerToYahoo`) loaded from `configs/universe.json` |
 
 ### `internal/universe/` — Symbol Universe
 

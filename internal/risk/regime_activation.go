@@ -56,6 +56,11 @@ func NewRegimeActivationMatrix() *RegimeActivationMatrix {
 				Allowed:        [4]bool{true, false, false, false},   // Calm only
 				KellyMultiplier: [4]float64{0.25, 0, 0, 0},
 			},
+			"intraday_mr": {
+				StrategyID:     "intraday_mr",
+				Allowed:        [4]bool{true, false, false, false},   // Calm only
+				KellyMultiplier: [4]float64{0.25, 0, 0, 0},
+			},
 		"opening_range_breakout": {
 			StrategyID:     "opening_range_breakout",
 			Allowed:        [4]bool{true, true, true, false},    // Calm, Trending, HighVol

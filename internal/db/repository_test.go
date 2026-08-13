@@ -129,12 +129,12 @@ func TestTradeExecutionTypeFields(t *testing.T) {
 
 func TestStrategyTypeJSONRoundTrip(t *testing.T) {
 	s := Strategy{
-		ID:      "strat-001",
-		Name:    "MA Crossover",
-		Type:    "trend_following",
+		ID:   "strat-001",
+		Name: "MA Crossover",
+		Type: "trend_following",
 		Parameters: map[string]interface{}{
-			"fast_period":  10.0,
-			"slow_period":  50.0,
+			"fast_period":    10.0,
+			"slow_period":    50.0,
 			"kelly_fraction": 0.25,
 		},
 		Enabled:   true,
@@ -252,11 +252,40 @@ func TestRepositoryMethodsExist(t *testing.T) {
 		t.Fatal("Repository should not be nil")
 	}
 	_ = r.LoadCandles
+	_ = r.LoadCandlesFiltered
 	_ = r.LoadCandlesByTimeframe
+	_ = r.LoadCandlesByTimeframeFiltered
 	_ = r.ListStrategies
 	_ = r.ListSymbols
 	_ = r.Ping
 	_ = r.Close
 	_ = r.Pool
 	_ = r.IsConnected
+}
+
+func TestSourceValues(t *testing.T) {
+	cases := []struct {
+		source string
+		want   []string
+	}{
+		{"", nil},
+		{"all", nil},
+		{"any", nil},
+		{"stooq", []string{"stooq", "stooq-resampled", "stooq-calibrated"}},
+		{"yahoo", []string{"yahoo"}},
+		{"seed", []string{"seed"}},
+		{"alpaca", []string{"alpaca"}},
+	}
+	for _, c := range cases {
+		got := SourceValues(c.source)
+		if len(got) != len(c.want) {
+			t.Errorf("SourceValues(%q) = %v, want %v", c.source, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("SourceValues(%q)[%d] = %q, want %q", c.source, i, got[i], c.want[i])
+			}
+		}
+	}
 }

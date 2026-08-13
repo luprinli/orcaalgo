@@ -70,19 +70,54 @@ func (fs *FeatureStore) Compute(
 	if fs.count < 40 {
 		return nil, fmt.Errorf("insufficient data: %d bars (need 40)", fs.count)
 	}
+	return fs.computeAt(fs.count-1, ts, hmmAlpha, hmmConfidence, signalType, signalStrength, cvdDivergence, spreadPct)
+}
 
-	n := fs.count
+// ComputeAt computes the feature vector as of bar `index` (0-based), treating
+// bars after `index` as unseen. This is the point-in-time primitive: features
+// for a decision made at bar `index` must never read bars > `index`.
+func (fs *FeatureStore) ComputeAt(
+	index int,
+	ts time.Time,
+	hmmAlpha [4]float64,
+	hmmConfidence float64,
+	signalType int,
+	signalStrength float64,
+	cvdDivergence float64,
+	spreadPct float64,
+) (*FeatureVector, error) {
+	if index < 0 || index >= fs.count {
+		return nil, fmt.Errorf("index %d out of range [0,%d)", index, fs.count)
+	}
+	n := index + 1
+	if n < 40 {
+		return nil, fmt.Errorf("insufficient data: %d bars (need 40)", n)
+	}
+	return fs.computeAt(index, ts, hmmAlpha, hmmConfidence, signalType, signalStrength, cvdDivergence, spreadPct)
+}
+
+func (fs *FeatureStore) computeAt(
+	index int,
+	ts time.Time,
+	hmmAlpha [4]float64,
+	hmmConfidence float64,
+	signalType int,
+	signalStrength float64,
+	cvdDivergence float64,
+	spreadPct float64,
+) (*FeatureVector, error) {
+	n := index + 1
 	if n > 256 {
 		n = 256
 	}
 
-	// Extract working slices from ring buffer
+	// Extract working slices from ring buffer, ending at `index` (inclusive).
 	closes := make([]float64, n)
 	highs := make([]float64, n)
 	lows := make([]float64, n)
 	volumes := make([]float64, n)
 	for i := 0; i < n; i++ {
-		idx := (fs.count - n + i) % 256
+		idx := (index + 1 - n + i) % 256
 		closes[i] = fs.prices[idx]
 		highs[i] = fs.highs[idx]
 		lows[i] = fs.lows[idx]

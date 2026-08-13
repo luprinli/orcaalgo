@@ -101,11 +101,13 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
     return FALLBACK_STRATEGIES.slice(0, 1)
   })
   const [symbols, setSymbols] = useState('')
-  const [start, setStart] = useState('2023-01-01')
-  const [end, setEnd] = useState('2025-12-31')
+  // Default to the trailing 1-year window so the seeded data (and real intraday
+  // feeds, which only carry ~5 months of 5m/15m/30m bars) overlaps the range.
+  const [start, setStart] = useState(() => new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+  const [end, setEnd] = useState(() => new Date().toISOString().slice(0, 10))
   const [capital, setCapital] = useState('100000')
-  const [dataSource, setDataSource] = useState('synthetic')
-  const [gateProfile, setGateProfile] = useState('none')
+  const [dataSource, setDataSource] = useState('stooq')
+  const [gateProfile, setGateProfile] = useState('default')
   const [timeframes, setTimeframes] = useState<string[]>(['1d'])
   const [lightOptimize, setLightOptimize] = useState(true)
   const [favoriteSymbols, setFavoriteSymbols] = useState<string[]>(() => {

@@ -15,6 +15,8 @@ type Candle struct {
 	Volume           float64
 	Symbol           string
 	AdjustmentFactor float64
+	Source           string
+	GenerationID     string
 }
 
 type Signal struct {

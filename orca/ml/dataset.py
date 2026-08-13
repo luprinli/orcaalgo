@@ -7,6 +7,7 @@ labels, and exports training-ready datasets.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -112,12 +113,36 @@ class FeatureDataset:
         return True, []
 
 
+def compute_dataset_id(
+    generation_id: str,
+    feature_names: list[str],
+    barrier_config: BarrierConfig,
+) -> str:
+    """Deterministic dataset identifier from data lineage + feature/label spec.
+
+    Ties a dataset to the exact data generation that produced it and the exact
+    feature/label computation code signature (feature names + barrier config),
+    so a trained model can be audited back to its inputs (R12).
+    """
+    payload = json.dumps(
+        {
+            "generation_id": generation_id or "",
+            "feature_names": sorted(feature_names),
+            "barrier_config": asdict(barrier_config),
+        },
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def build_dataset_from_trade_logs(
     trades: list[dict],
     candle_data: dict[str, dict[str, np.ndarray]],
     hmm_data: dict[str, list] | None = None,
     barrier_config: BarrierConfig | None = None,
     min_bars: int = 40,
+    generation_id: str | None = None,
 ) -> FeatureDataset:
     """Build a training dataset from trade logs and candle data.
 
@@ -129,15 +154,21 @@ def build_dataset_from_trade_logs(
         hmm_data: Optional dict of {symbol: [(timestamp, alpha, confidence), ...]}.
         barrier_config: Triple-barrier config.
         min_bars: Minimum bars needed after entry for labeling.
+        generation_id: Data-generation identifier for lineage (R12).
 
     Returns:
         FeatureDataset ready for training.
     """
+    resolved_barrier = barrier_config or BarrierConfig()
     dataset = FeatureDataset(
         metadata={
             "created_at": datetime.now(UTC).isoformat(),
             "n_trades_loaded": len(trades),
-            "barrier_config": asdict(barrier_config or BarrierConfig()),
+            "barrier_config": asdict(resolved_barrier),
+            "generation_id": generation_id or "",
+            "dataset_id": compute_dataset_id(
+                generation_id or "", FEATURE_NAMES, resolved_barrier
+            ),
         }
     )
 

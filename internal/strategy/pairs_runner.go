@@ -33,8 +33,8 @@ type PairsRunner struct {
 	SecondarySymbol string
 
 	// Cointegration state (updated externally)
-	pairMu      sync.RWMutex
-	pairStatus  PairStatus
+	pairMu     sync.RWMutex
+	pairStatus PairStatus
 
 	// Entry/exit z-score thresholds
 	EntryZ float64
@@ -42,6 +42,12 @@ type PairsRunner struct {
 
 	// Maximum holding period in bars
 	MaxHold int
+
+	// Minimum log-price correlation required to open new positions. This is a
+	// backtest proxy for the live-path cointegration p-value gate: correlation
+	// is a necessary (though not sufficient) condition for cointegration, so an
+	// uncorrelated pair is skipped without a full ADF regression.
+	MinPairCorrelation float64
 
 	// Rolling window for spread computation
 	SpreadLookback int
@@ -58,14 +64,15 @@ type PairsRunner struct {
 
 func NewPairsRunner(primary, secondary string) *PairsRunner {
 	return &PairsRunner{
-		BaseRunner:       NewBaseRunner(256),
-		SecondarySymbol:  secondary,
-		EntryZ:           2.0,
-		ExitZ:            0.5,
-		MaxHold:          60,
-		SpreadLookback:   60,
-		spreadHistory:    make([]float64, 256),
-		secPriceHistory:  make([]float64, 256),
+		BaseRunner:         NewBaseRunner(256),
+		SecondarySymbol:    secondary,
+		EntryZ:             2.0,
+		ExitZ:              0.5,
+		MaxHold:            60,
+		MinPairCorrelation: 0.5,
+		SpreadLookback:     60,
+		spreadHistory:      make([]float64, 256),
+		secPriceHistory:    make([]float64, 256),
 		pairStatus: PairStatus{
 			Primary:   primary,
 			Secondary: secondary,
@@ -74,8 +81,8 @@ func NewPairsRunner(primary, secondary string) *PairsRunner {
 	}
 }
 
-func (r *PairsRunner) Name() string     { return "pairs_trading" }
-func (r *PairsRunner) Type() string     { return "pairs" }
+func (r *PairsRunner) Name() string              { return "pairs_trading" }
+func (r *PairsRunner) Type() string              { return "pairs" }
 func (r *PairsRunner) Version() (string, string) { return r.BaseRunner.Version() }
 
 func (r *PairsRunner) Reset() {
@@ -89,10 +96,11 @@ func (r *PairsRunner) Reset() {
 
 func (r *PairsRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"entry_z":         r.EntryZ,
-		"exit_z":          r.ExitZ,
-		"max_hold":        float64(r.MaxHold),
-		"spread_lookback": float64(r.SpreadLookback),
+		"entry_z":              r.EntryZ,
+		"exit_z":               r.ExitZ,
+		"max_hold":             float64(r.MaxHold),
+		"spread_lookback":      float64(r.SpreadLookback),
+		"min_pair_correlation": r.MinPairCorrelation,
 	}
 }
 
@@ -109,6 +117,9 @@ func (r *PairsRunner) SetParams(params map[string]float64) {
 	if v, ok := params["spread_lookback"]; ok {
 		r.SpreadLookback = int(v)
 	}
+	if v, ok := params["min_pair_correlation"]; ok {
+		r.MinPairCorrelation = v
+	}
 }
 
 func (r *PairsRunner) ParamDefs() []ParamDef {
@@ -117,6 +128,7 @@ func (r *PairsRunner) ParamDefs() []ParamDef {
 		{Name: "exit_z", Type: ParamContinuous, Default: 0.5, Min: 0.0, Max: 1.5, Step: 0.25, Group: "Signal", Description: "Spread z-score threshold for exit"},
 		{Name: "max_hold", Type: ParamInteger, Default: 60, Min: 10, Max: 200, Step: 10, Group: "Risk", Description: "Maximum holding period in bars"},
 		{Name: "spread_lookback", Type: ParamInteger, Default: 60, Min: 20, Max: 120, Step: 10, Group: "Signal", Description: "Lookback window for spread mean/std"},
+		{Name: "min_pair_correlation", Type: ParamContinuous, Default: 0.5, Min: 0.0, Max: 1.0, Step: 0.05, Group: "Filter", Description: "Minimum log-price correlation to open positions (cointegration proxy)"},
 	}
 }
 
@@ -193,6 +205,47 @@ func (r *PairsRunner) computeSimpleHedge() float64 {
 	return (sumXY*float64(count) - sumX*sumY) / denom
 }
 
+// pairLogCorrelation returns the Pearson correlation of log(primary) and
+// log(secondary) over the available price history. Used as a backtest proxy for
+// the cointegration check: uncorrelated pairs cannot be cointegrated.
+func (r *PairsRunner) pairLogCorrelation() float64 {
+	n := r.HistCount
+	if n < 20 || r.secHistCount < 20 {
+		return 0
+	}
+	minN := n
+	if r.secHistCount < minN {
+		minN = r.secHistCount
+	}
+	var sumX, sumY, sumXY, sumX2, sumY2 float64
+	count := 0
+	for i := 0; i < minN; i++ {
+		pi := r.PriceHistory[i%r.BufferSize]
+		si := r.secPriceHistory[i%256]
+		if pi > 0 && si > 0 {
+			x := math.Log(si)
+			y := math.Log(pi)
+			sumX += x
+			sumY += y
+			sumXY += x * y
+			sumX2 += x * x
+			sumY2 += y * y
+			count++
+		}
+	}
+	if count < 5 {
+		return 0
+	}
+	num := sumXY*float64(count) - sumX*sumY
+	denX := sumX2*float64(count) - sumX*sumX
+	denY := sumY2*float64(count) - sumY*sumY
+	den := math.Sqrt(denX * denY)
+	if den <= 0 {
+		return 0
+	}
+	return num / den
+}
+
 func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 	price := candle.Close
 	if price.IsZero() {
@@ -266,7 +319,12 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	// Entry signals.
+	// Entry signals — gated by the cointegration proxy. Uncorrelated pairs are
+	// skipped for new entries (but existing positions still exit normally above).
+	if r.MinPairCorrelation > 0 && r.pairLogCorrelation() < r.MinPairCorrelation {
+		return nil
+	}
+
 	if zScore <= -r.EntryZ {
 		// Spread is below mean → go LONG primary (expect spread to widen).
 		r.barsHeld = 0

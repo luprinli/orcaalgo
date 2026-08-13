@@ -216,8 +216,10 @@ func TestCapitalPool_HardHaltRejectsAll(t *testing.T) {
 	}
 	pool := NewCapitalPoolManager(profile, state)
 
-	// Balance drop to 94,000 = -6.0% → exceeds 5% daily loss limit → hard halt.
+	// Single-day loss of -6.0% (DailyPnL = -6000 on a 100k day-start balance)
+	// exceeds the 5% daily loss limit → hard halt.
 	pool.poolState.TotalBalance = 94000
+	pool.poolState.DailyPnL = -6000
 	result := pool.RequestCapital(context.Background(), CapitalRequest{
 		StrategyID: "s1", Confidence: 1.0, Symbol: "SPY", Side: "BUY", BaseSize: 1000,
 	})

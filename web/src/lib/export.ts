@@ -58,6 +58,7 @@ export function exportMatrixResultsCSV(results: ComboResult[], filename = 'matri
     'Wins', 'Losses', 'AvgWin', 'AvgLoss', 'MFE', 'MAE',
     'GatePassed', 'Optimized', 'Params',
     'TotalFees', 'AvgSlippageBps', 'CalmarRatio', 'CandleCount',
+    'GrossReturn%', 'DataSource', 'EngineVersion',
   ]
   const rows = results.map(r => [
     r.strategy_id, r.symbol, r.timeframe, r.num_trades,
@@ -77,6 +78,7 @@ export function exportMatrixResultsCSV(results: ComboResult[], filename = 'matri
     r.strategy_params ? JSON.stringify(r.strategy_params) : '',
     r.total_fees?.toFixed(2) ?? '', r.avg_slippage_bps?.toFixed(4) ?? '',
     r.calmar_ratio?.toFixed(4) ?? '', r.candle_count ?? '',
+    r.gross_return_pct?.toFixed(2) ?? '', r.data_source ?? '', r.engine_version ?? '',
   ].map(escapeCSV).join(','))
   const csv = [headers.join(','), ...rows].join('\n')
   downloadBlob(csv, filename)

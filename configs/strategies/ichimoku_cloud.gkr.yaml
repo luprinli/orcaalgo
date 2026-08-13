@@ -1,0 +1,61 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-ichimoku-cloud-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "ichimoku"
+      token_ref:
+        token_id: "indicator.ichimoku"
+        version: ">=1.0"
+      params:
+        tenkan_period: 9
+        kijun_period: 26
+        senkou_b_period: 52
+    - id: "cloud_signal"
+      token_ref:
+        token_id: "signal.trend"
+        version: ">=1.0"
+      inputs:
+        cloud: "ichimoku.cloud"
+        crossover: "ichimoku.crossover"
+      params:
+        cloud_confirm: true
+        atr_multiplier: 2.0
+        use_chandelier: true
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "cloud_signal.signal"
+      params:
+        blocked_states: [3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - regime_aware

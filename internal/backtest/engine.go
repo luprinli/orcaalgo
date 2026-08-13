@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/broker"
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/hash"
 	"github.com/lee-econ/orca-core/internal/market"
 	"github.com/lee-econ/orca-core/internal/ml"
@@ -83,6 +84,7 @@ type MatrixBacktestConfig struct {
 	KellyFraction     float64   `json:"kelly_fraction"`
 	SkipLightOptimize bool      `json:"skip_light_optimize"`
 	WirePipeline      bool      `json:"wire_pipeline"`
+	WalkForward       bool      `json:"walk_forward"`
 }
 
 type ComboResult struct {
@@ -134,6 +136,12 @@ type ComboResult struct {
 	AvgSlippageBps     float64             `json:"avg_slippage_bps,omitempty"`
 	CalmarRatio        float64             `json:"calmar_ratio,omitempty"`
 	CandleCount        int                 `json:"candle_count,omitempty"`
+	GrossReturnPct     float64             `json:"gross_return_pct,omitempty"`
+	DataSource         string              `json:"data_source,omitempty"`
+	EngineVersion      string              `json:"engine_version,omitempty"`
+	DataGenerationID   string              `json:"data_generation_id,omitempty"`
+	WfISSharpe         float64             `json:"wf_is_sharpe,omitempty"`
+	WfOOSSharpe        float64             `json:"wf_oos_sharpe,omitempty"`
 	FirstCandleTime    time.Time           `json:"first_candle_time,omitempty"`
 	LastCandleTime     time.Time           `json:"last_candle_time,omitempty"`
 	DeclaredBarsPerDay float64             `json:"declared_bars_per_day,omitempty"`
@@ -141,10 +149,11 @@ type ComboResult struct {
 }
 
 type MatrixResult struct {
-	RunID   string              `json:"run_id"`
-	Combos  int                 `json:"total_combos"`
-	Results []ComboResult       `json:"results"`
-	Config  MatrixBacktestConfig `json:"config"`
+	RunID        string              `json:"run_id"`
+	Combos       int                 `json:"total_combos"`
+	Results      []ComboResult       `json:"results"`
+	Config       MatrixBacktestConfig `json:"config"`
+	Plausibility []PlausibilityFlag  `json:"plausibility_flags,omitempty"`
 }
 
 type Trade struct {
@@ -166,6 +175,8 @@ type Trade struct {
 	BrokerFee        float64
 	SlippageMidBps   float64
 	SlippageLastBps  float64
+	SlippageBps      float64
+	SlippageFillCount int
 	AdverseSelection bool
 	MAE              float64
 	MFE              float64
@@ -241,6 +252,7 @@ type BacktestResult struct {
 	LastCandleTime   time.Time           `json:"last_candle_time,omitempty"`
 	EffectiveBarsPerDay float64          `json:"effective_bars_per_day,omitempty"`
 	DeclaredBarsPerDay  float64          `json:"declared_bars_per_day,omitempty"`
+	DataGenerationID  string             `json:"data_generation_id,omitempty"`
 }
 
 type TemporalBreakdown struct {
@@ -287,6 +299,7 @@ type SignalDiag struct {
 	TradesOpened      int `json:"trades_opened"`
 	FillRejected      int `json:"fill_rejected"`
 	MLRejected        int `json:"ml_rejected"`
+	RegimeRejected    int `json:"regime_rejected"`
 }
 
 type EquityPoint struct {
@@ -360,6 +373,14 @@ type SentimentLog struct {
 func NewEngine(db Database) *Engine {
 	return NewEngineBuilder(db).Build()
 }
+
+// defaultRegimeMatrix is the shared regime-activation table (the single source
+// of truth in internal/risk/regime_activation.go). It is consulted directly by
+// the backtest engine because the matrix path does not always wire the
+// RiskPipeline, and regime gating must be enforced identically in backtest and
+// live paths (HP#17). Strategies not explicitly mapped fall through to the
+// permissive default entry and are unaffected.
+var defaultRegimeMatrix = risk.NewRegimeActivationMatrix()
 
 // SetMetaLabeler configures the ML meta-labeling subsystem.
 func (e *Engine) SetMetaLabeler(predictor ml.Predictor) error {
@@ -538,6 +559,30 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		result.FirstCandleTime = allCandles[0].Time
 		result.LastCandleTime = allCandles[len(allCandles)-1].Time
 	}
+	// Link the result to the exact data generation that produced it, so a
+	// backtest can be audited against the (generation_id) lineage of its input.
+	result.DataGenerationID = representativeGenerationID(allCandles)
+
+	// Real-data coverage guard: surface per-symbol gaps instead of silently
+	// running (or not running) a strategy on an empty feed. This is what lets a
+	// matrix run distinguish "strategy chose not to trade" from "no data was
+	// loaded for this symbol/timeframe/source".
+	if len(config.Symbols) == len(candlesBySymbol) && len(candlesBySymbol) > 0 {
+		var missing []string
+		for i, sym := range config.Symbols {
+			if len(candlesBySymbol[i]) == 0 {
+				missing = append(missing, sym)
+			}
+		}
+		if len(missing) > 0 {
+			src := config.DataSource
+			if src == "" {
+				src = "all"
+			}
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("data coverage: no %q candles for symbols %v at timeframe %q — verify source coverage or seed data", src, missing, config.Timeframe))
+		}
+	}
 
 	if config.CommissionBps <= 0 {
 		config.CommissionBps = 5.0
@@ -557,6 +602,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	if regimeLogs == nil {
 		result.Warnings = append(result.Warnings, "regime_logs: failed to load, all candles treated as regime 0 (Calm)")
 	}
+	regimeIdx := buildRegimeIndex(regimeLogs)
 	capital := config.InitialCapital
 	peakCapital := config.InitialCapital
 	equity := []EquityPoint{}
@@ -590,7 +636,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		atrPeriod = config.StopLoss.ATRPeriod
 	}
 
-	declaredBarsPerDay := barsPerDayFromTimeframe(config.Timeframe)
+	declaredBarsPerDay := barsPerDayForSymbol(config.Timeframe, firstSymbol(config.Symbols))
 	barsPerDay := declaredBarsPerDay
 
 	for i := range allCandles {
@@ -630,7 +676,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			}
 		}
 
-		regime := getRegimeAt(candle.Time, regimeLogs)
+		regime := regimeAt(regimeIdx, candle.Symbol, candle.Time)
 		vix := getVIXAt(candle.Time, vixLogs)
 		sentiment := getSentimentAt(candle.Time, sentimentLogs)
 		if vix > 25.0 {
@@ -682,6 +728,15 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		}
 
 		for sym, ot := range openTrades {
+			if candle.Symbol != sym {
+				// Multi-symbol runs (e.g. pairs_trading) interleave primary and
+				// secondary candles in the same stream. A trade on `sym` must
+				// only be updated on `sym`'s own candles; otherwise the
+				// secondary's price scale corrupts stop checks, trailing stops,
+				// and the lowest/highest-since-entry excursion tracking (which
+				// produced implausible MAE/MFE for pairs).
+				continue
+			}
 			if stop, ok := activeStops[sym]; ok && stop.StopType == StopLossTrail {
 				UpdateTrailingStop(stop, candle)
 			}
@@ -729,7 +784,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			}
 
 			exitReason := ""
-			exitPrice := candle.Close.Float64() * candle.AdjustmentFactor
+			exitPrice := candle.Close.Float64() * adjFactor(candle.AdjustmentFactor)
 			fillQty := ot.Quantity
 			shouldExit := false
 
@@ -764,17 +819,19 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 			if shouldExit {
 				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64()*candle.AdjustmentFactor, candle.Volume)
+				simulatedExit := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), ot.Symbol, ot.EntryPrice.Float64(), fillQty, invertSide(ot.Side), exitPrice, candle.Time, midPrice, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Volume)
 				if simulatedExit.FillPrice.Float64() > 0 {
 					exitPrice = simulatedExit.FillPrice.Float64()
 				}
 				if simulatedExit.FillQuantity > 0 {
 					fillQty = simulatedExit.FillQuantity
 				}
+				ot.SlippageBps += simulatedExit.SlippageBps
+				ot.SlippageFillCount++
 
 				commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
-				brokerFee := config.BrokerFee.CalculateFee(fillQty, ot.EntryPrice.Float64()) +
-					config.BrokerFee.CalculateFee(fillQty, exitPrice)
+				brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, ot.EntryPrice.Float64()) +
+					config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, exitPrice)
 
 			if ot.Side == "BUY" {
 				ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
@@ -797,11 +854,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				entry := ot.EntryPrice.Float64()
 				if entry > 0 {
 					if ot.Side == "BUY" {
-						ot.MAE = (entry - ot.lowestSinceEntry) / entry * 100.0
-						ot.MFE = (ot.highestSinceEntry - entry) / entry * 100.0
+						ot.MAE = clampExcursionPct((entry - ot.lowestSinceEntry) / entry * 100.0)
+						ot.MFE = clampExcursionPct((ot.highestSinceEntry - entry) / entry * 100.0)
 					} else {
-						ot.MAE = (ot.highestSinceEntry - entry) / entry * 100.0
-						ot.MFE = (entry - ot.lowestSinceEntry) / entry * 100.0
+						ot.MAE = clampExcursionPct((ot.highestSinceEntry - entry) / entry * 100.0)
+						ot.MFE = clampExcursionPct((entry - ot.lowestSinceEntry) / entry * 100.0)
 					}
 				}
 
@@ -865,11 +922,12 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			if signal != nil {
 			e.signalDiag.TradesOpened++
 			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*candle.AdjustmentFactor, signal.Quantity, signal.Side, candle.Close.Float64()*candle.AdjustmentFactor, candle.Time, midPrice, candle.Close.Float64()*candle.AdjustmentFactor, candle.Volume)
+			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), signal.Quantity, signal.Side, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Time, midPrice, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Volume)
 			entryPrice := simulatedEntry.FillPrice.Float64()
 			entryQty := simulatedEntry.FillQuantity
 			entrySlippageMid := simulatedEntry.SlippageMidBps
 			entrySlippageLast := simulatedEntry.SlippageLastBps
+			entrySlippage := simulatedEntry.SlippageBps
 			if entryPrice <= 0 {
 				entryPrice = candle.Close.Float64()
 			}
@@ -919,6 +977,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				TakePrice:        types.PriceFromFloat(takePrice),
 				SlippageMidBps:   entrySlippageMid,
 				SlippageLastBps:  entrySlippageLast,
+				SlippageBps:      entrySlippage,
+				SlippageFillCount: 1,
 				lowestSinceEntry:  entryPrice,
 				highestSinceEntry: entryPrice,
 			}
@@ -990,7 +1050,7 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 	lastCandle := allCandles[len(allCandles)-1]
 	for _, ot := range openTrades {
-		exitPrice := lastCandle.Close.Float64() * lastCandle.AdjustmentFactor
+		exitPrice := lastCandle.Close.Float64() * adjFactor(lastCandle.AdjustmentFactor)
 		exitReason := "end_of_data"
 		if stop, ok := activeStops[ot.Symbol]; ok {
 			if stopHit, sp := CheckStopHit(lastCandle, stop); stopHit {
@@ -1002,8 +1062,8 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			}
 		}
 		commission := ot.EntryPrice.Float64() * ot.Quantity * config.CommissionBps / 10000.0 * 2
-		brokerFee := config.BrokerFee.CalculateFee(ot.Quantity, ot.EntryPrice.Float64()) +
-			config.BrokerFee.CalculateFee(ot.Quantity, exitPrice)
+		brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, ot.EntryPrice.Float64()) +
+			config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, exitPrice)
 	if ot.Side == "BUY" {
 		ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
 	} else {
@@ -1024,11 +1084,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		entry := ot.EntryPrice.Float64()
 		if entry > 0 {
 			if ot.Side == "BUY" {
-				ot.MAE = (entry - ot.lowestSinceEntry) / entry * 100.0
-				ot.MFE = (ot.highestSinceEntry - entry) / entry * 100.0
+				ot.MAE = clampExcursionPct((entry - ot.lowestSinceEntry) / entry * 100.0)
+				ot.MFE = clampExcursionPct((ot.highestSinceEntry - entry) / entry * 100.0)
 			} else {
-				ot.MAE = (ot.highestSinceEntry - entry) / entry * 100.0
-				ot.MFE = (entry - ot.lowestSinceEntry) / entry * 100.0
+				ot.MAE = clampExcursionPct((ot.highestSinceEntry - entry) / entry * 100.0)
+				ot.MFE = clampExcursionPct((entry - ot.lowestSinceEntry) / entry * 100.0)
 			}
 		}
 
@@ -1056,9 +1116,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		sumMAE += t.MAE
 		sumMFE += t.MFE
 		totalFees += t.BrokerFee
-		if t.SlippageMidBps > 0 {
-			totalSlippage += t.SlippageMidBps
-			slippageCount++
+		if t.SlippageFillCount > 0 {
+			totalSlippage += t.SlippageBps
+			slippageCount += t.SlippageFillCount
 		}
 	}
 	if len(trades) > 0 {
@@ -1108,30 +1168,38 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		result.Warnings = append(result.Warnings, diag)
 	}
 
+	if config.DataSource == "synthetic" {
+		result.Warnings = append(result.Warnings, "synthetic data uses legacy per-asset-class calibration (not stooq-calibrated per-symbol EWMA σ) — treat results as illustrative only")
+	}
+
 	if config.DataSource == "synthetic" && (config.StrategyID == "breakout" || config.StrategyID == "opening_range_breakout" || config.StrategyID == "session_scalp" || config.StrategyID == "scalp") {
 		result.Warnings = append(result.Warnings, "strategy requires intraday microstructure patterns absent from synthetic data — use real market data for reliable evaluation")
 	}
 
 	if result.NumTrades > 0 {
 		result.WinRate = calculateWinRate(trades)
+		// Deterministic metrics are well-defined for any non-zero trade count and
+		// must not be gated behind minTradesForReliable. Otherwise low-trade-count
+		// combos report MaxDrawdown==0, NumWins==0, NumLosses==0 alongside a
+		// non-zero (possibly negative) return — an inconsistent and misleading result.
+		result.MaxDrawdown = calculateMaxDrawdown(equity)
+		result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
+		result.AvgTrade = result.TotalReturn / float64(result.NumTrades)
+		result.AvgWin, result.AvgLoss = calculateAvgWinLoss(trades)
+		result.NumWins, result.NumLosses = countWinsLosses(trades)
 		if result.NumTrades >= minTradesForMetrics {
 			result.SharpeRatio = calculateSharpe(equity, barsPerDay)
 			monitor.SetStrategySharpe(config.StrategyID, "backtest", result.SharpeRatio)
 		}
 		if result.NumTrades >= minTradesForReliable {
 			result.SortinoRatio = calculateSortino(equity, barsPerDay)
-			result.MaxDrawdown = calculateMaxDrawdown(equity)
-			result.MaxDrawdownDuration = calculateMaxDrawdownDuration(equity)
 			result.CalmarRatio = calculateCalmar(equity, barsPerDay)
-			result.AvgTrade = result.TotalReturn / float64(result.NumTrades)
-			result.AvgWin, result.AvgLoss = calculateAvgWinLoss(trades)
-			result.NumWins, result.NumLosses = countWinsLosses(trades)
+		}
+		if len(mtmEquity) >= 2 {
+			result.MtmMaxDrawdown = calculateMaxDrawdown(mtmEquity)
 		}
 		if len(mtmEquity) >= 2 && result.NumTrades >= minTradesForMetrics {
 			result.MtmSharpeRatio = calculateMtmSharpe(mtmEquity, barsPerDay)
-		}
-		if result.NumTrades >= minTradesForReliable {
-			result.MtmMaxDrawdown = calculateMaxDrawdown(mtmEquity)
 		}
 		result.ProfitFactor = calculateProfitFactor(trades)
 		result.AdverseSelectionRate = calculateAdverseSelectionRate(trades)
@@ -1174,12 +1242,25 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		result.MetricGateStatus = &verdict
 	}
 
-	if len(config.StrategyParams) > 0 {
-		result.StrategyParams = make(map[string]float64, len(config.StrategyParams))
-		for k, v := range config.StrategyParams {
-			result.StrategyParams[k] = v
-		}
+	if result.StrategyParams == nil {
+		result.StrategyParams = make(map[string]float64)
 	}
+	for k, v := range config.StrategyParams {
+		result.StrategyParams[k] = v
+	}
+	// Surface the effective Kelly fraction for every run so HP#6 (kelly <= 0.25)
+	// remains verifiable downstream. Unoptimized matrix runs previously emitted
+	// an empty `Params` column, which made the CI Kelly scan (validate-matrix.ps1)
+	// silently pass with zero checks. The `Optimized` flag is derived separately
+	// from whether light optimization produced params, not from this map.
+	kelly := config.KellyFraction
+	if kelly <= 0 {
+		kelly = e.kellyMult
+	}
+	if kelly <= 0 {
+		kelly = 0.25
+	}
+	result.StrategyParams["kelly_fraction"] = kelly
 
 	result.SignalDiag = e.signalDiag
 	result.MLFeatureEnabled = e.featureStore != nil
@@ -1188,6 +1269,10 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 }
 
 func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfig, runningCapital float64) *Signal {
+	if !defaultRegimeMatrix.IsAllowed(config.StrategyID, regime) {
+		e.signalDiag.RegimeRejected++
+		return nil
+	}
 	sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
 	var raw *strategy.Signal
 	func() {
@@ -1205,12 +1290,12 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 	}
 
 	if raw.Quantity == 0 {
+		// A zero-quantity signal is the strategy's "flat/exit" convention, not an
+		// entry. Treating it as an entry would open a zero-size position that
+		// still pays the round-trip fee and records a guaranteed loss. Exits are
+		// handled separately via generateSignalForExit.
 		e.signalDiag.ExitSignalZeroQty++
-		return &Signal{
-			Symbol:   candle.Symbol,
-			Side:     raw.Side,
-			Quantity: 0,
-		}
+		return nil
 	}
 
 	confidence := 1.0
@@ -1401,6 +1486,51 @@ func barsPerDayFromTimeframe(timeframe string) float64 {
 	}
 }
 
+// barsPerDay24h returns the bars-per-day for continuously-traded markets (forex,
+// crypto) with a 24h session.
+func barsPerDay24h(timeframe string) float64 {
+	switch timeframe {
+	case "5m", "5min":
+		return 288.0
+	case "15m", "15min":
+		return 96.0
+	case "30m", "30min":
+		return 48.0
+	case "1h", "60m", "hourly":
+		return 24.0
+	case "4h":
+		return 6.0
+	case "1d", "daily", "":
+		return 1.0
+	default:
+		return barsPerDayFromTimeframe(timeframe)
+	}
+}
+
+// barsPerDayForSymbol returns the declared bars-per-day for a symbol's timeframe,
+// using the 24h session for continuously-traded asset classes (forex, crypto)
+// and the RTH session otherwise.
+func barsPerDayForSymbol(timeframe, symbol string) float64 {
+	if symbol == "" {
+		return barsPerDayFromTimeframe(timeframe)
+	}
+	if s, ok := config.SymbolByTicker(symbol); ok {
+		switch s.AssetClass {
+		case "forex_major", "forex_minor", "crypto":
+			return barsPerDay24h(timeframe)
+		}
+	}
+	return barsPerDayFromTimeframe(timeframe)
+}
+
+// firstSymbol returns the first symbol in the list, or "" if empty.
+func firstSymbol(symbols []string) string {
+	if len(symbols) == 0 {
+		return ""
+	}
+	return symbols[0]
+}
+
 // effectiveBarsPerDay computes the actual bars-per-trading-day from the candle
 // data, guarding against timeframe label mismatches (e.g. when synthetic daily
 // data is labeled as "5m"). Falls back to declared barsPerDay if data is empty.
@@ -1490,13 +1620,60 @@ func mergeCandlesByTime(candlesBySymbol [][]Candle) []Candle {
 	return all
 }
 
-func getRegimeAt(t time.Time, logs []RegimeLog) int8 {
-	for i := len(logs) - 1; i >= 0; i-- {
-		if logs[i].Time.Before(t) || logs[i].Time.Equal(t) {
-			return logs[i].HMMState
+// representativeGenerationID returns the most common non-empty generation_id
+// across the loaded candles. A result can therefore be tied to the exact data
+// generation that produced it. Returns "" when candles carry no lineage info.
+func representativeGenerationID(candles []Candle) string {
+	counts := make(map[string]int)
+	for _, c := range candles {
+		if c.GenerationID != "" {
+			counts[c.GenerationID]++
 		}
 	}
-	return 0
+	best := ""
+	bestCount := 0
+	for id, n := range counts {
+		if n > bestCount || (n == bestCount && id < best) {
+			best = id
+			bestCount = n
+		}
+	}
+	return best
+}
+
+// buildRegimeIndex groups regime logs by symbol. Regime logs are per-symbol
+// (regime_logs.symbol), so a global "last log before t" is wrong: it returns an
+// unrelated symbol's regime. The index enables a per-symbol binary search.
+// Input logs must be sorted by time ascending (LoadRegimeLogs guarantees this),
+// which keeps each per-symbol slice sorted too.
+func buildRegimeIndex(logs []RegimeLog) map[string][]RegimeLog {
+	idx := make(map[string][]RegimeLog)
+	for _, l := range logs {
+		idx[l.Symbol] = append(idx[l.Symbol], l)
+	}
+	return idx
+}
+
+// regimeAt returns the regime for a specific symbol at time t, using a
+// per-symbol binary search. Returns 0 (Calm) when the symbol has no logs.
+func regimeAt(idx map[string][]RegimeLog, symbol string, t time.Time) int8 {
+	logs := idx[symbol]
+	if len(logs) == 0 {
+		return 0
+	}
+	lo, hi := 0, len(logs)
+	for lo < hi {
+		mid := (lo + hi) / 2
+		if logs[mid].Time.After(t) {
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+	if lo == 0 {
+		return 0
+	}
+	return logs[lo-1].HMMState
 }
 
 func getVIXAt(t time.Time, logs []VIXLog) float64 {
@@ -1658,6 +1835,35 @@ func calculateCalmar(equity []EquityPoint, _ float64) float64 {
 	return cagr / maxDD
 }
 
+// adjFactor returns the candle's adjustment factor, treating a non-positive
+// value as identity (1.0). The candles table has no split/dividend adjustment
+// column, and the in-process synthetic generator leaves the field unset (0),
+// so a raw read would otherwise zero out every price used in fill simulation.
+func adjFactor(af float64) float64 {
+	if af <= 0 {
+		return 1.0
+	}
+	return af
+}
+
+// clampExcursionPct bounds a trade's MAE/MFE percentage to a finite, physically
+// plausible range, guarding against data anomalies (e.g. a fixed-point scale
+// mismatch or an unbounded synthetic path) that would otherwise report absurd
+// multi-million-percent favorable/adverse excursions.
+func clampExcursionPct(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
+	const maxExcursionPct = 10000.0
+	if v > maxExcursionPct {
+		return maxExcursionPct
+	}
+	if v < -maxExcursionPct {
+		return -maxExcursionPct
+	}
+	return v
+}
+
 func calculateMaxDrawdown(equity []EquityPoint) float64 {
 	peak := 0.0
 	maxDD := 0.0
@@ -1713,6 +1919,12 @@ func calculateProfitFactor(trades []Trade) float64 {
 		}
 	}
 	if grossLoss == 0 {
+		if grossWin > 0 {
+			// All wins: profit factor is unbounded. Return a finite sentinel
+			// (rather than +Inf, which encoding/json cannot marshal) so the
+			// value is distinguishable from the all-loss / all-breakeven case.
+			return 999.0
+		}
 		return 0
 	}
 	if math.IsNaN(grossWin) || math.IsNaN(grossLoss) || math.IsInf(grossWin, 0) || math.IsInf(grossLoss, 0) {
@@ -1749,7 +1961,10 @@ func countWinsLosses(trades []Trade) (int, int) {
 	for _, t := range trades {
 		if t.PnL > 0 {
 			wins++
-		} else if t.PnL < 0 {
+		} else {
+			// Breakeven trades (PnL == 0) count as losses so that
+			// Wins + Losses == Trades. This mirrors calculateWinRate, which
+			// treats any non-positive trade as a non-win.
 			losses++
 		}
 	}
@@ -1810,12 +2025,15 @@ func calculateLongShortBreakdown(trades []Trade) LongShortBreakdown {
 	if longLoss > 0 {
 		b.LongPF = (b.LongGrossPnL + longLoss) / longLoss
 	} else if b.LongGrossPnL > 0 {
-		b.LongPF = b.LongGrossPnL
+		// All wins: profit factor is unbounded. Use the same finite sentinel as
+		// calculateProfitFactor (999) rather than reporting the raw gross PnL,
+		// which conflated a dollar amount with a ratio.
+		b.LongPF = 999.0
 	}
 	if shortLoss > 0 {
 		b.ShortPF = (b.ShortGrossPnL + shortLoss) / shortLoss
 	} else if b.ShortGrossPnL > 0 {
-		b.ShortPF = b.ShortGrossPnL
+		b.ShortPF = 999.0
 	}
 
 	totalAbsPnL := math.Abs(b.LongGrossPnL) + math.Abs(b.ShortGrossPnL)
@@ -1934,6 +2152,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 	if err != nil {
 		regimeLogs = nil
 	}
+	regimeIdx := buildRegimeIndex(regimeLogs)
 
 	candlesBySymbol, err := e.db.LoadCandles(ctx, config.Symbols, config.StartDate, config.EndDate)
 	if err != nil {
@@ -2005,7 +2224,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 			lastDay = currentDay
 		}
 
-		regime := getRegimeAt(candle.Time, regimeLogs)
+		regime := regimeAt(regimeIdx, candle.Symbol, candle.Time)
 
 		if e.poolSim.Halted() {
 			continue
@@ -2025,7 +2244,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 					Symbol:     sig.Symbol,
 					Side:       sig.Side,
 					Quantity:   sig.Quantity,
-					EntryPrice: types.PriceFromFloat(candle.Close.Float64() * candle.AdjustmentFactor),
+					EntryPrice: types.PriceFromFloat(candle.Close.Float64() * adjFactor(candle.AdjustmentFactor)),
 					EntryTime:  candle.Time,
 					StrategyID: sid,
 				},
@@ -2034,7 +2253,7 @@ func (e *EngineMulti) RunMulti(ctx context.Context, config MultiBacktestConfig) 
 		}
 
 		for sid, op := range openPositions {
-			exitPrice := candle.Close.Float64() * candle.AdjustmentFactor
+			exitPrice := candle.Close.Float64() * adjFactor(candle.AdjustmentFactor)
 			commission := op.Trade.EntryPrice.Float64() * op.Trade.Quantity * config.CommissionBps / 10000.0 * 2
 
 			var pnl float64

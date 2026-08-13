@@ -61,8 +61,9 @@ reports/
 # Kilo plugin dependencies
 .kilo/node_modules/
 
-# Market data (large)
-data/
+# Market data (large) — anchored to the repo root only, so the orca/data
+# Python package is NOT ignored.
+/data/
 *.parquet
 *.npy
 

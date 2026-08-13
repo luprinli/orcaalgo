@@ -151,3 +151,32 @@ func TestPropFirmEnforcerDailyReset(t *testing.T) {
 		t.Errorf("DailyPnLPct should be 0 after reset, got %f", f.DailyPnLPct)
 	}
 }
+
+func TestPropFirmEnforcerDailyLossPerDay(t *testing.T) {
+	f := DefaultPropFirmEnforcer(100000.0)
+	f.SoftHaltThresholdPct = 4.5
+	f.HardHaltThresholdPct = 5.0
+
+	// Day 1: -3% from the day-opening balance — no halt.
+	f.CurrentBalance = 97000
+	if !f.CheckDailyLoss() {
+		t.Error("3% intraday loss should not hard-halt")
+	}
+	if f.IsHalted() {
+		t.Error("should not be halted at -3% daily loss")
+	}
+
+	// Day boundary: the daily-loss window must reset to the day-starting balance.
+	f.OnNewDay()
+
+	// Day 2: another -3% from the day-opening balance (97000 -> 94090).
+	// Cumulative loss from inception is now -5.9%, but the day-2 loss is only -3%,
+	// so it must NOT trigger the daily-loss halt.
+	f.CurrentBalance = 94090
+	if !f.CheckDailyLoss() {
+		t.Error("3% intraday loss on day 2 should not hard-halt")
+	}
+	if f.IsHalted() {
+		t.Error("daily-loss window did not reset at day boundary — halted on cumulative (not daily) loss")
+	}
+}

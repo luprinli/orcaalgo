@@ -1,0 +1,68 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-keltner-macd-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "keltner_channel"
+      token_ref:
+        token_id: "indicator.keltner_channel"
+        version: ">=1.0"
+      params:
+        keltner_period: 20
+    - id: "macd_filter"
+      token_ref:
+        token_id: "indicator.macd"
+        version: ">=1.0"
+      inputs:
+        series: "keltner_channel.price"
+      params:
+        fast_period: 12
+        slow_period: 26
+        signal_period: 9
+    - id: "breakout_signal"
+      token_ref:
+        token_id: "signal.breakout"
+        version: ">=1.0"
+      inputs:
+        channel: "keltner_channel.bands"
+        momentum: "macd_filter.histogram"
+      params:
+        macd_requirement: true
+        atr_multiplier: 2.0
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "breakout_signal.signal"
+      params:
+        blocked_states: [3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - trend_verified

@@ -1,0 +1,77 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-ma-crossover-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "ema_crossover"
+      token_ref:
+        token_id: "math.ema_crossover"
+        version: ">=1.0"
+      params:
+        fast_period: 9
+        slow_period: 21
+    - id: "rsi_filter"
+      token_ref:
+        token_id: "filter.rsi"
+        version: ">=1.0"
+      inputs:
+        signal: "ema_crossover.signal"
+      params:
+        rsi_period: 14
+        rsi_overbought: 70.0
+        rsi_oversold: 30.0
+    - id: "macd_filter"
+      token_ref:
+        token_id: "filter.macd"
+        version: ">=1.0"
+      inputs:
+        signal: "rsi_filter.signal"
+      params:
+        use_macd_filter: true
+    - id: "trend_signal"
+      token_ref:
+        token_id: "signal.trend"
+        version: ">=1.0"
+      inputs:
+        signal: "macd_filter.signal"
+      params:
+        atr_period: 14
+        atr_multiplier: 2.0
+        use_boll_exit: true
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "trend_signal.signal"
+      params:
+        blocked_states: [3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - trend_verified

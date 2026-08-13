@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -101,49 +101,13 @@ func (f *YahooDataFetcher) FetchDailyMetrics(ctx context.Context, ticker string)
 }
 
 func (f *YahooDataFetcher) resolveSymbol(ticker string) string {
-	ticker = strings.ToUpper(ticker)
-	switch ticker {
-	case "EURUSD":
-		return "EURUSD=X"
-	case "GBPUSD":
-		return "GBPUSD=X"
-	case "USDJPY":
-		return "USDJPY=X"
-	case "USDCHF":
-		return "USDCHF=X"
-	case "AUDUSD":
-		return "AUDUSD=X"
-	case "USDCAD":
-		return "USDCAD=X"
-	case "NZDUSD":
-		return "NZDUSD=X"
-	case "US30":
-		return "^DJI"
-	case "SPX500":
-		return "^GSPC"
-	case "NAS100":
-		return "^IXIC"
-	case "UK100":
-		return "^FTSE"
-	case "GER40":
-		return "^GDAXI"
-	case "JPN225":
-		return "^N225"
-	case "XAUUSD":
-		return "GLD"
-	case "XAGUSD":
-		return "SLV"
-	case "USOIL":
-		return "USO"
-	case "UKOIL":
-		return "BNO"
-	case "BTCUSD":
-		return "BTC-USD"
-	case "ETHUSD":
-		return "ETH-USD"
-	default:
-		return ticker
+	// Prefer the provider mapping from the universe config; fall back to
+	// the resolved canonical ticker for symbols not in the config.
+	canonical := ResolveTicker(ticker)
+	if yt := config.TickerToYahoo(canonical); yt != "" {
+		return yt
 	}
+	return canonical
 }
 
 func (f *YahooDataFetcher) resolveInterval(timeframe string) string {

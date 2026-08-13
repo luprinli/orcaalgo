@@ -1,20 +1,30 @@
 package ingest
 
-import "strings"
+import (
+	"strings"
 
-var CanonicalSymbolMap = map[string]string{
-	"eurusd": "EURUSD", "gbpusd": "GBPUSD", "usdjpy": "USDJPY",
-	"usdchf": "USDCHF", "audusd": "AUDUSD", "usdcad": "USDCAD", "nzdusd": "NZDUSD",
-	"eurgbp": "EURGBP", "eurjpy": "EURJPY", "eurchf": "EURCHF",
-	"gbpjpy": "GBPJPY", "gbpchf": "GBPCHF", "chfjpy": "CHFJPY",
-	"audjpy": "AUDJPY", "audnzd": "AUDNZD", "audchf": "AUDCHF",
-	"cadjpy": "CADJPY", "nzdjpy": "NZDJPY", "nzdchf": "NZDCHF",
-	"euraud": "EURAUD", "eurcad": "EURCAD", "eurnzd": "EURNZD",
-	"gbpaud": "GBPAUD", "gbpcad": "GBPCAD", "gbpnzd": "GBPNZD",
-	"^dji": "US30", "^spx": "SPX500", "^ndq": "NAS100",
-	"^dax": "GER40", "^nkx": "JPN225", "^ukx": "UK100",
-	"btc.v": "BTCUSD", "eth.v": "ETHUSD",
-	"xauusd": "XAUUSD", "xagusd": "XAGUSD",
+	"github.com/lee-econ/orca-core/internal/config"
+)
+
+// CanonicalSymbolMap maps provider-specific tickers (lowercased) to the
+// canonical ORCA ticker, derived from configs/universe.json — the single
+// source of truth shared with Python.
+var CanonicalSymbolMap = buildCanonicalMap()
+
+func buildCanonicalMap() map[string]string {
+	m := make(map[string]string)
+	u, err := config.Load()
+	if err != nil {
+		return m
+	}
+	for _, s := range u.Symbols {
+		for _, provider := range []string{s.Ticker, s.StooqTicker, s.YahooTicker, s.TiingoTicker} {
+			if provider != "" {
+				m[strings.ToLower(provider)] = s.Ticker
+			}
+		}
+	}
+	return m
 }
 
 func ResolveTicker(raw string) string {

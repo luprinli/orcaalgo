@@ -48,6 +48,27 @@ VENV_DIR = PROJECT_ROOT / ".venv"
 PYTHON_MIN_VERSION = (3, 11)
 WINDOWS = platform.system() == "Windows"
 
+# Windows console defaults to cp1252, which cannot encode non-ASCII characters
+# (e.g. the "\u2192" arrow in stooq pipeline labels). Reconfigure stdout/stderr
+# to UTF-8 with replace-on-error so logging never raises UnicodeEncodeError.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
+
+# The 18-symbol universe is loaded from configs/universe.json (single source of
+# truth shared with Go). Used as the default reseed symbol list.
+try:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    from orca.universe_config import get_tickers
+    FULL_SYMBOL_LIST = get_tickers()
+except Exception:
+    FULL_SYMBOL_LIST = [
+        "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "IWM", "GLD", "TLT",
+        "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "BTC-USD", "ETH-USD", "^_US", "^DAX",
+    ]
+
 COLORS = {
     "reset":   "\033[0m",
     "cyan":    "\033[96m",
@@ -894,15 +915,20 @@ def build_cli() -> argparse.ArgumentParser:
     parser.add_argument("--seed", action="store_true",
                         help="Seed database with initial data before starting API")
     parser.add_argument("--reset-reseed", action="store_true",
-                        help="Reset and regenerate all data: fetch real market data from Yahoo, "
-                             "resample to all timeframes, infer regimes, and generate sentiment. "
-                             "Requires yfinance and psycopg2-binary installed.")
+                        help="Reset and regenerate all data from the stooq pipeline: ingest "
+                             "stooq 1d/1h/5m, resample to 4h/15m/30m, calibrate synthetic gap-fill, "
+                             "fetch VIX, infer regimes, and backfill sentiment. Requires "
+                             "psycopg2-binary (and yfinance for the isolated VIX fetch) installed.")
     parser.add_argument("--reseed-symbols", type=str, nargs="*",
-                        help="Symbols to reseed (default: SPY,QQQ,IWM,DIA,AAPL,MSFT,NVDA,GLD,BTC-USD,ETH-USD and major FX pairs)")
-    parser.add_argument("--reseed-start", type=str, default="2026-06-12",
-                        help="Start date for reseed (YYYY-MM-DD, default: 60d ago for Yahoo 5m)")
+                        help="Symbols to reseed (default: the canonical 18-symbol prop-firm universe)")
+    parser.add_argument("--reseed-start", type=str, default="2021-07-01",
+                        help="Start date for reseed (YYYY-MM-DD, default: 2021-07-01 for 5-year history)")
     parser.add_argument("--reseed-end", type=str, default="2026-08-12",
                         help="End date for reseed (YYYY-MM-DD, default: 2026-08-12)")
+    parser.add_argument("--reseed-skip-vix", action="store_true",
+                        help="Skip VIX fetching during reseed (preserves existing VIX data)")
+    parser.add_argument("--reseed-skip-validate", action="store_true",
+                        help="Skip data integrity validation after reseed")
     parser.add_argument("--no-react", action="store_true",
                         help="Skip React frontend dev server")
     parser.add_argument("--no-monitoring", action="store_true",
@@ -1053,75 +1079,213 @@ def run_reseed(
     db_password: str,
     db_name: str,
     db_sslmode: str,
+    skip_vix: bool = False,
+    skip_validate: bool = False,
 ) -> bool:
-    """Reset and regenerate all market data from Yahoo Finance.
+    """Reset and regenerate all market data from the stooq pipeline.
 
-    Pipeline: seed-all (reset) -> build-regime-logs -> build-candles.
-    All commands run via subprocess in the project's venv or system Python.
+    Pipeline (consolidated on stooq — the Yahoo provider is retired):
+      1. Purge legacy provider bars (yahoo/seed) from the candles table.
+      2. stooq discovery → ingestion (1d + 1h + 5m) → resampling (1h→4h,
+         5m→15m/30m) → calibrated synthetic gap-fill.
+      3. VIX (isolated Yahoo fetch — stooq carries no ^vix index).
+      4. Regime inference from the freshly-ingested 1d bars.
+      5. Sentiment backfill (Alternative.me Fear & Greed Index).
+      6. Cross-pipeline data-integrity validation.
 
-    Returns True if all steps succeed.
+    Returns True if all steps succeed (non-fatal steps log warnings).
+
+    stooq coverage: 1d is full 5-year stooq daily; 1h/4h real ~2-year with
+    stooq-calibrated synthetic gap-fill; 5m/15m/30m real ~5-month with
+    stooq-calibrated synthetic gap-fill.
     """
     python_cmd = venv_python or "python"
+    resolved_symbols = list(symbols) if symbols else list(FULL_SYMBOL_LIST)
+
     from urllib.parse import quote
     db_url = f"postgresql://{db_user}:{quote(db_password, safe='')}@{db_host}:{db_port}/{db_name}?sslmode={db_sslmode}"
-
     env = os.environ.copy()
     env["ORCA_DB_URL"] = db_url
 
-    sym_args: list[str] = []
-    if symbols:
-        flat: list[str] = []
-        for s in symbols:
-            flat.extend([x.strip() for x in s.replace(",", " ").split() if x.strip()])
-        for s in flat:
-            sym_args.extend(["--symbols", s])
+    log("STEP", "Reseed", "=== Reset & Regenerate Data Pipeline (stooq) ===")
+    log("INFO", "Reseed", f"Date range: {start} -> {end}")
+    log("INFO", "Reseed", f"Symbols: {len(resolved_symbols)} ({', '.join(resolved_symbols[:8])}...{resolved_symbols[-1]})")
+
+    total_steps = 6
+    if skip_vix:
+        total_steps -= 1
+    if skip_validate:
+        total_steps -= 1
 
     step = 0
-    log("STEP", "Reseed", "=== Reset & Regenerate Data Pipeline ===")
 
-    # Step 1: seed-all --reset
+    # Step 1: purge legacy provider bars (yahoo/seed) so the consolidated
+    # stooq pipeline is the single source of truth. Idempotent.
     step += 1
-    log("STEP", f"Reseed/{step}", f"Fetching real market data from Yahoo Finance ({start} -> {end})...")
-    log("INFO", f"Reseed/{step}", f"Symbols: {', '.join(symbols) if symbols else 'default (30 major instruments)'}")
-    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "seed-all",
-           "--start", start, "--end", end, "--reset"] + sym_args
-    result = subprocess.run(
-        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=600
-    )
-    if result.returncode != 0:
-        log("ERROR", f"Reseed/{step}", f"seed-all failed: {result.stderr.strip()[-500:]}")
-        log("ERROR", f"Reseed/{step}", result.stdout.strip()[-500:] if result.stdout else "")
-        return False
-    log("OK", f"Reseed/{step}", "seed-all complete")
-    log("INFO", f"Reseed/{step}", result.stdout.strip()[-200:] if result.stdout else "")
+    log("STEP", f"Reseed/{step}/{total_steps}", "Purging legacy provider candles (yahoo/seed)...")
+    if not _purge_legacy_providers(python_cmd, resolved_symbols, start, end, env):
+        log("WARN", f"Reseed/{step}", "Legacy-provider purge had issues — stale bars may remain")
 
-    # Step 2: build-regime-logs
+    # Step 2: stooq pipeline (discovery → 1d/1h/5m ingestion → resampling → gap-fill)
     step += 1
-    log("STEP", f"Reseed/{step}", "Inferring regimes from fresh candle data...")
-    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "build-regime-logs"] + sym_args
+    log("STEP", f"Reseed/{step}/{total_steps}",
+        "Running stooq pipeline (discovery, 1d/1h/5m ingestion, resampling, gap-fill)...")
+    stooq_ok = _run_stooq_pipeline(python_cmd, resolved_symbols, env)
+    if stooq_ok:
+        log("OK", f"Reseed/{step}", "stooq pipeline complete — real 1d/1h/5m + resampled 4h/15m/30m + calibrated synthetic")
+    else:
+        log("WARN", f"Reseed/{step}", "stooq pipeline had issues — data may be incomplete")
+
+    # Step 3: VIX (isolated Yahoo fetch; stooq carries no ^vix index)
+    if not skip_vix:
+        step += 1
+        log("STEP", f"Reseed/{step}/{total_steps}", "Fetching VIX (isolated Yahoo feed)...")
+        cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "ingest-vix",
+               "--start", start, "--end", end]
+        result = subprocess.run(
+            cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=180
+        )
+        if result.returncode != 0:
+            log("WARN", f"Reseed/{step}", f"VIX fetch had issues: {result.stderr.strip()[-200:]}")
+        else:
+            for line in result.stdout.strip().splitlines():
+                log("INFO", f"Reseed/{step}", line.strip())
+            log("OK", f"Reseed/{step}", "VIX ingested")
+
+    # Step 4: regime inference from stooq 1d
+    step += 1
+    log("STEP", f"Reseed/{step}/{total_steps}", "Inferring regimes from stooq 1d bars...")
+    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "build-regime-logs"]
     result = subprocess.run(
         cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=120
     )
     if result.returncode != 0:
         log("WARN", f"Reseed/{step}", f"regime inference had issues: {result.stderr.strip()[-200:]}")
     else:
+        for line in result.stdout.strip().splitlines():
+            log("INFO", f"Reseed/{step}", line.strip())
         log("OK", f"Reseed/{step}", "Regime logs generated")
 
-    # Step 3: build-candles (resample 5m -> higher timeframes)
+    # Step 5: sentiment backfill
     step += 1
-    log("STEP", f"Reseed/{step}", "Resampling 5m candles to higher timeframes...")
-    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "build-candles",
-           "--validate"] + sym_args
+    log("STEP", f"Reseed/{step}/{total_steps}", "Backfilling sentiment (Alternative.me Fear & Greed)...")
+    cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()", "backfill-sentiment"]
     result = subprocess.run(
-        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=300
+        cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=180
     )
     if result.returncode != 0:
-        log("WARN", f"Reseed/{step}", f"candle resampling had issues: {result.stderr.strip()[-200:]}")
+        log("WARN", f"Reseed/{step}", f"sentiment backfill had issues: {result.stderr.strip()[-200:]}")
     else:
-        log("OK", f"Reseed/{step}", "Candle resampling complete")
-        log("INFO", f"Reseed/{step}", result.stdout.strip()[-300:] if result.stdout else "")
+        for line in result.stdout.strip().splitlines():
+            log("INFO", f"Reseed/{step}", line.strip())
+        log("OK", f"Reseed/{step}", "Sentiment backfilled")
+
+    # Step 6: validate-data-integrity (optional)
+    if not skip_validate:
+        step += 1
+        log("STEP", f"Reseed/{step}/{total_steps}", "Running cross-pipeline data integrity validation...")
+        cmd = [python_cmd, "-c", "import orca.cli; orca.cli.app()",
+               "validate-data-integrity", "--start", start, "--end", end]
+        result = subprocess.run(
+            cmd, cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=60
+        )
+        if result.returncode != 0:
+            log("WARN", f"Reseed/{step}", f"Validation found issues: {result.stdout.strip()[-300:]}")
+        else:
+            for line in result.stdout.strip().splitlines():
+                log("INFO", f"Reseed/{step}", line.strip())
+            log("OK", f"Reseed/{step}", "Data integrity validation PASSED")
 
     log("OK", "Reseed", "Data regeneration pipeline complete")
+    log("INFO", "Reseed", "Data coverage (18-symbol prop-firm universe):")
+    log("INFO", "Reseed", "  1d: real stooq daily (5-year: 2021-07 to 2026-08)")
+    log("INFO", "Reseed", "  1h/4h: real stooq (2-year: 2024-07 to 2026-08) + stooq-calibrated synthetic (2021-07 to 2024-07)")
+    log("INFO", "Reseed", "  5m/15m/30m: real stooq (5-month: 2026-03 to 2026-08) + stooq-calibrated synthetic (2021-07 to 2026-03)")
+    return True
+
+
+def _purge_legacy_providers(
+    python_cmd: str,
+    symbols: list[str],
+    start: str,
+    end: str,
+    env: dict[str, str],
+) -> bool:
+    """Delete candles written by the retired yahoo/seed providers.
+
+    The consolidated pipeline uses stooq exclusively (plus stooq-resampled and
+    stooq-calibrated), so legacy bars must not linger and pollute source-priority
+    loading. Scoped to the requested symbols and date range.
+    """
+    symbols_repr = repr(symbols)
+    script = f'''
+import os
+import psycopg2
+
+conn = psycopg2.connect(os.environ["ORCA_DB_URL"])
+try:
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM candles c USING symbols s "
+            "WHERE c.symbol_id = s.id AND s.ticker = ANY(%s) "
+            "AND c.source IN ('yahoo', 'seed') AND c.time >= %s AND c.time <= %s",
+            ({symbols_repr}, "{start}", "{end}"),
+        )
+        deleted = cur.rowcount
+        # Re-activate canonical symbols so a partial reseed never orphans rows.
+        cur.execute("UPDATE symbols SET is_active = TRUE WHERE ticker = ANY(%s)", ({symbols_repr},))
+    conn.commit()
+    print(f"Purged {{deleted}} legacy (yahoo/seed) candle bars")
+finally:
+    conn.close()
+'''
+    result = subprocess.run(
+        [python_cmd, "-c", script],
+        cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=120
+    )
+    if result.returncode != 0:
+        if result.stderr:
+            log("WARN", "Reseed", result.stderr.strip()[-300:])
+        return False
+    for line in result.stdout.strip().splitlines():
+        log("INFO", "Reseed", line.strip())
+    return True
+
+
+def _run_stooq_pipeline(
+    python_cmd: str,
+    symbols: list[str],
+    env: dict[str, str],
+) -> bool:
+    """Run the full stooq real-data pipeline.
+
+    Sequence: discovery (1d + 1h + 5m) → ingestion (1d + 1h + 5m) →
+    resampling (1H→4H, 5m→15m/30m) → calibrated synthetic gap-fill.
+
+    All scripts are stream-based and context-efficient; they read/write the
+    TimescaleDB candles table directly via the ORCA_DB_URL environment variable.
+    """
+    scripts = [
+        ("stooq_discovery.py", "Symbol discovery & manifest (1d + 1h + 5m)"),
+        ("stooq_seed.py", "Real 1d + 1h + 5m ingestion"),
+        ("stooq_resample.py", "1H→4H + 5m→15m/30m resampling"),
+        ("stooq_synthetic.py", "Calibrated synthetic gap-fill"),
+    ]
+
+    for script, label in scripts:
+        log("INFO", "Stooq", f"Running {script}: {label}")
+        result = subprocess.run(
+            [python_cmd, str(PROJECT_ROOT / "scripts" / script)],
+            cwd=str(PROJECT_ROOT), env=env, capture_output=True, text=True, timeout=3600
+        )
+        if result.returncode != 0:
+            log("WARN", "Stooq", f"{script} failed: {result.stderr.strip()[-300:]}")
+            return False
+        # Print the last summary line
+        lines = [l for l in result.stdout.strip().splitlines() if l.strip()]
+        if lines:
+            log("INFO", "Stooq", lines[-1].strip())
+
     return True
 
 
@@ -1175,12 +1339,17 @@ def main() -> None:
         db_name = args.db_name if args.db_name != "orca_core" else str(db_info.get("dbname", "orca_core"))
         db_sslmode = args.db_sslmode if args.db_sslmode != "disable" else str(db_info.get("sslmode", "disable"))
     else:
-        db_host = "localhost"
-        db_port = 5433
-        db_user = "orca"
-        db_password = ""
-        db_name = "orca_core"
-        db_sslmode = "disable"
+        merged_env = load_dotenv(PROJECT_ROOT / ".env")
+        db_host = merged_env.get("ORCA_DB_HOST", "localhost")
+        db_port = int(merged_env.get("ORCA_DB_PORT", "5433"))
+        db_user = merged_env.get("ORCA_DB_USER", "orca")
+        # Docker compose defaults POSTGRES_PASSWORD to "change_me" (see
+        # docker-compose.yml `${DB_PASSWORD:-change_me}`). The previous code
+        # hardcoded an empty password, which caused psycopg2 auth failures
+        # ("fe_sendauth: no password supplied") during --reset-reseed.
+        db_password = merged_env.get("ORCA_DB_PASSWORD", "change_me")
+        db_name = merged_env.get("ORCA_DB_NAME", "orca_core")
+        db_sslmode = merged_env.get("ORCA_DB_SSLMODE", "disable")
 
     active_services = _build_services(
         local_mode=local_mode,
@@ -1221,6 +1390,8 @@ def main() -> None:
             if not run_reseed(
                 venv_python, args.reseed_symbols, args.reseed_start, args.reseed_end,
                 db_host, db_port, db_user, db_password, db_name, db_sslmode,
+                skip_vix=args.reseed_skip_vix,
+                skip_validate=args.reseed_skip_validate,
             ):
                 log("ERROR", "Orchestrator", "Data regeneration failed. Aborting.")
                 sys.exit(1)

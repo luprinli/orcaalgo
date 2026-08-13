@@ -88,7 +88,7 @@ func (d *DataDownloader) upsertCandles(ctx context.Context, ticker, timeframe st
 		tag, execErr := d.pool.Exec(ctx,
 			`INSERT INTO candles (time, symbol_id, timeframe, open_raw, high_raw, low_raw, close_raw, volume, source)
 			 SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8, 'api'
-			 ON CONFLICT (symbol_id, timeframe, time) DO UPDATE SET
+			 ON CONFLICT (symbol_id, timeframe, time, source) DO UPDATE SET
 			   open_raw=EXCLUDED.open_raw, high_raw=EXCLUDED.high_raw,
 			   low_raw=EXCLUDED.low_raw, close_raw=EXCLUDED.close_raw,
 			   volume=EXCLUDED.volume

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/monitor"
 	"github.com/lee-econ/orca-core/internal/risk"
 	"golang.org/x/sync/errgroup"
@@ -152,16 +153,22 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 						NumWins:            result.NumWins,
 						NumLosses:          result.NumLosses,
 						AvgMAE:             result.AvgMAE,
-				AvgMFE:             result.AvgMFE,
-				Warnings:           result.Warnings,
-				AdverseSelectRate:  result.AdverseSelectionRate,
-				StrategyParams:     result.StrategyParams,
-				EquityCurve:        result.EquityCurve,
-				Trades:             result.Trades,
-			MtmSharpeRatio:     result.MtmSharpeRatio,
-			MtmMaxDrawdown:     result.MtmMaxDrawdown,
-			MLFeatureEnabled:   result.MLFeatureEnabled,
-		}
+						AvgMFE:             result.AvgMFE,
+						Warnings:           result.Warnings,
+						AdverseSelectRate:  result.AdverseSelectionRate,
+						StrategyParams:     result.StrategyParams,
+						EquityCurve:        result.EquityCurve,
+						Trades:             result.Trades,
+						MtmSharpeRatio:     result.MtmSharpeRatio,
+						MtmMaxDrawdown:     result.MtmMaxDrawdown,
+						MLFeatureEnabled:   result.MLFeatureEnabled,
+						TotalFees:          result.TotalFees,
+						AvgSlippageBps:     result.AvgSlippageBps,
+						CalmarRatio:        result.CalmarRatio,
+						CandleCount:        result.CandleCount,
+						GrossReturnPct:     grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
+						EngineVersion:      result.EngineVersion,
+					}
 		return nil
 	})
 }
@@ -353,6 +360,27 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				}
 				return nil
 			}
+
+			// Optional walk-forward validation for optimized combos, mirroring the
+			// CLI matrix-runner --walk-forward flag. Populates WfIS/WfOOS columns.
+			var wfIS, wfOOS float64
+			if config.WalkForward {
+				if _, ok := optimizedParams[combo.Strategy]; ok {
+					wfCfg := WalkForwardConfig{
+						Config:             btConfig,
+						TrainWindows:       3,
+						TrainYears:         1,
+						TestYears:          2,
+						StepMonths:         6,
+						PurgeTradingDays:   5,
+						EmbargoTradingDays: 2,
+					}
+					if wfRes, wfErr := engine.RunWalkForward(ctx, wfCfg); wfErr == nil && wfRes != nil && wfRes.TotalWindows > 0 {
+						wfIS = wfRes.OverallSharpe
+						wfOOS = wfRes.AvgOOSSharpe
+					}
+				}
+			}
 			monitor.RecordMatrixCombo("completed")
 			warnings := result.Warnings
 			if (combo.Strategy == "grid_trading" || combo.Strategy == "grid") &&
@@ -380,7 +408,7 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				GatePassed:         gateBool(result.MetricGateStatus),
 				AdverseSelectRate:  result.AdverseSelectionRate,
 				StrategyParams:     result.StrategyParams,
-				Optimized:          len(result.StrategyParams) > 0,
+				Optimized:          len(btConfig.StrategyParams) > 0,
 				EquityCurve:        result.EquityCurve,
 				Trades:             result.Trades,
 				LongTrades:         result.LongShort.LongTrades,
@@ -401,6 +429,16 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				MtmSharpeRatio:     result.MtmSharpeRatio,
 				MtmMaxDrawdown:     result.MtmMaxDrawdown,
 				MLFeatureEnabled:   result.MLFeatureEnabled,
+				TotalFees:          result.TotalFees,
+				AvgSlippageBps:     result.AvgSlippageBps,
+				CalmarRatio:        result.CalmarRatio,
+				CandleCount:        result.CandleCount,
+				GrossReturnPct:     grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
+				DataSource:         config.DataSource,
+				EngineVersion:      result.EngineVersion,
+				DataGenerationID:   result.DataGenerationID,
+				WfISSharpe:         wfIS,
+				WfOOSSharpe:        wfOOS,
 			}
 			if onProgress != nil {
 				onProgress(i, "completed", "", &results[i])
@@ -412,11 +450,22 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 
 	runID := fmt.Sprintf("matrix-%s", time.Now().Format("20060102150405"))
 	return &MatrixResult{
-		RunID:   runID,
-		Combos:  len(combos),
-		Results: results,
-		Config:  config,
+		RunID:        runID,
+		Combos:       len(combos),
+		Results:      results,
+		Config:       config,
+		Plausibility: FlagImplausibleCombos(results),
 	}, nil
+}
+
+// grossReturnPct recomputes the return before fees/slippage so the cost drag is
+// visible alongside the net return. Falls back to net return when capital is
+// non-positive.
+func grossReturnPct(netReturnPct, totalFees, initialCapital float64) float64 {
+	if initialCapital <= 0 {
+		return netReturnPct
+	}
+	return netReturnPct + totalFees/initialCapital*100.0
 }
 
 type CachedContext struct {
@@ -558,17 +607,10 @@ func clampAbs(val, limit float64) float64 {
 }
 
 func defaultSecondarySymbol(primary string) string {
-	pairs := map[string]string{
-		"XAGUSD": "XAUUSD",
-		"XAUUSD": "XAGUSD",
-		"GBPUSD": "EURUSD",
-		"USDCHF": "EURUSD",
-		"CL":     "XLE",
-		"USDCAD": "EURUSD",
-		"NZDUSD": "AUDUSD",
-		"AUDUSD": "NZDUSD",
+	if sec := config.SecondaryTicker(primary); sec != "" {
+		return sec
 	}
-	return pairs[primary]
+	return ""
 }
 
 func computeExpectedPF(winRate, avgWin, avgLoss float64) float64 {

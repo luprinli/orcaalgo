@@ -1,43 +1,34 @@
 ir_version: "qst-ir/0.4"
 canonical_version: "qst-canonical/0.4"
 strategy:
-  id: "orca-rsi-divergence-v1"
+  id: "orca-rsi2-reversion-v1"
   version: "1.0.0"
   nodes:
-    - id: "divergence_signal"
+    - id: "rsi2"
       token_ref:
-        token_id: "signal.rsi_divergence"
+        token_id: "indicator.rsi2"
         version: ">=1.0"
       params:
-        rsi_period: 9
-        pivot_left: 1
-        pivot_right: 3
-        range_lower: 5
-        range_upper: 60
-    - id: "adx_filter"
+        rsi_period: 2
+    - id: "reversion_signal"
       token_ref:
-        token_id: "filter.adx"
+        token_id: "signal.threshold"
         version: ">=1.0"
       inputs:
-        signal: "divergence_signal.signal"
+        oscillator: "rsi2.value"
       params:
-        length: 14
-        threshold: 22.0
-    - id: "supertrend_filter"
-      token_ref:
-        token_id: "filter.supertrend"
-        version: ">=1.0"
-      inputs:
-        signal: "adx_filter.signal"
-      params:
-        atr_multiplier: 4.0
-        atr_length: 14
+        oversold: 5.0
+        overbought: 95.0
+        exit_neutral: 50.0
+        atr_period: 14
+        atr_multiplier: 1.5
+        max_hold_bars: 20
     - id: "regime_gate"
       token_ref:
         token_id: "risk.regime_filter"
         version: ">=1.0"
       inputs:
-        signal: "supertrend_filter.signal"
+        signal: "reversion_signal.signal"
       params:
         blocked_states: [3]
     - id: "position_sizer"
@@ -52,18 +43,19 @@ strategy:
         total_exposure_cap_pct: 0.30
     - id: "risk_gate"
       token_ref:
-        token_id: "risk.propfirm_compliance"
+        token_id: "risk.ftmo_compliance"
         version: ">=1.0"
       inputs:
         size: "position_sizer.contracts"
-        signal: "supertrend_filter.signal"
+        signal: "regime_gate.signal"
       params:
         max_daily_dd_pct: 5.0
         max_absolute_dd: 1000.0
         max_open_positions: 5
   outputs:
-    signal: "supertrend_filter.signal"
+    signal: "regime_gate.signal"
     size: "position_sizer.contracts"
     final: "risk_gate.approved_size"
 capabilities:
   - core
+  - mean_reversion

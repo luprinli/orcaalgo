@@ -1,6 +1,6 @@
 ﻿# OrcaAlgo — Polyglot Algorithmic Prop Trading System
 
-**Version**: 1.3.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 16 registered (14 active) · **Migrations**: 39
+**Version**: 1.3.0 · **Auth**: JWT enforced + WS origin validated · **Prices**: types.Price (int64×100000) · **Preflight**: 12 checks · **Guardrails**: pre-commit hook + change audit + env guard · **Strategies**: 17 matrix strategies (18 `.gkr.yaml` configs) · **Migrations**: 40
 
 A high-performance algorithmic trading platform purpose-built for **prop firm challenge compliance** (FTMO, TopStep, E8, TFT). Uses a multi-language architecture: **Go** for orchestration and execution, **Python** for strategy IR and canonical mathematics, and **React + TypeScript** for real-time dashboards.
 
@@ -49,6 +49,10 @@ orca calibrate --since 90d
 # PnL attribution
 orca attribute --since 90d
 ```
+
+## Backtest Readiness (2026-08-12)
+
+The matrix backtest pipeline has been remediated per `docs/Backtest Readiness Audit matrix_results (7) 2026-08-12.md`: data loading is source+timeframe aware (`stooq` intraday + `yahoo` daily), the synthetic fallback no longer silently contaminates real-data runs, unknown tickers error, daily-loss/drawdown metrics are computed per-day and ungated for deterministic fields, all 17 matrix strategies are IR-backed (18 validated `.gkr.yaml` configs), and `backtest.FlagImplausibleCombos` gates implausible matrix outputs. A fresh matrix re-run against the seeded 18-symbol database is the remaining verification step before parameter selection or deployment.
 
 ## Key Features
 
@@ -291,4 +295,4 @@ Proprietary. All rights reserved.
 
 ---
 
-*OrcaAlgo v1.3.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware data pipelines, ML-enhanced signal gating, VIX BIGINT storage, block bootstrap Monte Carlo, multiple testing correction, and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*
+*OrcaAlgo v1.3.0 — Multi-user, multi-account, multi-firm, deterministic backtest-live consistent prop trading platform with regime-aware data pipelines, ML-enhanced signal gating, VIX BIGINT storage, block bootstrap Monte Carlo, multiple testing correction, real intraday data (stooq 1h/5m + calibrated synthetic gap-fill, 18-symbol prop-firm universe, 6 timeframes), and comprehensive test coverage (Go: 28 packages, Python: 96 tests, TypeScript: 228 unit + 49 e2e)*

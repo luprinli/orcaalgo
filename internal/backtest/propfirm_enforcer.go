@@ -17,6 +17,7 @@ type PropFirmEnforcer struct {
 	ConsistencySizeMult   float64
 	StartingBalance       float64
 	CurrentBalance        float64
+	DayStartingBalance    float64
 	PeakBalance           float64
 	DailyPnL              float64
 	DailyPnLPct           float64
@@ -58,6 +59,7 @@ func NewPropFirmEnforcerFromProfile(p *propfirm.Profile, startingBalance float64
 		ConsistencySizeMult:   p.ConsistencyPenalty,
 		StartingBalance:       startingBalance,
 		CurrentBalance:        startingBalance,
+		DayStartingBalance:    startingBalance,
 		PeakBalance:           startingBalance,
 		ConsistencyMultiplier: 1.0,
 		RegimeSizeMultipliers: p.RegimeMultipliers,
@@ -73,10 +75,14 @@ func DefaultPropFirmEnforcer(startingBalance float64) *PropFirmEnforcer {
 }
 
 func (f *PropFirmEnforcer) CheckDailyLoss() bool {
-	if f.StartingBalance <= 0 {
+	dayStart := f.DayStartingBalance
+	if dayStart <= 0 {
+		dayStart = f.StartingBalance
+	}
+	if dayStart <= 0 {
 		return true
 	}
-	dailyChange := propfirm.DailyLossPct(f.StartingBalance, f.CurrentBalance)
+	dailyChange := propfirm.DailyLossPct(dayStart, f.CurrentBalance)
 	f.DailyPnLPct = dailyChange
 
 	hardLimit := f.HardHaltThresholdPct
@@ -88,7 +94,7 @@ func (f *PropFirmEnforcer) CheckDailyLoss() bool {
 		softLimit = hardLimit * 0.9
 	}
 
-	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, hardLimit) {
+	if propfirm.DailyLossExceeded(dayStart, f.CurrentBalance, hardLimit) {
 		f.halted = true
 		f.softHalted = true
 		f.haltReason = "daily_loss_limit_hard"
@@ -102,7 +108,7 @@ func (f *PropFirmEnforcer) CheckDailyLoss() bool {
 		return false
 	}
 
-	if propfirm.DailyLossExceeded(f.StartingBalance, f.CurrentBalance, softLimit) {
+	if propfirm.DailyLossExceeded(dayStart, f.CurrentBalance, softLimit) {
 		f.softHalted = true
 		f.DailyBreaches = append(f.DailyBreaches, RuleBreach{
 			Date:   time.Now(),
@@ -169,6 +175,7 @@ func (f *PropFirmEnforcer) OnFill(pnl float64, balance float64) {
 func (f *PropFirmEnforcer) OnNewDay() {
 	f.TradingDays++
 	f.CheckProfitTarget()
+	f.DayStartingBalance = f.CurrentBalance
 	f.DailyPnL = 0
 	f.DailyPnLPct = 0
 	f.ConsistencyMultiplier = 1.0

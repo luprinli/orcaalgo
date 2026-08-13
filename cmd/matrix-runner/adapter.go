@@ -15,14 +15,16 @@ func (a *repoAdapter) LoadCandles(ctx context.Context, symbols []string, start, 
 	return convertCandles(c), err
 }
 func (a *repoAdapter) LoadCandlesFiltered(ctx context.Context, symbols []string, start, end time.Time, source string) ([][]backtest.Candle, error) {
-	return a.LoadCandles(ctx, symbols, start, end)
+	c, err := a.repo.LoadCandlesFiltered(ctx, symbols, start, end, source)
+	return convertCandles(c), err
 }
 func (a *repoAdapter) LoadCandlesTF(ctx context.Context, symbols []string, start, end time.Time, tf string) ([][]backtest.Candle, error) {
 	c, err := a.repo.LoadCandlesByTimeframe(ctx, symbols, start, end, tf)
 	return convertCandles(c), err
 }
 func (a *repoAdapter) LoadCandlesTFFiltered(ctx context.Context, symbols []string, start, end time.Time, tf, source string) ([][]backtest.Candle, error) {
-	return a.LoadCandlesTF(ctx, symbols, start, end, tf)
+	c, err := a.repo.LoadCandlesByTimeframeFiltered(ctx, symbols, start, end, tf, source)
+	return convertCandles(c), err
 }
 func (a *repoAdapter) LoadAllCandles(ctx context.Context, symbols []string, start, end time.Time, tf string) (map[string][]backtest.Candle, error) {
 	return nil, nil
@@ -76,6 +78,7 @@ func convertCandles(c [][]db.Candle) [][]backtest.Candle {
 				Symbol: candle.Symbol, Time: candle.Time,
 				Open: candle.Open, High: candle.High, Low: candle.Low, Close: candle.Close,
 				Volume: candle.Volume, AdjustmentFactor: candle.AdjustmentFactor,
+				Source: candle.Source, GenerationID: candle.GenerationID,
 			}
 		}
 		out[i] = r

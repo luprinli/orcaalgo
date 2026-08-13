@@ -250,6 +250,8 @@ type Candle struct {
 	Volume           float64
 	Symbol           string
 	AdjustmentFactor float64
+	Source           string
+	GenerationID     string
 }
 
 type RegimeLog struct {
@@ -303,27 +305,31 @@ type MatrixProgressRecord struct {
 	TotalTrades  int       `json:"total_trades"`
 }
 
+// DefaultSymbols is the seed universe for the `symbols` table. It MUST stay in
+// sync with configs/universe.json (the canonical single source of truth). A
+// previous version carried 20 symbols including legacy tickers (GOOGL, AMZN,
+// META, DIA, VOO, USO, ES, NQ, CL) and misnamed crypto tickers (BTCUSD/ETHUSD)
+// that have no stooq data, which produced phantom no-data rows in the backtest
+// matrix. This list is the 18-symbol prop-firm universe.
 var DefaultSymbols = []Symbol{
-	{Ticker: "AAPL", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "MSFT", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "GOOGL", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "AMZN", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "NVDA", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "TSLA", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "META", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
 	{Ticker: "SPY", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
 	{Ticker: "QQQ", Exchange: "NASDAQ", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "AAPL", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "MSFT", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "NVDA", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "TSLA", Exchange: "NASDAQ", AssetType: "equity", TickSize: 0.01, LotSize: 1, IsActive: true},
 	{Ticker: "IWM", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "DIA", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "VOO", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "TLT", Exchange: "NASDAQ", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
 	{Ticker: "GLD", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "USO", Exchange: "ARCA", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "BTCUSD", Exchange: "CRYPTO", AssetType: "crypto", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "ETHUSD", Exchange: "CRYPTO", AssetType: "crypto", TickSize: 0.01, LotSize: 1, IsActive: true},
-	{Ticker: "ES", Exchange: "CME", AssetType: "futures", TickSize: 0.25, LotSize: 50, IsActive: true},
-	{Ticker: "NQ", Exchange: "CME", AssetType: "futures", TickSize: 0.25, LotSize: 20, IsActive: true},
-	{Ticker: "CL", Exchange: "NYMEX", AssetType: "futures", TickSize: 0.01, LotSize: 1000, IsActive: true},
+	{Ticker: "TLT", Exchange: "NASDAQ", AssetType: "etf", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "EURUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000, IsActive: true},
+	{Ticker: "GBPUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000, IsActive: true},
+	{Ticker: "USDJPY", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.001, LotSize: 1000, IsActive: true},
+	{Ticker: "AUDUSD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000, IsActive: true},
+	{Ticker: "USDCAD", Exchange: "STOOQ", AssetType: "forex", TickSize: 0.00001, LotSize: 1000, IsActive: true},
+	{Ticker: "BTC-USD", Exchange: "CRYPTO", AssetType: "crypto", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "ETH-USD", Exchange: "CRYPTO", AssetType: "crypto", TickSize: 0.01, LotSize: 1, IsActive: true},
+	{Ticker: "^_US", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1, IsActive: true},
+	{Ticker: "^DAX", Exchange: "STOOQ", AssetType: "index", TickSize: 0.25, LotSize: 1, IsActive: true},
 }
 
 func (r *Repository) GetSetting(ctx context.Context, key string) (map[string]interface{}, error) {

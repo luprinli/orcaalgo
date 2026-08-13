@@ -345,8 +345,8 @@ func TestSyntheticGenerator_DeterministicReseeding(t *testing.T) {
 	end := time.Date(2024, 6, 30, 0, 0, 0, 0, time.UTC)
 	symbols := []string{"AAPL", "EURUSD", "BTCUSD", "XAUUSD", "SPX500"}
 
-	run1 := generateSyntheticCandles(symbols, start, end, "1d")
-	run2 := generateSyntheticCandles(symbols, start, end, "1d")
+	run1 := synth(t, symbols, start, end, "1d")
+	run2 := synth(t, symbols, start, end, "1d")
 
 	for si, sym := range symbols {
 		if len(run1[si]) != len(run2[si]) {
@@ -371,9 +371,9 @@ func TestSyntheticGenerator_AssetClassDifferentiation(t *testing.T) {
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
 
-	equity := generateSyntheticCandles([]string{"AAPL"}, start, end, "1d")[0]
-	forex := generateSyntheticCandles([]string{"EURUSD"}, start, end, "1d")[0]
-	crypto := generateSyntheticCandles([]string{"BTCUSD"}, start, end, "1d")[0]
+	equity := synth(t, []string{"AAPL"}, start, end, "1d")[0]
+	forex := synth(t, []string{"EURUSD"}, start, end, "1d")[0]
+	crypto := synth(t, []string{"BTCUSD"}, start, end, "1d")[0]
 
 	// All must have enough bars
 	if len(equity) < 200 || len(forex) < 200 || len(crypto) < 200 {
@@ -415,7 +415,7 @@ func TestSyntheticGenerator_AssetClassDifferentiation(t *testing.T) {
 	t.Logf("equity_vol=%.2f%%, crypto_vol=%.2f%%, ratio=%.2f", equityVol*100, cryptoVol*100, cryptoVol/equityVol)
 
 	// Symbols must differ: equity AAPL vs equity MSFT should not be identical
-	msft := generateSyntheticCandles([]string{"MSFT"}, start, end, "1d")[0]
+	msft := synth(t, []string{"MSFT"}, start, end, "1d")[0]
 	identical := true
 	for i := range equity {
 		if i >= len(msft) || equity[i].Close.Float64() != msft[i].Close.Float64() {
@@ -433,8 +433,8 @@ func TestSyntheticGenerator_IntradayBars(t *testing.T) {
 	end := time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC)
 	sym := "AAPL"
 
-	d1 := generateSyntheticCandles([]string{sym}, start, end, "1d")[0]
-	d5 := generateSyntheticCandles([]string{sym}, start, end, "5m")[0]
+	d1 := synth(t, []string{sym}, start, end, "1d")[0]
+	d5 := synth(t, []string{sym}, start, end, "5m")[0]
 
 	ratio := float64(len(d5)) / float64(len(d1))
 	expectedRatio := 78.0 // 78 five-minute bars per daily bar
@@ -442,6 +442,15 @@ func TestSyntheticGenerator_IntradayBars(t *testing.T) {
 		t.Errorf("5m/daily bar ratio = %.1f, expected ~%.1f (intraday generation broken)", ratio, expectedRatio)
 	}
 	t.Logf("%s: 1d=%d bars, 5m=%d bars, ratio=%.1f", sym, len(d1), len(d5), ratio)
+}
+
+func synth(t *testing.T, symbols []string, start, end time.Time, tf string) [][]backtest.Candle {
+	t.Helper()
+	c, err := generateSyntheticCandles(symbols, start, end, tf)
+	if err != nil {
+		t.Fatalf("generateSyntheticCandles(%v, %s): %v", symbols, tf, err)
+	}
+	return c
 }
 
 func dailyReturns(candles []backtest.Candle) []float64 {

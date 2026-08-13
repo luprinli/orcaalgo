@@ -229,17 +229,30 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 
 ### Data Infrastructure (2026-08-12)
 
-| Data Type | Source | Status |
-|-----------|--------|--------|
-| Candles | Yahoo Finance 1d + 5m, resampled to 15m/30m/1h/4h | 36,693 bars, 475 combos BPD ≤5% |
-| VIX | Yahoo ^VIX + OU model fallback, **BIGINT** (migration 000039) | 1,255 rows, 5-year history |
-| Regime | Volatility/trend-based inference from candle data | 8,841 rows across 7 symbols |
-| Sentiment | Synthetic from returns + Alternative.me backfill | 110 rows synthetic, full history available |
+**18-symbol prop-firm universe** (equities, forex, crypto, indices). Real data replaces synthetic wherever available. Stooq dataset (`data/stooq/`, 31K files) provides real intraday bars; Yahoo provides 5-year daily history.
+
+| Data Type | Source | Coverage |
+|-----------|--------|----------|
+| Candles (1d) | Yahoo Finance real daily | 5-year (2021-07 → 2026-08), all 18 symbols |
+| Candles (1h) | **Stooq real hourly** + calibrated synthetic | Real 2-year (2024-07 → 2026-08); synthetic 3-year gap (2021-07 → 2024-07) |
+| Candles (4h) | Resampled from stooq 1h + calibrated synthetic | Same as 1h |
+| Candles (5m) | **Stooq real 5-min** + calibrated synthetic | Real 5-month (2026-03 → 2026-08); synthetic 4.7-year gap |
+| Candles (15m/30m) | Resampled from stooq 5m + calibrated synthetic | Same as 5m |
+| VIX | Yahoo ^VIX, **BIGINT** (migration 000039) | 1,284 rows, 5-year |
+| Regime | Volatility/trend-based inference | 400+ rows |
+| Sentiment | Synthetic + Alternative.me backfill | 9,000+ rows |
+
+**Synthetic generation** (`scripts/stooq_synthetic.py`): Unconstrained Geometric Brownian Motion calibrated from per-symbol stooq σ (Close-to-Close + High-Low range, EWMA λ=0.94), with a soft blend toward the daily Close in the final 50% of the session. Paths are free to break through daily High/Low — no artificial clipping. Source labels: `stooq` (real), `stooq-resampled` (resampled from real), `stooq-calibrated` (synthetic gap-fill), `yahoo` (real 1d).
 
 ### Key Files Added (2026-08-12)
 
 | File | Purpose |
 |------|---------|
+| `scripts/stooq_discovery.py` | Walk stooq tree → `data/stooq/manifest.json` (18-symbol mapping) |
+| `scripts/stooq_seed.py` | Stream stooq 1h + 5m CSVs into candles (source='stooq') |
+| `scripts/stooq_resample.py` | 1H→4H + 5m→15m/30m resampling (source='stooq-resampled') |
+| `scripts/stooq_synthetic.py` | Unconstrained-GBM gap-fill calibrated from stooq σ/μ (source='stooq-calibrated') |
+| `internal/db/migrations/000040_stooq_source.up.sql` | `source` column + unique (symbol_id, timeframe, time) constraint |
 | `scripts/anti_pattern_scan.py` Rule 11 | HP #17 CI check — detects NewEngine()→Run() without WirePipeline() |
 | `internal/backtest/parity_test.go` | Backtest-vs-replay parity: batch/streaming determinism, pipeline signal parity |
 | `cmd/matrix-runner/main.go` `--optimize` | Per-combo light optimizer in matrix sweeps |
@@ -255,6 +268,7 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 | `orca/sizing/multiple_testing.py` | Bonferroni + Benjamini-Hochberg multiple testing correction |
 | `orca/simulation/tick_disaggregator.py` `get_symbol_ticks_per_minute` | Per-symbol liquidity-configured tick generation |
 | `orca/simulation/generate_1m.py` _get_us_trading_days | NYSE holiday calendar integration in synthetic pipeline |
+| `scripts/orchestrate.py` `_run_stooq_pipeline` | Orchestrator delegates intraday data to the stooq pipeline |
 
 ### Migrations
 
@@ -262,7 +276,23 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 |---|------|---------|
 | 000001–000038 | Various | Initial schema through sentiment_logs |
 | **000039** | **vix_bigint** | VIX DOUBLE PRECISION → BIGINT (HP #2 compliance, idempotent) |
+| **000040** | **stooq_source** | `source` column + unique (symbol_id, timeframe, time) constraint on candles |
 
 ### Known Issues
 
-All 102 issues identified in the Production Audit Report (2026-08-11) have been resolved. The 15-item data infrastructure implementation backlog (E-4, E-23, E-26, E-36, D-6, D-8, D-9, D-10, D-12, D-15, E-19b, E-24, E-27, E-28, E-36b) has been fully delivered. Historical audit and implementation documents have been cleaned up.
+All 102 issues identified in the Production Audit Report (2026-08-11) have been resolved. The 15-item data infrastructure implementation backlog has been fully delivered. The real intraday data pipeline (stooq) provides 2-year 1H/4H coverage and 5-month 5m/15m/30m coverage, with stooq-calibrated synthetic bars filling the remaining 5-year gap. The synthetic generator uses unconstrained GBM with per-symbol σ — no fixed volatility multiplier, no daily OHLC clipping. Historical audit and implementation documents have been cleaned up.
+
+## Backtest Remediation Status (2026-08-12)
+
+Post-audit remediation of `docs/Backtest Readiness Audit matrix_results (7) 2026-08-12.md` is complete. All P0–P3 enhancements (E1–E15) plus the live-path daily-loss parity fix are implemented and verified (`go build/test/vet`, `orca validate` on 18 configs, `tsc --noEmit`).
+
+Key changes agents must preserve:
+
+- **Data loading is source+timeframe aware and priority-ordered.** `db.Repository` exposes `LoadCandlesFiltered(source)` and `LoadCandlesByTimeframeFiltered(timeframe, source)` backed by `SourceValues()` (`stooq` → `stooq`/`stooq-resampled`/`stooq-calibrated`; `yahoo` → `yahoo`; `seed` → `seed`). The loader applies a source-priority `DISTINCT ON` so the highest-priority source wins per bar — the legacy `seed` fixture and the `yahoo` provider are **never** merged into the `stooq` selector (they produced ~7–10x price-scale discontinuities). `backtestRepoAdapter` (`internal/api/router.go`) no longer hard-codes `1d` and no longer silently falls back to synthetic. Do not reintroduce a `LoadCandles`-only path for timeframed runs, and do not add `seed`/`yahoo` back to `SourceValues("stooq")`.
+- **Unknown tickers error.** `symbolConfig` returns `(syntheticSymbolConfig, bool)`; `generateSyntheticCandles` returns an error for unmapped tickers. Add new universe tickers to **both** `configs/universe.json` and `symbolConfig`.
+- **Daily-loss is per-day.** `PropFirmEnforcer.CheckDailyLoss` uses `DayStartingBalance` (reset in `OnNewDay`); `risk.CapitalPoolManager.RequestCapital` uses `TotalBalance − DailyPnL`. Do not compare cumulative balance against inception `StartingBalance`.
+- **Deterministic metrics are ungated.** `MaxDrawdown`, `AvgWin/Loss`, `NumWins/Losses` compute for any non-zero trade count (only `Sharpe`/`Sortino`/`Calmar` remain gated).
+- **Matrix plausibility gate.** `backtest.FlagImplausibleCombos` is surfaced as `MatrixResult.Plausibility`. Keep it wired in `RunMatrixConcurrent`.
+- **All 17 matrix strategies are IR-backed.** `configs/strategies/*.gkr.yaml` (18 files) all pass `orca validate`. New strategies require a `.gkr.yaml` before entering the matrix.
+
+Remaining follow-ups (documented, non-blocking): none — API walk-forward wiring, the `rsi_divergence` orphan, and the pairs-runner cointegration proxy have all been resolved. The one open item is a **fresh matrix re-run against real stooq data** (the dev seed's 2-decimal intraday rounding limits grid/ORB realism; see the audit report §11).

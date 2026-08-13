@@ -11,63 +11,94 @@ import (
 )
 
 func (r *Repository) LoadCandles(ctx context.Context, symbols []string, start, end time.Time) ([][]Candle, error) {
-	var result [][]Candle
-	var scanErrors []string
-	for _, sym := range symbols {
-		rows, err := r.pool.Query(ctx,
-			`SELECT c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume
-			 FROM candles c
-			 JOIN symbols s ON c.symbol_id = s.id
-			 WHERE s.ticker = $1 AND c.time >= $2 AND c.time <= $3
-			 ORDER BY c.time ASC`, sym, start, end,
-		)
-		if err != nil {
-			scanErrors = append(scanErrors, fmt.Sprintf("%s: query err (%v)", sym, err))
-			continue
-		}
-		var candles []Candle
-		rowErrors := 0
-		for rows.Next() {
-			var c Candle
-			var openRaw, highRaw, lowRaw, closeRaw, vol int64
-			if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol); err != nil {
-				rowErrors++
-				continue
-			}
-			c.Open = types.PriceFromFloat(float64(openRaw) / PRICE_SCALE_F)
-			c.High = types.PriceFromFloat(float64(highRaw) / PRICE_SCALE_F)
-			c.Low = types.PriceFromFloat(float64(lowRaw) / PRICE_SCALE_F)
-			c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
-			c.Volume = float64(vol)
-			c.Symbol = sym
-			candles = append(candles, c)
-		}
-		rows.Close()
-		if rowErrors > 0 {
-			scanErrors = append(scanErrors, fmt.Sprintf("%s: %d row scan errors", sym, rowErrors))
-		}
-		result = append(result, candles)
-	}
-	if len(symbols) > 0 && len(result) == 0 {
-		return nil, fmt.Errorf("LoadCandles: all %d symbols failed to load data (%v)", len(symbols), scanErrors)
-	}
-	return result, nil
+	return r.loadCandles(ctx, symbols, start, end, "1d", nil, "LoadCandles")
+}
+
+// LoadCandlesFiltered loads 1d candles, optionally restricted to the given
+// logical data source. An empty source matches all sources.
+func (r *Repository) LoadCandlesFiltered(ctx context.Context, symbols []string, start, end time.Time, source string) ([][]Candle, error) {
+	return r.loadCandles(ctx, symbols, start, end, "1d", SourceValues(source), "LoadCandlesFiltered")
 }
 
 func (r *Repository) LoadCandlesByTimeframe(ctx context.Context, symbols []string, start, end time.Time, timeframe string) ([][]Candle, error) {
+	return r.loadCandles(ctx, symbols, start, end, timeframe, nil, "LoadCandlesByTimeframe")
+}
+
+// LoadCandlesByTimeframeFiltered loads candles for a timeframe, optionally
+// restricted to the given logical data source. An empty source matches all
+// sources. timeframe "" or "1d" selects daily bars.
+func (r *Repository) LoadCandlesByTimeframeFiltered(ctx context.Context, symbols []string, start, end time.Time, timeframe, source string) ([][]Candle, error) {
+	return r.loadCandles(ctx, symbols, start, end, timeframe, SourceValues(source), "LoadCandlesByTimeframeFiltered")
+}
+
+// SourceValues maps a logical data-source selector to the set of candle
+// `source` values to include. Returns nil (no filter) for empty/all/any.
+//
+// The "stooq" selector represents the real-data pipeline exclusively:
+// stooq (real raw bars, including daily), stooq-resampled (derived from real
+// stooq), and stooq-calibrated (synthetic gap-fill calibrated from stooq σ/μ).
+//
+// The legacy "seed" development fixture and the "yahoo" provider are NOT part
+// of the stooq selector. Merging them with real stooq bars produced ~7-10x
+// price-scale discontinuities (NVDA, ^_US) and absurd backtest results. The
+// loadCandles query additionally applies a source-priority DISTINCT ON so the
+// highest-priority source wins per bar even when no filter is supplied.
+func SourceValues(source string) []string {
+	switch source {
+	case "", "all", "any":
+		return nil
+	case "stooq":
+		return []string{"stooq", "stooq-resampled", "stooq-calibrated"}
+	case "yahoo":
+		return []string{"yahoo"}
+	case "seed":
+		return []string{"seed"}
+	default:
+		return []string{source}
+	}
+}
+
+// loadCandles is the shared loader backing LoadCandles, LoadCandlesFiltered,
+// LoadCandlesByTimeframe, and LoadCandlesByTimeframeFiltered. sourceValues nil
+// means no source restriction; timeframe "" or "1d" selects daily bars.
+func (r *Repository) loadCandles(ctx context.Context, symbols []string, start, end time.Time, timeframe string, sourceValues []string, caller string) ([][]Candle, error) {
 	if timeframe == "" || timeframe == "1d" {
-		return r.LoadCandles(ctx, symbols, start, end)
+		timeframe = "1d"
 	}
 	var result [][]Candle
 	var scanErrors []string
 	for _, sym := range symbols {
-		rows, err := r.pool.Query(ctx,
-			`SELECT c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume
-			 FROM candles c
-			 JOIN symbols s ON c.symbol_id = s.id
-			 WHERE s.ticker = $1 AND c.time >= $2 AND c.time <= $3 AND c.timeframe = $4
-			 ORDER BY c.time ASC`, sym, start, end, timeframe,
-		)
+		// DISTINCT ON (c.time) + source-priority ordering loads the
+		// highest-priority source per bar instead of merging every source.
+		// Priority: stooq (real) > stooq-resampled > stooq-calibrated >
+		// yahoo > seed. This prevents incompatible price scales from
+		// coexisting in a single series.
+		query := `SELECT d.time, d.open_raw, d.high_raw, d.low_raw, d.close_raw, d.volume, d.source, d.generation_id
+			 FROM (
+				SELECT DISTINCT ON (c.time)
+					c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume,
+					c.source, c.generation_id
+				FROM candles c
+				JOIN symbols s ON c.symbol_id = s.id
+				WHERE s.ticker = $1 AND c.time >= $2 AND c.time <= $3 AND c.timeframe = $4`
+		args := []interface{}{sym, start, end, timeframe}
+		if len(sourceValues) > 0 {
+			query += ` AND c.source = ANY($5)`
+			args = append(args, sourceValues)
+		}
+		query += ` ORDER BY c.time ASC,
+				CASE c.source
+					WHEN 'stooq' THEN 0
+					WHEN 'stooq-resampled' THEN 1
+					WHEN 'stooq-calibrated' THEN 2
+					WHEN 'yahoo' THEN 3
+					WHEN 'seed' THEN 4
+					ELSE 5
+				END ASC, c.source ASC
+			 ) d
+			 ORDER BY d.time ASC`
+
+		rows, err := r.pool.Query(ctx, query, args...)
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("%s/%s: query err (%v)", sym, timeframe, err))
 			continue
@@ -77,7 +108,9 @@ func (r *Repository) LoadCandlesByTimeframe(ctx context.Context, symbols []strin
 		for rows.Next() {
 			var c Candle
 			var openRaw, highRaw, lowRaw, closeRaw, vol int64
-			if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol); err != nil {
+			var source string
+			var generationID *string
+			if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol, &source, &generationID); err != nil {
 				rowErrors++
 				continue
 			}
@@ -87,16 +120,28 @@ func (r *Repository) LoadCandlesByTimeframe(ctx context.Context, symbols []strin
 			c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
 			c.Volume = float64(vol)
 			c.Symbol = sym
+			c.Source = source
+			if generationID != nil {
+				c.GenerationID = *generationID
+			}
+			// Default identity factor; corporate-action splits are applied on
+			// load below (see corporate_actions.go).
+			c.AdjustmentFactor = 1.0
 			candles = append(candles, c)
 		}
 		rows.Close()
 		if rowErrors > 0 {
 			scanErrors = append(scanErrors, fmt.Sprintf("%s/%s: %d row scan errors", sym, timeframe, rowErrors))
 		}
+		// Apply corporate-action adjustment factors (splits/dividends) on load,
+		// replacing the identity factor once corporate-action data is ingested.
+		if actions, err := r.LoadCorporateActions(ctx, sym); err == nil {
+			candles = ApplyCorporateActions(candles, actions)
+		}
 		result = append(result, candles)
 	}
 	if len(symbols) > 0 && len(result) == 0 {
-		return nil, fmt.Errorf("LoadCandlesByTimeframe: all %d symbols failed to load data for timeframe %s (%v)", len(symbols), timeframe, scanErrors)
+		return nil, fmt.Errorf("%s: all %d symbols failed to load data for timeframe %s (%v)", caller, len(symbols), timeframe, scanErrors)
 	}
 	return result, nil
 }
@@ -109,16 +154,28 @@ func (r *Repository) LoadCandlesUpTo(ctx context.Context, symbols []string, star
 }
 
 func (r *Repository) LoadAllCandles(ctx context.Context, symbols []string, start, end time.Time, timeframe string) (map[string][]Candle, error) {
-	query := `SELECT c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume, s.ticker
-		 FROM candles c JOIN symbols s ON c.symbol_id = s.id
-		 WHERE s.ticker = ANY($1) AND c.time BETWEEN $2 AND $3`
+	query := `SELECT d.time, d.open_raw, d.high_raw, d.low_raw, d.close_raw, d.volume, d.ticker, d.source, d.generation_id
+		 FROM (
+			SELECT DISTINCT ON (c.symbol_id, c.time)
+				c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume, s.ticker, c.source, c.generation_id, c.symbol_id
+			FROM candles c JOIN symbols s ON c.symbol_id = s.id
+			WHERE s.ticker = ANY($1) AND c.time BETWEEN $2 AND $3`
 	args := []interface{}{symbols, start, end}
 	if timeframe != "" && timeframe != "1d" {
-		query += ` AND c.timeframe = $4 ORDER BY s.ticker, c.time ASC`
+		query += ` AND c.timeframe = $4`
 		args = append(args, timeframe)
-	} else {
-		query += ` ORDER BY s.ticker, c.time ASC`
 	}
+	query += ` ORDER BY c.symbol_id ASC, c.time ASC,
+			CASE c.source
+				WHEN 'stooq' THEN 0
+				WHEN 'stooq-resampled' THEN 1
+				WHEN 'stooq-calibrated' THEN 2
+				WHEN 'yahoo' THEN 3
+				WHEN 'seed' THEN 4
+				ELSE 5
+			END ASC, c.source ASC
+		 ) d
+		 ORDER BY d.ticker ASC, d.time ASC`
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -130,7 +187,9 @@ func (r *Repository) LoadAllCandles(ctx context.Context, symbols []string, start
 		var c Candle
 		var ticker string
 		var openRaw, highRaw, lowRaw, closeRaw, vol int64
-		if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol, &ticker); err != nil {
+		var source string
+		var generationID *string
+		if err := rows.Scan(&c.Time, &openRaw, &highRaw, &lowRaw, &closeRaw, &vol, &ticker, &source, &generationID); err != nil {
 			continue
 		}
 		c.Open = types.PriceFromFloat(float64(openRaw) / PRICE_SCALE_F)
@@ -139,6 +198,10 @@ func (r *Repository) LoadAllCandles(ctx context.Context, symbols []string, start
 		c.Close = types.PriceFromFloat(float64(closeRaw) / PRICE_SCALE_F)
 		c.Volume = float64(vol)
 		c.Symbol = ticker
+		c.Source = source
+		if generationID != nil {
+			c.GenerationID = *generationID
+		}
 		result[ticker] = append(result[ticker], c)
 	}
 	return result, nil

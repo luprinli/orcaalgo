@@ -253,6 +253,10 @@ def validate_strategy_coverage(
             "passed": False,
             "error": f"No data available for symbol={symbol} source={data_source}. Run seed-all first with --generate-first.",
             "data_check": data_check,
+            "strategies": {
+                strat: {"error": "no data available", "passed": False}
+                for strat in strategies
+            },
         }
 
     results: dict[str, Any] = {}

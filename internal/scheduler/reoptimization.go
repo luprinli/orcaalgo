@@ -8,26 +8,16 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/backtest"
+	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/db"
 )
 
 func defaultSymbols(strategyID string) []string {
-	switch strategyID {
-	case "trend_following":
-		return []string{"SPY", "QQQ", "ES", "NQ", "GLD", "TLT"}
-	case "mean_reversion":
-		return []string{"SPY", "QQQ", "IWM", "AAPL", "MSFT"}
-	case "session_scalp":
-		return []string{"SPY", "QQQ", "ES"}
-	case "opening_range_breakout":
-		return []string{"SPY", "QQQ", "ES"}
-	case "pairs_trading":
-		return []string{"SPY"} // single symbol — pair adds secondary in runner
-	case "volatility_harvesting":
-		return []string{"SPY", "QQQ"}
-	default:
-		return []string{"SPY"}
+	// Re-optimization defaults to the full universe from configs/universe.json.
+	if tickers, err := config.Tickers(); err == nil && len(tickers) > 0 {
+		return tickers
 	}
+	return []string{"SPY"}
 }
 
 // ReoptimizationConfig configures the automatic parameter re-optimization job.
@@ -129,12 +119,9 @@ func (c *ReoptimizationConfig) CheckAndOptimize(ctx context.Context) {
 	}
 	strategies := c.Strategies
 	if len(strategies) == 0 {
-		// Default: optimize all registered strategies in the regime matrix.
-		for _, s := range []string{
-			"trend_following", "session_scalp", "mean_reversion",
-			"opening_range_breakout", "pairs_trading", "volatility_harvesting",
-		} {
-			strategies = append(strategies, s)
+		// Default: all strategies from the universe config.
+		if cfgStrategies, err := config.Load(); err == nil {
+			strategies = append(strategies, cfgStrategies.Strategies...)
 		}
 	}
 

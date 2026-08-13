@@ -138,6 +138,11 @@ export interface ComboResult {
   avg_slippage_bps?: number
   calmar_ratio?: number
   candle_count?: number
+  gross_return_pct?: number
+  data_source?: string
+  engine_version?: string
+  wf_is_sharpe?: number
+  wf_oos_sharpe?: number
   first_candle_time?: string
   last_candle_time?: string
   declared_bars_per_day?: number

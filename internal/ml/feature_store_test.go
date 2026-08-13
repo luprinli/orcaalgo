@@ -27,6 +27,71 @@ func TestNewFeatureStore(t *testing.T) {
 	}
 }
 
+// TestFeatureStorePointInTime verifies the feature store is causal (lookahead-safe):
+// the feature vector computed at bar t must be identical whether the store was fed
+// incrementally up to t, or seeded directly with only bars[0..t]. A divergence would
+// indicate the feature computation reads future bars (lookahead leakage).
+func TestFeatureStorePointInTime(t *testing.T) {
+	n := 200
+	rawCloses := make([]float64, n)
+	rawHighs := make([]float64, n)
+	rawLows := make([]float64, n)
+	rawVolumes := make([]float64, n)
+	for i := 0; i < n; i++ {
+		rawCloses[i] = 100.0 + float64(i)*0.05 + math.Sin(float64(i)*0.1)*2.0
+		rawHighs[i] = rawCloses[i] + 0.5
+		rawLows[i] = rawCloses[i] - 0.5
+		rawVolumes[i] = 1000.0 + float64(i%10)*100.0
+	}
+
+	// Round-trip every price through types.Price (fixed-point), so both the
+	// incremental and batch stores operate on the exact same values.
+	candles := make([]strategy.Candle, n)
+	closes := make([]float64, n)
+	highs := make([]float64, n)
+	lows := make([]float64, n)
+	volumes := make([]float64, n)
+	for i := 0; i < n; i++ {
+		candles[i] = strategy.Candle{
+			Close:  types.PriceFromFloat(rawCloses[i]),
+			High:   types.PriceFromFloat(rawHighs[i]),
+			Low:    types.PriceFromFloat(rawLows[i]),
+			Volume: rawVolumes[i],
+			Time:   time.Unix(int64(i)*3600, 0),
+		}
+		closes[i] = candles[i].Close.Float64()
+		highs[i] = candles[i].High.Float64()
+		lows[i] = candles[i].Low.Float64()
+		volumes[i] = candles[i].Volume
+	}
+
+	// Incremental store fed one bar at a time.
+	inc := NewFeatureStore(nil, nil, nil, nil)
+	for _, c := range candles {
+		inc.Push(c)
+	}
+
+	// At every step t in [40, n), the incremental feature must equal the
+	// batch-seeded feature from bars[0..t] — proving no future bars leak in.
+	for bar := 40; bar < n; bar++ {
+		ts := time.Unix(int64(bar)*3600, 0)
+		fvInc, err := inc.ComputeAt(bar, ts, [4]float64{0.1, 0.2, 0.3, 0.4}, 0.5, 1, 0.7, 0.0, 0.01)
+		if err != nil {
+			t.Fatalf("incremental compute at %d: %v", bar, err)
+		}
+		batch := NewFeatureStore(closes[:bar+1], highs[:bar+1], lows[:bar+1], volumes[:bar+1])
+		fvBatch, err := batch.Compute(ts, [4]float64{0.1, 0.2, 0.3, 0.4}, 0.5, 1, 0.7, 0.0, 0.01)
+		if err != nil {
+			t.Fatalf("batch compute at %d: %v", bar, err)
+		}
+		for i := 0; i < FeatureDim; i++ {
+			if math.Abs(float64(fvInc[i]-fvBatch[i])) > 1e-6 {
+				t.Fatalf("point-in-time violation at bar %d feature %d: inc=%v batch=%v", bar, i, fvInc[i], fvBatch[i])
+			}
+		}
+	}
+}
+
 func TestFeatureStoreCompute(t *testing.T) {
 	// Create 60 bars of synthetic data
 	n := 60

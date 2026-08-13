@@ -1,6 +1,7 @@
 package backtest
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -29,11 +30,50 @@ func TestCalculateMaxDrawdown(t *testing.T) {
 	}
 	dd := calculateMaxDrawdown(equity)
 	expected := (110000.0 - 90000.0) / 110000.0 * 100
-	if dd == 0 {
-		t.Error("Expected non-zero max drawdown")
+	if math.Abs(dd-expected) > 1e-9 {
+		t.Errorf("MaxDrawdown: got %.6f, want %.6f", dd, expected)
 	}
-	_ = expected
-	t.Logf("MaxDrawdown: %.2f%%", dd)
+
+	// A curve that only declines from the start must still report a non-zero
+	// drawdown (the gating bug previously reported MaxDD==0 for these).
+	declining := []EquityPoint{
+		{Value: 100000},
+		{Value: 98000},
+		{Value: 95000},
+	}
+	ddDecline := calculateMaxDrawdown(declining)
+	if ddDecline <= 0 {
+		t.Errorf("declining equity should report positive drawdown, got %.2f", ddDecline)
+	}
+}
+
+func TestClampExcursionPct(t *testing.T) {
+	cases := []struct {
+		in   float64
+		want float64
+	}{
+		{0, 0},
+		{2.5, 2.5},
+		{-3.1, -3.1},
+		{10000.0, 10000.0},
+		{36247557.5, 10000.0},
+		{-1e12, -10000.0},
+		{math.NaN(), 0},
+		{math.Inf(1), 0},
+		{math.Inf(-1), 0},
+	}
+	for _, c := range cases {
+		got := clampExcursionPct(c.in)
+		if math.IsNaN(c.want) {
+			if !math.IsNaN(got) {
+				t.Errorf("clampExcursionPct(%v) = %v, want NaN", c.in, got)
+			}
+			continue
+		}
+		if got != c.want {
+			t.Errorf("clampExcursionPct(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
 }
 
 func TestCalculateWinRate(t *testing.T) {

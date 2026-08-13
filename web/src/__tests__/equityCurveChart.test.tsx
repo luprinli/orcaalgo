@@ -83,6 +83,19 @@ vi.mock('../hooks/useChartKeyboard', () => ({
 }))
 
 vi.mock('../charts/chartConfig', () => ({
+  CHART_LAYOUT: {
+    CANDLE_SCALE_MARGINS: { top: 0.1, bottom: 0.2 },
+    EQUITY_SCALE_MARGINS: { top: 0.02, bottom: 0.25 },
+    VOLUME_SCALE_MARGINS: { top: 0.85, bottom: 0 },
+    DRAWDDOWN_SCALE_MARGINS: { top: 0.75, bottom: 0 },
+  },
+  OVERLAY_PALETTE: ['#3fb950', '#d29922', '#da3633', '#8b949e', '#f0883e', '#58a6ff', '#bc8cff', '#ff7b72'],
+  COMPARE_COLORS: ['#3fb950', '#d29922', '#58a6ff', '#da3633', '#f0883e', '#bc8cff', '#8b949e', '#ff7b72'],
+  CHART_DIMENSIONS: {
+    DEFAULT_CHART_HEIGHT: 500,
+    EQUITY_CHART_HEIGHT: 300,
+    DD_CHART_HEIGHT: 200,
+  },
   getChartColors: vi.fn(() => ({
     background: '#1a1a2e',
     text: '#d1d4dc',

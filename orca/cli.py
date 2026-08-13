@@ -914,12 +914,14 @@ def build_regime_logs(
             if symbols:
                 placeholders = ",".join(["%s"] * len(symbols))
                 cur.execute(
-                    f"SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id WHERE s.ticker IN ({placeholders})",
+                    f"SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id "
+                    f"WHERE s.ticker IN ({placeholders}) AND c.timeframe = '1d'",
                     symbols,
                 )
             else:
                 cur.execute(
-                    "SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id"
+                    "SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id "
+                    "WHERE c.timeframe = '1d'"
                 )
             available = [r[0] for r in cur.fetchall()]
 
@@ -932,11 +934,16 @@ def build_regime_logs(
         all_logs = []
         for symbol in available:
             with conn.cursor() as cur:
+                # The consolidated pipeline writes 1d bars exclusively under
+                # source='stooq' (stooq daily); legacy yahoo/seed are purged on
+                # reseed. Resolving symbol_id first avoids a Nested Loop + Seq
+                # Scan over every hypertable chunk (the JOIN-on-ticker form is
+                # ~3x slower on the TimescaleDB hypertable).
                 cur.execute("""
-                    SELECT s.ticker, c.time, c.close_raw
-                    FROM candles c JOIN symbols s ON c.symbol_id = s.id
-                    WHERE s.ticker = %s AND c.timeframe = '1d'
-                    ORDER BY c.time ASC
+                    SELECT time, close_raw FROM candles
+                    WHERE symbol_id = (SELECT id FROM symbols WHERE ticker = %s)
+                      AND timeframe = '1d' AND source = 'stooq'
+                    ORDER BY time ASC
                 """, (symbol,))
                 rows = cur.fetchall()
 
@@ -945,8 +952,8 @@ def build_regime_logs(
                 continue
 
             import numpy as np
-            times = np.array([r[1] for r in rows])
-            closes = np.array([r[2] for r in rows], dtype=np.float64) / 100000.0
+            times = np.array([r[0] for r in rows])
+            closes = np.array([r[1] for r in rows], dtype=np.float64) / 100000.0
 
             from orca.data.regime_inference import infer_regimes
             labels, confs = infer_regimes(closes, times.astype("datetime64[us]"), lookback)
@@ -1064,12 +1071,15 @@ def seed_all_cmd(
     end: str = typer.Option("2026-08-12", "--end", help="End date (YYYY-MM-DD)"),
     reset: bool = typer.Option(False, "--reset", help="Truncate existing data for the target period before seeding"),
 ) -> None:
-    """Reset and regenerate all data from Yahoo Finance.
+    """Reset and regenerate data from the legacy Yahoo pipeline (deprecated).
 
-    Fetches real 5m and 1d market data, resamples to 15m/30m/1h/4h,
-    fetches VIX from ^VIX, infers regimes, generates sentiment, and
-    upserts everything into TimescaleDB with a shared generation_id.
-    This is a complete data reset for a fresh backtest environment.
+    Fetches Yahoo 5m and 1d candles (source='yahoo'), resamples to
+    15m/30m/1h/4h, fetches VIX from ^VIX, infers regimes, generates sentiment,
+    and upserts everything into TimescaleDB with a shared generation_id.
+
+    The Yahoo candle fetch is deprecated in favor of the stooq pipeline
+    (scripts/orchestrate.py --reset-reseed). VIX remains the one Yahoo-sourced
+    series since stooq carries no ^vix index.
     """
     from datetime import date as _date
     from orca.data.seed_all import seed_all
@@ -1176,6 +1186,41 @@ def validate_data_integrity_cmd(
     if json_output:
         typer.echo(_json.dumps(report, indent=2, default=str))
     elif not report["passed"]:
+        raise typer.Exit(code=1)
+
+
+@app.command("promote-gate")
+def promote_gate_cmd(
+    matrix_csv: str = typer.Argument(..., help="Path to the matrix results CSV"),
+    alpha: float = typer.Option(0.05, "--alpha", help="FDR/FWER significance level"),
+    min_trades: int = typer.Option(20, "--min-trades", help="Minimum trades for reliability"),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
+) -> None:
+    """Apply the multiple-testing + walk-forward promotion gate to a matrix CSV.
+
+    A combination is promotion-eligible only if it is BH-significant over the
+    full sweep and walk-forward OOS does not degrade >20%. Exits 0 only when at
+    least one survivor exists; otherwise exits 1 (no promotion).
+    """
+    import json as _json
+    from orca.sizing.promotion_gate import apply_promotion_gate
+
+    result = apply_promotion_gate(matrix_csv, alpha=alpha, min_trades=min_trades)
+    if json_output:
+        typer.echo(_json.dumps(result.as_dict(), indent=2))
+    else:
+        typer.echo(f"Matrix sweep: {result.n_tests} combos")
+        typer.echo(f"Reliable candidates (Sharpe>0, trades>={min_trades}): {result.n_candidates}")
+        typer.echo(f"BH-significant (FDR {alpha:.0%}): {result.bh_significant}")
+        typer.echo(f"Bonferroni-significant (FWER {alpha:.0%}): {result.bonferroni_significant}")
+        typer.echo(f"Survivors (BH + walk-forward): {len(result.survivors)}")
+        for s in result.survivors:
+            typer.echo(
+                f"  {s['strategy']:<22} {s['symbol']:<8} {s['timeframe']:<4} "
+                f"Sharpe={s['sharpe']:.4f} trades={s['trades']} p={s['p_value']:.2e}"
+            )
+
+    if not result.passed:
         raise typer.Exit(code=1)
 
 
