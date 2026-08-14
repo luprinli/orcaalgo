@@ -102,6 +102,20 @@ var (
 		Name: "orca_strategy_sharpe",
 		Help: "Rolling Sharpe ratio per strategy",
 	}, []string{"strategy_id", "window"})
+	llmRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "orca_llm_request_duration_seconds",
+		Help:    "LLM API request duration in seconds",
+		Buckets: []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120},
+	}, []string{"provider"})
+	llmRequestsTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "orca_llm_requests_total",
+		Help: "LLM API requests by provider and result",
+	}, []string{"provider", "result"})
+	brokerCallDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "orca_broker_call_duration_seconds",
+		Help:    "Broker API call duration in seconds",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+	}, []string{"broker", "operation"})
 )
 
 func init() {
@@ -125,6 +139,9 @@ func init() {
 		backtestDuration,
 		propfirmBreach,
 		strategySharpe,
+		llmRequestDuration,
+		llmRequestsTotal,
+		brokerCallDuration,
 	)
 }
 
@@ -254,4 +271,19 @@ func RecordPropfirmBreach(breachType string) {
 
 func SetStrategySharpe(strategyID, window string, sharpe float64) {
 	strategySharpe.WithLabelValues(strategyID, window).Set(sharpe)
+}
+
+// RecordLLMRequest observes an LLM API call's duration for a provider.
+func RecordLLMRequest(provider string, seconds float64) {
+	llmRequestDuration.WithLabelValues(provider).Observe(seconds)
+}
+
+// RecordLLMResult increments the LLM request counter for a provider/result.
+func RecordLLMResult(provider, result string) {
+	llmRequestsTotal.WithLabelValues(provider, result).Inc()
+}
+
+// RecordBrokerCall observes a broker API call's duration for an operation.
+func RecordBrokerCall(brokerName, operation string, seconds float64) {
+	brokerCallDuration.WithLabelValues(brokerName, operation).Observe(seconds)
 }

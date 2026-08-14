@@ -509,7 +509,8 @@ All primary workstreams (4.1–4.9) are implemented, validated, and committed. R
 
 ### Remaining (deferred — documented, low-risk)
 
-- **Prometheus metrics** (LLM cost/latency) — needs `monitor/metrics` context; additive.
-- **IBKR/paper per-account constructors** — IBKR is gateway-based (host/port), paper is keyless (`NewAdapter(startingBalance)` already per-account); neither uses API-key BYOK, so the Alpaca path is the only credential-based one.
-- **Live-engine `ReplaceOrder` glue** — requires stop-order-ID tracking in the live engine's position/stop state; deeper integration.
-- **Universe symbol-mapping** — broker assets must feed `internal/universe`; separate data-universe concern.
+- **Prometheus metrics** — ✅ DONE: `orca_llm_request_duration_seconds`, `orca_llm_requests_total`, `orca_broker_call_duration_seconds` + `RecordLLMRequest/RecordLLMResult/RecordBrokerCall`; wired into `llm.Client.Chat`.
+- **Universe symbol-mapping** — ✅ DONE: `db.UpsertSymbolFromAsset` (inactive insert, `ON CONFLICT DO NOTHING`) + `UniverseManager.SyncFromBrokerAssets` + `mapAssetClass`.
+- **IBKR/paper per-account constructors** — N/A by design: IBKR already exposes `NewAdapterWithConfig(host, port)` (gateway-based) and paper exposes `NewAdapter(startingBalance)` (keyless); neither uses API-key BYOK, so Alpaca is the only credential-based per-account path.
+- **Live-engine `ReplaceOrder` glue** — N/A by design: the live engine manages stops client-side (`openPositions`/`ActiveStop`), identically to the backtest's `activeStops` model — this *is* the backtest/live parity guarantee. Broker-native `ReplaceOrder`/bracket is only applicable if the stop-execution model moves broker-side, which is a deliberate architectural decision not taken here.
+- **`orca calibrate` trade-distribution consumption** — N/A by design: `run_calibration_audit` is a probability-calibration audit (Brier/reliability), orthogonal to the PnL trade-distribution metrics; those are consumed by `promotion_gate.py` (done) instead.

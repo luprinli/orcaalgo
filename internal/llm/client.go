@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/breaker"
+	"github.com/lee-econ/orca-core/internal/monitor"
 )
 
 type Provider string
@@ -87,14 +88,19 @@ func defaultBaseURL(provider Provider) string {
 
 func (c *Client) Chat(req *ChatRequest) (*ChatResponse, error) {
 	if !c.breaker.Allow() {
+		monitor.RecordLLMResult(string(c.provider), "circuit_open")
 		return nil, fmt.Errorf("llm circuit open")
 	}
+	start := time.Now()
 	resp, err := c.doChat(req)
+	monitor.RecordLLMRequest(string(c.provider), time.Since(start).Seconds())
 	if err != nil {
 		c.breaker.RecordFailure()
+		monitor.RecordLLMResult(string(c.provider), "error")
 		return nil, err
 	}
 	c.breaker.RecordSuccess()
+	monitor.RecordLLMResult(string(c.provider), "success")
 	return resp, nil
 }
 

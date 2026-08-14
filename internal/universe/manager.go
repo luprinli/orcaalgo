@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/db"
 )
 
@@ -389,4 +390,38 @@ func (m *UniverseManager) ConfigHash() string {
 
 func (m *UniverseManager) ConfigID() string {
 	return m.configID
+}
+
+// SyncFromBrokerAssets ingests broker-discovered assets as inactive symbols so
+// they are available for universe mapping, without disturbing the canonical
+// universe. Returns the number of newly-added symbols.
+func (m *UniverseManager) SyncFromBrokerAssets(ctx context.Context, assets []broker.Asset) (int, error) {
+	added := 0
+	for _, a := range assets {
+		if a.Symbol == "" || !a.Tradable {
+			continue
+		}
+		inserted, err := m.repo.UpsertSymbolFromAsset(ctx, a.Symbol, a.Exchange, mapAssetClass(a.Class))
+		if err != nil {
+			return added, err
+		}
+		if inserted {
+			added++
+		}
+	}
+	m.cache.Invalidate()
+	m.logger.InfoContext(ctx, "universe_broker_sync", "total", len(assets), "added", added)
+	return added, nil
+}
+
+// mapAssetClass maps a broker asset class to the internal symbol asset type.
+func mapAssetClass(class string) string {
+	switch class {
+	case "us_equity":
+		return "equity"
+	case "crypto":
+		return "crypto"
+	default:
+		return "equity"
+	}
 }

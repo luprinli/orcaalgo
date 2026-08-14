@@ -177,6 +177,21 @@ func (r *Repository) InsertSymbol(ctx context.Context, s *Symbol) (int32, error)
 	return id, err
 }
 
+// UpsertSymbolFromAsset inserts a broker-discovered asset as an inactive
+// symbol, leaving any existing symbol untouched (single source of truth for
+// the canonical universe). Returns true when a new row was inserted.
+func (r *Repository) UpsertSymbolFromAsset(ctx context.Context, ticker, exchange, assetType string) (bool, error) {
+	tag, err := r.pool.Exec(ctx,
+		`INSERT INTO symbols (ticker, exchange, asset_type, tick_size, lot_size, is_active)
+		 VALUES ($1, $2, $3, 0.01, 1, false)
+		 ON CONFLICT (ticker, exchange) DO NOTHING`,
+		ticker, exchange, assetType)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *Repository) ListSymbols(ctx context.Context) ([]Symbol, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, ticker, exchange, asset_type, tick_size, lot_size, is_active, created_at
