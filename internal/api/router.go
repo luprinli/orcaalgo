@@ -1257,6 +1257,8 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		}
 		s.progressStore.Create(batchID, len(combos), cp)
 
+		matrixUserID := c.GetString("user_id")
+
 		go func(bid string) {
 			defer func() {
 				if r := recover(); r != nil {
@@ -1304,28 +1306,33 @@ func (s *Server) submitBacktest(c *gin.Context) {
 							sd := startDate
 							ed := endDate
 							rec := &db.BacktestRunRecord{
-								StrategyID:       result.StrategyID,
-								RunType:          "matrix",
-								Status:           "completed",
-								StrategyIDs:      []string{result.StrategyID},
-								Symbols:          []string{result.Symbol},
-								StartDate:        &sd,
-								EndDate:          &ed,
-								InitialCapital:   mc.InitialCapital,
-								SharpeRatio:      result.SharpeRatio,
-								SortinoRatio:     result.SortinoRatio,
-								MaxDrawdown:      result.MaxDrawdown,
-								MaxDrawdownDur:   result.MaxDrawdownDur,
-								TotalReturn:      result.TotalReturn,
-								WinRate:          result.WinRate,
-								ProfitFactor:     result.ProfitFactor,
-								AvgTrade:         result.AvgTrade,
-								AvgWin:           result.AvgWin,
-								AvgLoss:          result.AvgLoss,
-								NumTrades:        result.NumTrades,
-								NumWins:          result.NumWins,
-								NumLosses:        result.NumLosses,
-								GatePassed:       result.GatePassed,
+								StrategyID:           result.StrategyID,
+								RunType:              "matrix",
+								Status:               "completed",
+								StrategyIDs:          []string{result.StrategyID},
+								Symbols:              []string{result.Symbol},
+								StartDate:            &sd,
+								EndDate:              &ed,
+								InitialCapital:       mc.InitialCapital,
+								SharpeRatio:          result.SharpeRatio,
+								SortinoRatio:         result.SortinoRatio,
+								MaxDrawdown:          result.MaxDrawdown,
+								MaxDrawdownDur:       result.MaxDrawdownDur,
+								TotalReturn:          result.TotalReturn,
+								WinRate:              result.WinRate,
+								ProfitFactor:         result.ProfitFactor,
+								AvgTrade:             result.AvgTrade,
+								AvgWin:               result.AvgWin,
+								AvgLoss:              result.AvgLoss,
+								NumTrades:            result.NumTrades,
+								NumWins:              result.NumWins,
+								NumLosses:            result.NumLosses,
+								GatePassed:           result.GatePassed,
+								UserID:               matrixUserID,
+								Timeframe:            result.Timeframe,
+								EngineVersion:        "dev",
+								SchemaVersion:        1,
+								UseUniverseSnapshots: false,
 							}
 							fullMetricsJSON, merr := json.Marshal(result)
 							if merr != nil {
@@ -1336,13 +1343,15 @@ func (s *Server) submitBacktest(c *gin.Context) {
 							eqJSON, _ := json.Marshal(result.EquityCurve)
 							tradesJSON, _ := json.Marshal(result.Trades)
 							btr := &db.BacktestResultRecord{
-								StrategyID:    result.StrategyID,
-								ResultType:    "matrix",
-								TrialIndex:    0,
-								SchemaVersion: 1,
-								Metrics:       fullMetricsJSON,
-								EquityCurve:   eqJSON,
-								Trades:        tradesJSON,
+								StrategyID:     result.StrategyID,
+								ResultType:     "matrix",
+								TrialIndex:     0,
+								SchemaVersion:  1,
+								EngineVersion:  "dev",
+								RetentionClass: 1,
+								Metrics:        fullMetricsJSON,
+								EquityCurve:    eqJSON,
+								Trades:         tradesJSON,
 							}
 							mu.Lock()
 							collected = append(collected, collectedPair{rec: rec, btr: btr, index: index, cr: *result})
@@ -2554,6 +2563,8 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	}
 	s.progressStore.Create(batchID, combos, progresses)
 
+	userID := c.GetString("user_id")
+
 	go func() {
 		type collectedPair struct {
 			rec    *db.BacktestRunRecord
@@ -2583,28 +2594,33 @@ func (s *Server) submitMatrix(c *gin.Context) {
 						sd := startDate
 						ed := endDate
 						rec := &db.BacktestRunRecord{
-							StrategyID:       result.StrategyID,
-							RunType:          "matrix",
-							Status:           "completed",
-							StrategyIDs:      []string{result.StrategyID},
-							Symbols:          []string{result.Symbol},
-							StartDate:        &sd,
-							EndDate:          &ed,
-							InitialCapital:   config.InitialCapital,
-							SharpeRatio:      result.SharpeRatio,
-							SortinoRatio:     result.SortinoRatio,
-							MaxDrawdown:      result.MaxDrawdown,
-							MaxDrawdownDur:   result.MaxDrawdownDur,
-							TotalReturn:      result.TotalReturn,
-							WinRate:          result.WinRate,
-							ProfitFactor:     result.ProfitFactor,
-							AvgTrade:         result.AvgTrade,
-							AvgWin:           result.AvgWin,
-							AvgLoss:          result.AvgLoss,
-							NumTrades:        result.NumTrades,
-							NumWins:          result.NumWins,
-							NumLosses:        result.NumLosses,
-							GatePassed:       result.GatePassed,
+							StrategyID:           result.StrategyID,
+							RunType:              "matrix",
+							Status:               "completed",
+							StrategyIDs:          []string{result.StrategyID},
+							Symbols:              []string{result.Symbol},
+							StartDate:            &sd,
+							EndDate:              &ed,
+							InitialCapital:       config.InitialCapital,
+							SharpeRatio:          result.SharpeRatio,
+							SortinoRatio:         result.SortinoRatio,
+							MaxDrawdown:          result.MaxDrawdown,
+							MaxDrawdownDur:       result.MaxDrawdownDur,
+							TotalReturn:          result.TotalReturn,
+							WinRate:              result.WinRate,
+							ProfitFactor:         result.ProfitFactor,
+							AvgTrade:             result.AvgTrade,
+							AvgWin:               result.AvgWin,
+							AvgLoss:              result.AvgLoss,
+							NumTrades:            result.NumTrades,
+							NumWins:              result.NumWins,
+							NumLosses:            result.NumLosses,
+							GatePassed:           result.GatePassed,
+							UserID:               userID,
+							Timeframe:            result.Timeframe,
+							EngineVersion:        "dev",
+							SchemaVersion:        1,
+							UseUniverseSnapshots: false,
 						}
 						fullMetricsJSON, merr := json.Marshal(result)
 						if merr == nil {
@@ -2612,13 +2628,15 @@ func (s *Server) submitMatrix(c *gin.Context) {
 							eqJSON, _ := json.Marshal(result.EquityCurve)
 							tradesJSON, _ := json.Marshal(result.Trades)
 							btr := &db.BacktestResultRecord{
-								StrategyID:    result.StrategyID,
-								ResultType:    "matrix",
-								TrialIndex:    0,
-								SchemaVersion: 1,
-								Metrics:       fullMetricsJSON,
-								EquityCurve:   eqJSON,
-								Trades:        tradesJSON,
+								StrategyID:     result.StrategyID,
+								ResultType:     "matrix",
+								TrialIndex:     0,
+								SchemaVersion:  1,
+								EngineVersion:  "dev",
+								RetentionClass: 1,
+								Metrics:        fullMetricsJSON,
+								EquityCurve:    eqJSON,
+								Trades:         tradesJSON,
 							}
 							mu.Lock()
 							collected = append(collected, collectedPair{rec: rec, btr: btr, index: index, cr: *result})

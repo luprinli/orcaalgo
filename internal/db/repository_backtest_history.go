@@ -9,62 +9,77 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// mustJSONArray marshals a []string to a JSON array (for the JSONB
+// strategy_ids/symbols columns). Marshaling of plain strings cannot fail.
+func mustJSONArray(items []string) json.RawMessage {
+	b, _ := json.Marshal(items)
+	return b
+}
+
 type BacktestRunRecord struct {
-	ID               string          `json:"id"`
-	StrategyID       string          `json:"strategy_id"`
-	RunType          string          `json:"run_type"`
-	Status           string          `json:"status"`
-	StrategyIDs      []string        `json:"strategy_ids"`
-	Symbols          []string        `json:"symbols"`
-	StartDate        *time.Time      `json:"start_date,omitempty"`
-	EndDate          *time.Time      `json:"end_date,omitempty"`
-	InitialCapital   float64         `json:"initial_capital"`
-	Config           json.RawMessage `json:"config,omitempty"`
-	SharpeRatio      float64         `json:"sharpe_ratio"`
-	SortinoRatio     float64         `json:"sortino_ratio"`
-	MaxDrawdown      float64         `json:"max_drawdown"`
-	MaxDrawdownDur   int             `json:"max_drawdown_duration"`
-	TotalReturn      float64         `json:"total_return"`
-	WinRate          float64         `json:"win_rate"`
-	ProfitFactor     float64         `json:"profit_factor"`
-	AvgTrade         float64         `json:"avg_trade"`
-	AvgWin           float64         `json:"avg_win"`
-	AvgLoss          float64         `json:"avg_loss"`
-	NumTrades        int             `json:"num_trades"`
-	NumWins          int             `json:"num_wins"`
-	NumLosses        int             `json:"num_losses"`
-	GatePassed       *bool           `json:"gate_passed,omitempty"`
-	ResultsJSON      json.RawMessage `json:"results_json,omitempty"`
-	ErrorMessage     *string         `json:"error_message,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	CompletedAt      *time.Time      `json:"completed_at,omitempty"`
+	ID                   string          `json:"id"`
+	StrategyID           string          `json:"strategy_id"`
+	RunType              string          `json:"run_type"`
+	Status               string          `json:"status"`
+	StrategyIDs          []string        `json:"strategy_ids"`
+	Symbols              []string        `json:"symbols"`
+	StartDate            *time.Time      `json:"start_date,omitempty"`
+	EndDate              *time.Time      `json:"end_date,omitempty"`
+	InitialCapital       float64         `json:"initial_capital"`
+	Config               json.RawMessage `json:"config,omitempty"`
+	SharpeRatio          float64         `json:"sharpe_ratio"`
+	SortinoRatio         float64         `json:"sortino_ratio"`
+	MaxDrawdown          float64         `json:"max_drawdown"`
+	MaxDrawdownDur       int             `json:"max_drawdown_duration"`
+	TotalReturn          float64         `json:"total_return"`
+	WinRate              float64         `json:"win_rate"`
+	ProfitFactor         float64         `json:"profit_factor"`
+	AvgTrade             float64         `json:"avg_trade"`
+	AvgWin               float64         `json:"avg_win"`
+	AvgLoss              float64         `json:"avg_loss"`
+	NumTrades            int             `json:"num_trades"`
+	NumWins              int             `json:"num_wins"`
+	NumLosses            int             `json:"num_losses"`
+	GatePassed           *bool           `json:"gate_passed,omitempty"`
+	ResultsJSON          json.RawMessage `json:"results_json,omitempty"`
+	UserID               string          `json:"user_id"`
+	Timeframe            string          `json:"timeframe"`
+	EngineVersion        string          `json:"engine_version"`
+	SchemaVersion        int             `json:"schema_version"`
+	UseUniverseSnapshots bool            `json:"use_universe_snapshots"`
+	ErrorMessage         *string         `json:"error_message,omitempty"`
+	CreatedAt            time.Time       `json:"created_at"`
+	UpdatedAt            time.Time       `json:"updated_at"`
+	CompletedAt          *time.Time      `json:"completed_at,omitempty"`
 }
 
 type BacktestResultRecord struct {
-	ID            string          `json:"id"`
-	RunID         string          `json:"run_id"`
-	StrategyID    string          `json:"strategy_id"`
-	ResultType    string          `json:"result_type"`
-	TrialIndex    int             `json:"trial_index"`
-	SchemaVersion int             `json:"schema_version"`
-	Parameters    json.RawMessage `json:"parameters,omitempty"`
-	Metrics       json.RawMessage `json:"metrics"`
-	EquityCurve   json.RawMessage `json:"equity_curve,omitempty"`
-	Trades        json.RawMessage `json:"trades,omitempty"`
-	CreatedAt     time.Time       `json:"created_at"`
+	ID             string          `json:"id"`
+	RunID          string          `json:"run_id"`
+	StrategyID     string          `json:"strategy_id"`
+	ResultType     string          `json:"result_type"`
+	TrialIndex     int             `json:"trial_index"`
+	SchemaVersion  int             `json:"schema_version"`
+	EngineVersion  string          `json:"engine_version"`
+	RetentionClass int16           `json:"retention_class"`
+	StrategyHash   string          `json:"strategy_hash,omitempty"`
+	Parameters     json.RawMessage `json:"parameters,omitempty"`
+	Metrics        json.RawMessage `json:"metrics"`
+	EquityCurve    json.RawMessage `json:"equity_curve,omitempty"`
+	Trades         json.RawMessage `json:"trades,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
 }
 
 func (r *Repository) CreateBacktestRun(ctx context.Context, br *BacktestRunRecord) error {
-	sids := stringsToPgArray(br.StrategyIDs)
-	syms := stringsToPgArray(br.Symbols)
+	sids := mustJSONArray(br.StrategyIDs)
+	syms := mustJSONArray(br.Symbols)
 	gatePassed := false
 	if br.GatePassed != nil {
 		gatePassed = *br.GatePassed
 	}
 	return r.pool.QueryRow(ctx,
-		`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+		`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json, user_id, timeframe, engine_version, schema_version, use_universe_snapshots, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, COALESCE(NULLIF($25, '')::uuid, (SELECT id FROM users ORDER BY created_at LIMIT 1)), COALESCE(NULLIF($26, ''), '1d'), COALESCE(NULLIF($27, ''), 'dev'), COALESCE($28, 1), COALESCE($29, false), now())
 		 RETURNING id`,
 		br.StrategyID, br.RunType, br.Status, sids, syms,
 		br.StartDate, br.EndDate, br.InitialCapital, br.Config,
@@ -72,7 +87,7 @@ func (r *Repository) CreateBacktestRun(ctx context.Context, br *BacktestRunRecor
 		br.TotalReturn, br.WinRate, br.ProfitFactor,
 		br.AvgTrade, br.AvgWin, br.AvgLoss,
 		br.NumTrades, br.NumWins, br.NumLosses, gatePassed,
-		br.ResultsJSON,
+		br.ResultsJSON, br.UserID, br.Timeframe, br.EngineVersion, br.SchemaVersion, br.UseUniverseSnapshots,
 	).Scan(&br.ID)
 }
 
@@ -100,11 +115,10 @@ func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRu
 	var errMsg *string
 
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at
+		`SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json, error_message, timeframe, created_at, updated_at, completed_at
 		 FROM backtest_runs WHERE id=$1`, id,
 	).Scan(&br.ID, &br.StrategyID, &br.RunType, &br.Status, &sIDs, &syms, &sd, &ed, &br.InitialCapital,
-		&config, &br.SharpeRatio, &br.MaxDrawdown, &br.TotalReturn, &br.WinRate, &br.NumTrades, &results, &errMsg,
-		&br.CreatedAt, &br.UpdatedAt, &br.CompletedAt)
+		&config, &br.SharpeRatio, &br.SortinoRatio, &br.MaxDrawdown, &br.MaxDrawdownDur, &br.TotalReturn, &br.WinRate, &br.ProfitFactor, &br.AvgTrade, &br.AvgWin, &br.AvgLoss, &br.NumTrades, &br.NumWins, &br.NumLosses, &br.GatePassed, &results, &errMsg, &br.Timeframe, &br.CreatedAt, &br.UpdatedAt, &br.CompletedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +134,7 @@ func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRu
 
 func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType string) ([]*BacktestRunRecord, error) {
 	if limit <= 0 { limit = 50 }
-	query := `SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, results_json, error_message, created_at, updated_at, completed_at FROM backtest_runs`
+	query := `SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json, error_message, timeframe, created_at, updated_at, completed_at FROM backtest_runs`
 	args := []interface{}{limit}
 	if runType != "" {
 		query += ` WHERE run_type=$1 ORDER BY created_at DESC LIMIT $2`
@@ -139,7 +153,7 @@ func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType st
 		var sd, ed *time.Time
 		var config, results []byte
 		var errMsg *string
-		if err := rows.Scan(&br.ID, &br.StrategyID, &br.RunType, &br.Status, &sIDs, &syms, &sd, &ed, &br.InitialCapital, &config, &br.SharpeRatio, &br.MaxDrawdown, &br.TotalReturn, &br.WinRate, &br.NumTrades, &results, &errMsg, &br.CreatedAt, &br.UpdatedAt, &br.CompletedAt); err != nil {
+		if err := rows.Scan(&br.ID, &br.StrategyID, &br.RunType, &br.Status, &sIDs, &syms, &sd, &ed, &br.InitialCapital, &config, &br.SharpeRatio, &br.SortinoRatio, &br.MaxDrawdown, &br.MaxDrawdownDur, &br.TotalReturn, &br.WinRate, &br.ProfitFactor, &br.AvgTrade, &br.AvgWin, &br.AvgLoss, &br.NumTrades, &br.NumWins, &br.NumLosses, &br.GatePassed, &results, &errMsg, &br.Timeframe, &br.CreatedAt, &br.UpdatedAt, &br.CompletedAt); err != nil {
 			return nil, err
 		}
 		br.StrategyIDs = pgArrayToStrings(sIDs)
@@ -160,9 +174,10 @@ func (r *Repository) DeleteBacktestRun(ctx context.Context, id string) error {
 
 func (r *Repository) InsertBacktestResult(ctx context.Context, btr *BacktestResultRecord) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'dev'), COALESCE($10, 1), COALESCE($11, 1), now())`,
 		btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.EquityCurve, btr.Trades,
+		btr.EngineVersion, btr.RetentionClass, btr.SchemaVersion,
 	)
 	return err
 }
@@ -204,8 +219,8 @@ func (r *Repository) CreateBacktestRunsBatch(ctx context.Context, runs []Backtes
 			gatePassed = *br.GatePassed
 		}
 		batch.Queue(
-			`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+			`INSERT INTO backtest_runs (strategy_id, run_type, status, strategy_ids, symbols, start_date, end_date, initial_capital, config, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json, user_id, timeframe, engine_version, schema_version, use_universe_snapshots, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, COALESCE(NULLIF($25, '')::uuid, (SELECT id FROM users ORDER BY created_at LIMIT 1)), COALESCE(NULLIF($26, ''), '1d'), COALESCE(NULLIF($27, ''), 'dev'), COALESCE($28, 1), COALESCE($29, false), now())
 			 RETURNING id`,
 			br.StrategyID, br.RunType, br.Status, sids, syms,
 			br.StartDate, br.EndDate, br.InitialCapital, br.Config,
@@ -213,7 +228,7 @@ func (r *Repository) CreateBacktestRunsBatch(ctx context.Context, runs []Backtes
 			br.TotalReturn, br.WinRate, br.ProfitFactor,
 			br.AvgTrade, br.AvgWin, br.AvgLoss,
 			br.NumTrades, br.NumWins, br.NumLosses, gatePassed,
-			br.ResultsJSON,
+			br.ResultsJSON, br.UserID, br.Timeframe, br.EngineVersion, br.SchemaVersion, br.UseUniverseSnapshots,
 		)
 	}
 	br := r.pool.SendBatch(ctx, batch)
@@ -236,9 +251,10 @@ func (r *Repository) InsertBacktestResultsBatch(ctx context.Context, results []B
 	for i := range results {
 		btr := &results[i]
 		batch.Queue(
-			`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'dev'), COALESCE($10, 1), COALESCE($11, 1), now())`,
 			btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.EquityCurve, btr.Trades,
+			btr.EngineVersion, btr.RetentionClass, btr.SchemaVersion,
 		)
 	}
 	br := r.pool.SendBatch(ctx, batch)
