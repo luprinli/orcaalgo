@@ -29,6 +29,10 @@ const (
 	ActionSettingsUpdated    AuditAction = "settings_updated"
 	ActionNotificationUpdated AuditAction = "notification_settings_updated"
 	ActionAdminAction        AuditAction = "admin_action"
+	ActionLLMKeyAdded        AuditAction = "llm_key_added"
+	ActionLLMKeyDeleted      AuditAction = "llm_key_deleted"
+	ActionCredentialStored   AuditAction = "credential_stored"
+	ActionCredentialRotated  AuditAction = "credential_rotated"
 )
 
 type Entry struct {

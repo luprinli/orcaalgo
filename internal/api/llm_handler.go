@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lee-econ/orca-core/internal/api/middleware"
+	"github.com/lee-econ/orca-core/internal/audit"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/llm"
 	"github.com/lee-econ/orca-core/internal/risk"
@@ -85,6 +86,7 @@ func (h *LLMHandler) AddKey(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	emitAudit(c.Request.Context(), h.repo, userID, audit.ActionLLMKeyAdded, "llm_key", provider)
 	c.JSON(http.StatusCreated, gin.H{"provider": provider, "masked_suffix": maskSuffix(req.APIKey)})
 }
 
@@ -98,6 +100,7 @@ func (h *LLMHandler) DeleteKey(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
+	emitAudit(c.Request.Context(), h.repo, userID, audit.ActionLLMKeyDeleted, "llm_key", c.Param("provider"))
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 

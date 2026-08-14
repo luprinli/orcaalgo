@@ -76,6 +76,36 @@ def _walk_forward_ok(row: dict[str, str], max_degradation: float) -> bool | None
     return oos > 0
 
 
+def _trade_distribution_ok(row: dict[str, str]) -> bool | None:
+    """Return True/False for the trade-distribution gate, or None when the
+    columns are absent (the matrix runner has not exported them yet).
+
+    Gate: the median trade PnL must be positive (a strategy whose "typical"
+    trade loses money is not promotion-worthy regardless of Sharpe), and the
+    candidate must span at least 2 unique tickers (breadth, not a single-name
+    lucky run). Backward-compatible: absent columns are treated as n/a.
+    """
+    checks: list[bool] = []
+
+    median_raw = row.get("MedianTradePnL", "")
+    if median_raw not in ("", "N/A"):
+        try:
+            checks.append(float(median_raw) > 0)
+        except ValueError:
+            pass
+
+    unique_raw = row.get("UniqueTickers", "")
+    if unique_raw not in ("", "N/A"):
+        try:
+            checks.append(int(unique_raw) >= 2)
+        except ValueError:
+            pass
+
+    if not checks:
+        return None
+    return all(checks)
+
+
 def apply_promotion_gate(
     matrix_csv: str | Path,
     alpha: float = DEFAULT_ALPHA,
@@ -118,7 +148,8 @@ def apply_promotion_gate(
     for i, r in enumerate(candidates):
         bh_pass = bool(bh["significant"][i])
         wf = _walk_forward_ok(r, max_oos_degradation)
-        if bh_pass and wf is not False:
+        td = _trade_distribution_ok(r)
+        if bh_pass and wf is not False and td is not False:
             survivors.append({
                 "strategy": r["Strategy"],
                 "symbol": r["Symbol"],
@@ -127,6 +158,7 @@ def apply_promotion_gate(
                 "trades": int(r["Trades"]),
                 "p_value": p_values[i],
                 "walk_forward": "pass" if wf is True else "n/a",
+                "trade_distribution": "pass" if td is True else "n/a",
             })
 
     return GateResult(

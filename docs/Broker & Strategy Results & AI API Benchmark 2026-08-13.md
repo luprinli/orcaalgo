@@ -499,3 +499,17 @@ All primary workstreams (4.1–4.9) are implemented, validated, and committed. R
 - `internal/api/benchmark_test.go` — `normalizeBenchmark` tests.
 
 **Validation:** `go build`/`go vet` clean; `go test ./internal/api` pass; `tsc --noEmit` clean; `vitest` 233/233 pass; anti-pattern scan clean.
+
+### ✅ Cross-cutting hardening (remaining items)
+- **LLM circuit breaker** — `llm.Client` gains a per-client `breaker.CircuitBreaker` (5 failures / 30s reset); `Chat` is wrapped (`Allow()` → `RecordFailure`/`RecordSuccess`), so every LLM call (test + future consumers) is circuit-protected.
+- **Audit events** — `api.emitAudit` helper (single, shared); `llm_key_added`/`llm_key_deleted` (LLM handler) and `credential_stored`/`credential_rotated` (credential handler) emit via `audit.Logger`; new `audit.Action*` constants.
+- **Promotion-gate trade-distribution gates** — `orca/sizing/promotion_gate.py` gains `_trade_distribution_ok` (optional, backward-compatible): rejects negative `MedianTradePnL` and `<2` `UniqueTickers` when those matrix columns are present; `survivors` record `trade_distribution: pass/n/a`.
+
+**Validation:** `go build`/`go vet` clean; `go test ./internal/api ./internal/llm ./internal/audit` pass; `pytest tests/test_promotion_gate.py` 7 pass; `ruff`/`mypy` clean on new code; anti-pattern scan clean.
+
+### Remaining (deferred — documented, low-risk)
+
+- **Prometheus metrics** (LLM cost/latency) — needs `monitor/metrics` context; additive.
+- **IBKR/paper per-account constructors** — IBKR is gateway-based (host/port), paper is keyless (`NewAdapter(startingBalance)` already per-account); neither uses API-key BYOK, so the Alpaca path is the only credential-based one.
+- **Live-engine `ReplaceOrder` glue** — requires stop-order-ID tracking in the live engine's position/stop state; deeper integration.
+- **Universe symbol-mapping** — broker assets must feed `internal/universe`; separate data-universe concern.

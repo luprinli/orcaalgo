@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/lee-econ/orca-core/internal/breaker"
 )
 
 type Provider string
@@ -46,6 +48,7 @@ type Client struct {
 	apiKey     string
 	baseURL    string
 	httpClient *http.Client
+	breaker    *breaker.CircuitBreaker
 }
 
 func NewClient(provider Provider) *Client {
@@ -65,6 +68,7 @@ func NewClientWithKey(provider Provider, key, baseURL string) *Client {
 		apiKey:     key,
 		baseURL:    baseURL,
 		httpClient: &http.Client{Timeout: 120 * time.Second},
+		breaker:    breaker.NewCircuitBreaker(5, 30*time.Second),
 	}
 }
 
@@ -82,6 +86,19 @@ func defaultBaseURL(provider Provider) string {
 }
 
 func (c *Client) Chat(req *ChatRequest) (*ChatResponse, error) {
+	if !c.breaker.Allow() {
+		return nil, fmt.Errorf("llm circuit open")
+	}
+	resp, err := c.doChat(req)
+	if err != nil {
+		c.breaker.RecordFailure()
+		return nil, err
+	}
+	c.breaker.RecordSuccess()
+	return resp, nil
+}
+
+func (c *Client) doChat(req *ChatRequest) (*ChatResponse, error) {
 	var url string
 	var bodyData []byte
 	var err error

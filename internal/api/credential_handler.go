@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lee-econ/orca-core/internal/audit"
 	"github.com/lee-econ/orca-core/internal/db"
 	"github.com/lee-econ/orca-core/internal/risk"
 )
@@ -59,6 +60,7 @@ func (h *CredentialHandler) StoreCredential(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store credential"})
 		return
 	}
+	emitAudit(c.Request.Context(), h.repo, c.GetString("user_id"), audit.ActionCredentialStored, "broker_credential", vaultPath)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"id":         vaultPath,
@@ -80,6 +82,7 @@ func (h *CredentialHandler) RotateCredential(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to rotate credential"})
 		return
 	}
+	emitAudit(c.Request.Context(), h.repo, c.GetString("user_id"), audit.ActionCredentialRotated, "broker_credential", newPath)
 	c.JSON(http.StatusOK, gin.H{
 		"id":       id,
 		"rotated":  true,

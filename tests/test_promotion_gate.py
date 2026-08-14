@@ -72,3 +72,48 @@ def test_gate_walk_forward_degradation():
     assert result.bh_significant == 1
     assert len(result.survivors) == 0  # OOS 0.5 < 0.8 * 2.0 (degradation >20%)
     assert result.passed is False
+
+
+def test_gate_trade_distribution_negative_median_rejected():
+    # Strong Sharpe + significant, but median trade PnL is negative -> excluded.
+    rows = [
+        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
+         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
+         "MedianTradePnL": "-5.0", "UniqueTickers": "5"},
+    ]
+    result = _run(rows)
+    assert result.bh_significant == 1
+    assert len(result.survivors) == 0
+    assert result.passed is False
+
+
+def test_gate_trade_distribution_single_ticker_rejected():
+    rows = [
+        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
+         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
+         "MedianTradePnL": "5.0", "UniqueTickers": "1"},
+    ]
+    result = _run(rows)
+    assert len(result.survivors) == 0
+
+
+def test_gate_trade_distribution_absent_is_na():
+    # No distribution columns -> gate is n/a and passes.
+    rows = [
+        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
+         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": ""},
+    ]
+    result = _run(rows)
+    assert len(result.survivors) == 1
+    assert result.survivors[0]["trade_distribution"] == "n/a"
+
+
+def test_gate_trade_distribution_passes():
+    rows = [
+        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
+         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
+         "MedianTradePnL": "5.0", "UniqueTickers": "5"},
+    ]
+    result = _run(rows)
+    assert len(result.survivors) == 1
+    assert result.survivors[0]["trade_distribution"] == "pass"
