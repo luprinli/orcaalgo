@@ -1504,7 +1504,11 @@ def main() -> None:
             log("WARN", "Database", "Migrations not applied. Running migrate script...")
             migrate_result = subprocess.run(
                 ["powershell", "-File", str(PROJECT_ROOT / "scripts" / "migrate.ps1")],
-                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=60
+                cwd=str(PROJECT_ROOT), capture_output=True, text=True, timeout=120,
+                env={**os.environ,
+                     "ORCA_DB_HOST": db_host, "ORCA_DB_PORT": str(db_port),
+                     "ORCA_DB_USER": db_user, "ORCA_DB_PASSWORD": db_password,
+                     "ORCA_DB_NAME": db_name, "ORCA_DB_SSLMODE": db_sslmode},
             )
             if migrate_result.returncode != 0:
                 log("ERROR", "Database", f"Migration failed: {migrate_result.stderr.strip()}")

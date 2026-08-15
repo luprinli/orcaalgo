@@ -28,13 +28,13 @@ type VolumeScalpRunner struct {
 	dailyTradeCount   int
 	currentDay        string
 
-	openingHigh    float64
-	openingLow     float64
-	rangeSet       bool
-	barsInRange    int
-	avgVolume      float64
-	volumeCount    int
-	volumeBuffer   []float64
+	openingHigh  float64
+	openingLow   float64
+	rangeSet     bool
+	barsInRange  int
+	avgVolume    float64
+	volumeCount  int
+	volumeBuffer []float64
 }
 
 func NewVolumeScalpRunner() *VolumeScalpRunner {
@@ -57,26 +57,36 @@ func NewVolumeScalpRunner() *VolumeScalpRunner {
 	}
 }
 
-func (r *VolumeScalpRunner) Name() string     { return "volume_scalp" }
-func (r *VolumeScalpRunner) Type() string     { return "scalp" }
+func (r *VolumeScalpRunner) Name() string              { return "volume_scalp" }
+func (r *VolumeScalpRunner) Type() string              { return "scalp" }
 func (r *VolumeScalpRunner) Version() (string, string) { return r.BaseRunner.Version() }
 
 func (r *VolumeScalpRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"volume_multiplier":   r.VolumeMultiplier,
-		"atr_period":          r.AtrPeriod,
+		"volume_multiplier":    r.VolumeMultiplier,
+		"atr_period":           r.AtrPeriod,
 		"take_profit_atr_mult": r.TakeProfitAtrMult,
-		"stop_loss_atr_mult":  r.StopLossAtrMult,
-		"max_trades_per_day":  float64(r.MaxTradesPerDay),
+		"stop_loss_atr_mult":   r.StopLossAtrMult,
+		"max_trades_per_day":   float64(r.MaxTradesPerDay),
 	}
 }
 
 func (r *VolumeScalpRunner) SetParams(params map[string]float64) {
-	if v, ok := params["volume_multiplier"]; ok { r.VolumeMultiplier = v }
-	if v, ok := params["atr_period"]; ok { r.AtrPeriod = v }
-	if v, ok := params["take_profit_atr_mult"]; ok { r.TakeProfitAtrMult = v }
-	if v, ok := params["stop_loss_atr_mult"]; ok { r.StopLossAtrMult = v }
-	if v, ok := params["max_trades_per_day"]; ok { r.MaxTradesPerDay = int(v) }
+	if v, ok := params["volume_multiplier"]; ok {
+		r.VolumeMultiplier = v
+	}
+	if v, ok := params["atr_period"]; ok {
+		r.AtrPeriod = v
+	}
+	if v, ok := params["take_profit_atr_mult"]; ok {
+		r.TakeProfitAtrMult = v
+	}
+	if v, ok := params["stop_loss_atr_mult"]; ok {
+		r.StopLossAtrMult = v
+	}
+	if v, ok := params["max_trades_per_day"]; ok {
+		r.MaxTradesPerDay = int(v)
+	}
 }
 
 func (r *VolumeScalpRunner) ParamDefs() []ParamDef {
@@ -180,18 +190,19 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	breakoutHigh := r.openingHigh * (1.0 + entryBuf)
 	breakoutLow := r.openingLow * (1.0 - entryBuf)
 
+	stopMult, profitMult := r.RegimeExitMults(regime)
 	qty := 1.0
 	if candle.Close.Float64() >= breakoutHigh {
-		stopPrice := candle.Close.Float64() - atr*r.StopLossAtrMult
-		profitPrice := candle.Close.Float64() + atr*r.TakeProfitAtrMult
+		stopPrice := candle.Close.Float64() - atr*r.StopLossAtrMult*stopMult
+		profitPrice := candle.Close.Float64() + atr*r.TakeProfitAtrMult*profitMult
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(stopPrice), types.PriceFromFloat(profitPrice), candle.Time)
 		r.dailyTradeCount++
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: qty}
 	}
 
 	if candle.Close.Float64() <= breakoutLow {
-		stopPrice := candle.Close.Float64() + atr*r.StopLossAtrMult
-		profitPrice := candle.Close.Float64() - atr*r.TakeProfitAtrMult
+		stopPrice := candle.Close.Float64() + atr*r.StopLossAtrMult*stopMult
+		profitPrice := candle.Close.Float64() - atr*r.TakeProfitAtrMult*profitMult
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(stopPrice), types.PriceFromFloat(profitPrice), candle.Time)
 		r.dailyTradeCount++
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: qty}

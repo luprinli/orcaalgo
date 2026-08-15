@@ -1,12 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -168,20 +171,38 @@ func (s *Server) getBacktestBenchmark(c *gin.Context) {
 		return
 	}
 
-	symbolCandles, err := s.repo.LoadCandles(c.Request.Context(), []string{"SPY", "QQQ"}, start, end)
+	// Configurable benchmark symbols (comma-separated); defaults to SPY,QQQ.
+	symbols := []string{"SPY", "QQQ"}
+	if q := c.Query("symbols"); q != "" {
+		symbols = nil
+		for _, s := range strings.Split(q, ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				symbols = append(symbols, s)
+			}
+		}
+		if len(symbols) == 0 {
+			symbols = []string{"SPY", "QQQ"}
+		}
+	}
+
+	// Source+timeframe-aware loader (stooq only) — never the legacy LoadCandles
+	// path, which merges incompatible price scales (AGENTS.md §Backtest Remediation).
+	symbolCandles, err := s.repo.LoadCandlesByTimeframeFiltered(c.Request.Context(), symbols, start, end, "1d", "stooq")
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	var spy, qqq []backtest.EquityPoint
-	if len(symbolCandles) > 0 {
-		spy = normalizeBenchmark(symbolCandles[0])
+	out := gin.H{}
+	for i, sym := range symbols {
+		key := strings.ToLower(sym)
+		if i < len(symbolCandles) {
+			out[key] = normalizeBenchmark(symbolCandles[i])
+		} else {
+			out[key] = []backtest.EquityPoint{}
+		}
 	}
-	if len(symbolCandles) > 1 {
-		qqq = normalizeBenchmark(symbolCandles[1])
-	}
-	c.JSON(200, gin.H{"spy": spy, "qqq": qqq})
+	c.JSON(200, out)
 }
 
 // normalizeBenchmark converts a candle series to a base-100 index (first close
@@ -509,6 +530,105 @@ func (s *Server) getBacktestMonthlyReturns(c *gin.Context) {
 	c.JSON(200, monthlyReturns)
 }
 
+// getBacktestStatisticalRobustness returns closed-form Sharpe SE, Deflated
+// Sharpe Ratio, and MinTRL for a backtest's daily returns. The math is computed
+// by the Python `orca backtest-stats` subprocess (HP #1: canonical sizing math
+// lives in Python, never reimplemented in Go).
+func (s *Server) getBacktestStatisticalRobustness(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "missing backtest ID"})
+		return
+	}
+	nTrials := 1
+	if t := c.Query("n_trials"); t != "" {
+		if parsed, err := strconv.Atoi(t); err == nil && parsed >= 1 {
+			nTrials = parsed
+		}
+	}
+
+	returns, err := s.collectDailyReturnValues(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+
+	stats := runBacktestStats(c.Request.Context(), returns, nTrials)
+	if stats == nil {
+		c.JSON(503, gin.H{"error": "statistical robustness unavailable (orca toolchain)"})
+		return
+	}
+	c.JSON(200, stats)
+}
+
+// collectDailyReturnValues returns the decimal daily returns for a backtest id,
+// derived from its equity curve (empty slice when no equity is recorded).
+func (s *Server) collectDailyReturnValues(ctx context.Context, id string) ([]float64, error) {
+	results, err := s.repo.GetBacktestResults(ctx, id)
+	if err != nil || len(results) == 0 {
+		return nil, errors.New("no backtest results found")
+	}
+
+	var allEquity []metrics.MetricEquityPoint
+	for _, res := range results {
+		if res.EquityCurve == nil {
+			continue
+		}
+		var rawEquity []backtest.EquityPoint
+		if err := json.Unmarshal(res.EquityCurve, &rawEquity); err != nil {
+			continue
+		}
+		for _, p := range rawEquity {
+			allEquity = append(allEquity, metrics.MetricEquityPoint{
+				Timestamp: p.Time,
+				Equity:    p.Value,
+				Balance:   p.Value,
+				Drawdown:  0,
+			})
+		}
+	}
+
+	calc := metrics.NewCalculator(0.05)
+	daily := calc.DailyReturnsFromEquity(allEquity)
+	values := make([]float64, 0, len(daily))
+	for _, d := range daily {
+		values = append(values, d.ReturnPct/100.0)
+	}
+	return values, nil
+}
+
+// runBacktestStats shells out to `orca backtest-stats`, passing the decimal
+// returns as JSON on stdin. Returns nil when the orca toolchain is unavailable,
+// so the endpoint degrades to a 503 rather than failing the hot path.
+func runBacktestStats(ctx context.Context, returns []float64, nTrials int) map[string]interface{} {
+	payload, err := json.Marshal(returns)
+	if err != nil {
+		return nil
+	}
+	args := [][]string{
+		{"orca", "backtest-stats", "--n-trials", strconv.Itoa(nTrials)},
+		{"python", "-m", "orca.cli", "backtest-stats", "--n-trials", strconv.Itoa(nTrials)},
+	}
+	for _, argv := range args {
+		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+		cmd.Stdin = bytes.NewReader(payload)
+		out, err := cmd.Output()
+		if err != nil {
+			slog.Debug("orca backtest-stats failed", "argv", argv[0], "error", err)
+			continue
+		}
+		var stats map[string]interface{}
+		if err := json.Unmarshal(bytes.TrimSpace(out), &stats); err != nil {
+			continue
+		}
+		if _, ok := stats["error"]; ok {
+			return stats
+		}
+		return stats
+	}
+	return nil
+}
+
 func (s *Server) getBacktestOptimization(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -774,7 +894,7 @@ func (s *Server) submitPipelineRun(c *gin.Context) {
 }
 
 func timePtr(t time.Time) *time.Time { return &t }
-func strPtr(s string) *string { return &s }
+func strPtr(s string) *string        { return &s }
 
 var _ = errors.New
 var _ = slog.Info

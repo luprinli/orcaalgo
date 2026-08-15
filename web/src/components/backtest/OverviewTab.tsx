@@ -8,8 +8,38 @@ interface Props {
   regimeStats: RegimeStat[]
 }
 
+interface RobustnessStats {
+  n_returns?: number
+  sharpe?: number
+  sharpe_se?: number
+  sharpe_ci_low?: number
+  sharpe_ci_high?: number
+  deflated_sharpe_ratio?: number
+  expected_max_sharpe?: number
+  min_trl?: number | null
+  n_trials?: number
+  error?: string
+}
+
+interface BenchmarkGateStats {
+  passed: boolean
+  kind: string
+  metrics?: {
+    n_periods?: number
+    beta?: number
+    alpha_annualized?: number
+    information_ratio?: number
+    tracking_error?: number
+  }
+  deflated_active_sharpe?: number
+  n_trials?: number
+  error?: string
+}
+
 export default function OverviewTab({ backtestId, regimeStats }: Props) {
   const [dist, setDist] = useState<TradeDistribution | null>(null)
+  const [robustness, setRobustness] = useState<RobustnessStats | null>(null)
+  const [benchmarkGate, setBenchmarkGate] = useState<BenchmarkGateStats | null>(null)
 
   useEffect(() => {
     let active = true
@@ -18,11 +48,51 @@ export default function OverviewTab({ backtestId, regimeStats }: Props) {
     }).catch(() => {
       if (active) setDist(null)
     })
+    backtests.robustness(backtestId).then(r => {
+      if (active) setRobustness(r)
+    }).catch(() => {
+      if (active) setRobustness(null)
+    })
+    backtests.benchmarkEval(backtestId).then(b => {
+      if (active) setBenchmarkGate(b)
+    }).catch(() => {
+      if (active) setBenchmarkGate(null)
+    })
     return () => { active = false }
   }, [backtestId])
 
   return (
     <div>
+      {benchmarkGate && !benchmarkGate.error && benchmarkGate.metrics && (
+        <div className="mb-4">
+          <h2>Benchmark Gate</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+            <MetricCard label="Passed" value={benchmarkGate.passed ? 'PASS' : 'FAIL'} format="decimal" color={benchmarkGate.passed ? 'positive' : 'negative'} />
+            <MetricCard label="Information Ratio" value={benchmarkGate.metrics.information_ratio ?? 0} format="decimal" />
+            <MetricCard label="Alpha (ann.)" value={benchmarkGate.metrics.alpha_annualized ?? 0} format="decimal" />
+            <MetricCard label="Beta" value={benchmarkGate.metrics.beta ?? 0} format="decimal" />
+            <MetricCard label="Tracking Error" value={benchmarkGate.metrics.tracking_error ?? 0} format="decimal" />
+            <MetricCard label="Deflated Active Sharpe" value={benchmarkGate.deflated_active_sharpe ?? 0} format="decimal" />
+            <MetricCard label="Kind" value={benchmarkGate.kind} format="decimal" />
+          </div>
+        </div>
+      )}
+
+      {robustness && !robustness.error && robustness.sharpe !== undefined && (
+        <div className="mb-4">
+          <h2>Statistical Robustness</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+            <MetricCard label="Sharpe (ann.)" value={robustness.sharpe} format="decimal" />
+            <MetricCard label="Sharpe SE" value={robustness.sharpe_se ?? 0} format="decimal" />
+            <MetricCard label="Sharpe 95% CI Low" value={robustness.sharpe_ci_low ?? 0} format="decimal" />
+            <MetricCard label="Sharpe 95% CI High" value={robustness.sharpe_ci_high ?? 0} format="decimal" />
+            <MetricCard label="Deflated Sharpe" value={robustness.deflated_sharpe_ratio ?? 0} format="decimal" color={robustness.deflated_sharpe_ratio && robustness.deflated_sharpe_ratio >= 0.95 ? 'positive' : 'negative'} />
+            <MetricCard label="Min Track Record" value={robustness.min_trl ?? 0} format="number" />
+            <MetricCard label="Observations" value={robustness.n_returns ?? 0} format="number" />
+          </div>
+        </div>
+      )}
+
       {dist && dist.total_trades > 0 && (
         <div className="mb-4">
           <h2>Trade Distribution</h2>

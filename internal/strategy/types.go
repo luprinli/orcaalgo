@@ -25,4 +25,9 @@ type Signal struct {
 	Quantity   float64
 	PWin       float64
 	StrategyID string
+	// StopLoss and TakeProfit let a strategy specify its own risk levels.
+	// When set (non-zero), the engine uses them instead of the generic
+	// config.StopLoss/config.TakeProfit defaults.
+	StopLoss   types.Price
+	TakeProfit types.Price
 }

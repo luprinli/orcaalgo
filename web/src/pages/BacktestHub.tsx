@@ -108,6 +108,8 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
   const [capital, setCapital] = useState('100000')
   const [dataSource, setDataSource] = useState('stooq')
   const [gateProfile, setGateProfile] = useState('default')
+  const [benchmarkKind, setBenchmarkKind] = useState('equity_index')
+  const [benchmarkSymbol, setBenchmarkSymbol] = useState('SPY')
   const [timeframes, setTimeframes] = useState<string[]>(['1d'])
   const [lightOptimize, setLightOptimize] = useState(true)
   const [favoriteSymbols, setFavoriteSymbols] = useState<string[]>(() => {
@@ -242,7 +244,20 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
 
   const sortedMatrixResults = useMemo(() => {
     const list = [...filtered]
-    const eqKey = sortField === 'return' ? 'total_return' : sortField === 'max_dd' ? 'max_drawdown' : sortField === 'trades' ? 'num_trades' : sortField === 'total_fees' ? 'total_fees' : sortField === 'slippage' ? 'avg_slippage_bps' : sortField === 'candles' ? 'candle_count' : `${sortField}_ratio` as keyof ComboResult
+    const keyMap: Record<SortField, keyof ComboResult> = {
+      sharpe: 'sharpe_ratio',
+      sortino: 'sortino_ratio',
+      max_dd: 'max_drawdown',
+      return: 'total_return',
+      win_rate: 'win_rate',
+      profit_factor: 'profit_factor',
+      trades: 'num_trades',
+      calmar: 'calmar_ratio',
+      total_fees: 'total_fees',
+      slippage: 'avg_slippage_bps',
+      candles: 'candle_count',
+    }
+    const eqKey = keyMap[sortField]
     list.sort((a, b) => { const va = (a[eqKey] as number) ?? 0; const vb = (b[eqKey] as number) ?? 0; return sortAsc ? va - vb : vb - va })
     return list
   }, [filtered, sortField, sortAsc])
@@ -256,6 +271,7 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
       const body: Record<string, unknown> = {
         strategy_ids: strategies, symbols: symbolList, start_date: start, end_date: end,
         capital: parseFloat(capital) || 100000, data_source: dataSource, gate_profile: gateProfile,
+        benchmark_kind: benchmarkKind, benchmark_symbol: benchmarkSymbol,
       }
       if (mode === 'matrix') { body.mode = 'matrix'; body.timeframes = timeframes; body.light_optimize = lightOptimize }
       if (mode === 'single' && lightOptimize) { body.light_optimize = true }
@@ -440,6 +456,35 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
               <SelectContent>{GATE_PROFILES.map(gp => <SelectItem key={gp} value={gp}>{gp}</SelectItem>)}</SelectContent>
             </Select>
           </div>
+          <div className="flex-[1.5_1.5_0%] min-w-0">
+            <Label className="text-xs">Benchmark</Label>
+            <Select value={benchmarkKind} onValueChange={(k) => {
+              setBenchmarkKind(k)
+              if (k === 'equity_index') setBenchmarkSymbol('SPY')
+              else if (k === 'growth_index') setBenchmarkSymbol('QQQ')
+              else if (k === 'risk_free') setBenchmarkSymbol('risk_free_3m')
+            }}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="equity_index">SPY (Equity)</SelectItem>
+                <SelectItem value="growth_index">QQQ (Growth)</SelectItem>
+                <SelectItem value="risk_free">Risk-Free</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {benchmarkKind !== 'risk_free' && (
+            <div className="flex-[1.5_1.5_0%] min-w-0">
+              <Label className="text-xs">Symbol</Label>
+              <input
+                className="input"
+                style={{ height: 32, fontSize: 12, padding: '2px 6px', width: '100%' }}
+                value={benchmarkSymbol}
+                onChange={(e) => setBenchmarkSymbol(e.target.value.toUpperCase())}
+                placeholder="SPY"
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

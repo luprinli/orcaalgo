@@ -114,8 +114,10 @@ func (s *Seeder) Run(ctx context.Context, force bool) error {
 func (s *Seeder) seedSymbols(ctx context.Context, symbols []SymbolSeed) error {
 	for _, sym := range symbols {
 		if _, err := s.repo.pool.Exec(ctx,
-			"INSERT INTO symbols (ticker, exchange, asset_type, tick_size, lot_size, is_active) VALUES ($1,$2,$3,$4,$5,true) ON CONFLICT (ticker, exchange) DO NOTHING",
-			sym.Ticker, sym.Exchange, sym.AssetType, sym.TickSize, sym.LotSize); err != nil { return fmt.Errorf("symbol %s: %w", sym.Ticker, err) }
+			"INSERT INTO symbols (ticker, exchange, asset_type, tick_size, lot_size, interest_rate, is_active) VALUES ($1,$2,$3,$4,$5,$6,true) ON CONFLICT (ticker, exchange) DO NOTHING",
+			sym.Ticker, sym.Exchange, sym.AssetType, sym.TickSize, sym.LotSize, sym.InterestRate); err != nil {
+			return fmt.Errorf("symbol %s: %w", sym.Ticker, err)
+		}
 	}
 	return nil
 }
@@ -124,7 +126,9 @@ func (s *Seeder) seedProviders(ctx context.Context, providers []BrokerProviderSe
 	for _, p := range providers {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO providers (name, type, driver, is_enabled, config) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (name) DO NOTHING",
-			p.Name, p.Type, p.Driver, true, mustMarshalJSON(p.Config)); err != nil { return fmt.Errorf("provider %s: %w", p.Name, err) }
+			p.Name, p.Type, p.Driver, true, mustMarshalJSON(p.Config)); err != nil {
+			return fmt.Errorf("provider %s: %w", p.Name, err)
+		}
 	}
 	return nil
 }
@@ -133,7 +137,9 @@ func (s *Seeder) seedStrategies(ctx context.Context, strategies []StrategySeed) 
 	for _, st := range strategies {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO strategies (name, type, parameters, enabled, user_id) VALUES ($1,$2,$3,$4, COALESCE((SELECT id FROM users WHERE username='admin' LIMIT 1), (SELECT id FROM users LIMIT 1))) ON CONFLICT (name) DO NOTHING",
-			st.Name, st.Type, mustMarshalJSON(st.Parameters), st.Enabled); err != nil { return fmt.Errorf("strategy %s: %w", st.Name, err) }
+			st.Name, st.Type, mustMarshalJSON(st.Parameters), st.Enabled); err != nil {
+			return fmt.Errorf("strategy %s: %w", st.Name, err)
+		}
 	}
 	return nil
 }
@@ -142,7 +148,9 @@ func (s *Seeder) seedMarketData(ctx context.Context, ticks []MarketTickSeed) err
 	for _, t := range ticks {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO market_ticks (time, symbol_id, price_raw, volume_raw, bid_price, ask_price, bid_size, ask_size) SELECT $1, COALESCE((SELECT id FROM symbols WHERE ticker=$2 LIMIT 1), 1), $3, $4, $5, $6, $7, $8 WHERE EXISTS (SELECT 1 FROM symbols WHERE ticker=$2)",
-			t.Time, t.Symbol, t.Price.Int64(), int64(t.Volume), t.BidPrice.Int64(), t.AskPrice.Int64(), int64(t.BidSize), int64(t.AskSize)); err != nil { return fmt.Errorf("tick %s: %w", t.Symbol, err) }
+			t.Time, t.Symbol, t.Price.Int64(), int64(t.Volume), t.BidPrice.Int64(), t.AskPrice.Int64(), int64(t.BidSize), int64(t.AskSize)); err != nil {
+			return fmt.Errorf("tick %s: %w", t.Symbol, err)
+		}
 	}
 	return nil
 }
@@ -151,7 +159,9 @@ func (s *Seeder) seedRegimeLogs(ctx context.Context, logs []RegimeLogSeed) error
 	for _, l := range logs {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO regime_logs (timestamp, symbol, hmm_state, confidence) VALUES ($1,$2,$3,$4)",
-			l.Time, l.Symbol, l.HMMState, l.Confidence); err != nil { return fmt.Errorf("regime %s: %w", l.Symbol, err) }
+			l.Time, l.Symbol, l.HMMState, l.Confidence); err != nil {
+			return fmt.Errorf("regime %s: %w", l.Symbol, err)
+		}
 	}
 	return nil
 }
@@ -163,7 +173,9 @@ func (s *Seeder) seedVIXLogs(ctx context.Context, logs []VIXLogSeed) error {
 	for _, l := range logs {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO vix_logs (timestamp, vix_value, vix_change) VALUES ($1,$2,$3)",
-			l.Time, int64(l.VIXValue*VIXBigintScale), int64(l.VIXChange*VIXBigintScale)); err != nil { return fmt.Errorf("vix %s: %w", l.Time.Format("2006-01-02"), err) }
+			l.Time, int64(l.VIXValue*VIXBigintScale), int64(l.VIXChange*VIXBigintScale)); err != nil {
+			return fmt.Errorf("vix %s: %w", l.Time.Format("2006-01-02"), err)
+		}
 	}
 	return nil
 }
@@ -186,7 +198,9 @@ func (s *Seeder) seedTradeHistory(ctx context.Context, trades []TradeHistorySeed
 	for _, t := range trades {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO trade_executions (strategy_id, symbol, side, quantity, price, hmm_regime, executed_at) SELECT id, $1, $2, $3, $4, $5, $6 FROM strategies WHERE name=$7 LIMIT 1",
-			t.Symbol, t.Side, t.Quantity, t.Price.Int64(), t.HMMRegime, t.Time, t.StrategyID); err != nil { return fmt.Errorf("trade %s: %w", t.Symbol, err) }
+			t.Symbol, t.Side, t.Quantity, t.Price.Int64(), t.HMMRegime, t.Time, t.StrategyID); err != nil {
+			return fmt.Errorf("trade %s: %w", t.Symbol, err)
+		}
 	}
 	return nil
 }
@@ -210,7 +224,9 @@ func (s *Seeder) seedCandles(ctx context.Context, candles []CandleSeed) error {
 				c.Time, c.Symbol, c.Timeframe, c.Open.Int64(), c.High.Int64(), c.Low.Int64(), c.Close.Int64(), int64(c.Volume))
 		}
 		br := s.repo.pool.SendBatch(ctx, batch)
-		if _, cerr := br.Exec(); cerr != nil { continue }
+		if _, cerr := br.Exec(); cerr != nil {
+			continue
+		}
 		br.Close()
 	}
 	slog.Info("seeded candles", "count", len(candles), "component", "seeder")
@@ -257,7 +273,9 @@ func (s *Seeder) seedBacktestResults(ctx context.Context, results []BacktestResu
 	for _, r := range results {
 		if _, err := s.repo.pool.Exec(ctx,
 			"INSERT INTO backtest_runs (strategy_id, symbol_set, start_date, end_date, status, sharpe_ratio, max_drawdown, total_return, win_rate, num_trades, initial_capital) SELECT id, $1, $2, $3, 'completed', $4, $5, $6, $7, $8, 100000 FROM strategies WHERE name=$9 LIMIT 1",
-			r.Symbols, r.StartDate, r.EndDate, r.SharpeRatio, r.MaxDrawdown, r.TotalReturn, r.WinRate, r.NumTrades, r.StrategyName); err != nil { return fmt.Errorf("backtest %s: %w", r.StrategyName, err) }
+			r.Symbols, r.StartDate, r.EndDate, r.SharpeRatio, r.MaxDrawdown, r.TotalReturn, r.WinRate, r.NumTrades, r.StrategyName); err != nil {
+			return fmt.Errorf("backtest %s: %w", r.StrategyName, err)
+		}
 	}
 	return nil
 }
@@ -285,7 +303,10 @@ func (s *Seeder) VerifyIntegrity(ctx context.Context) (*IntegrityReport, error) 
 		}
 		counts[t] = c
 		status := "ok"
-		if c == 0 { status = "empty"; report.Passed = false }
+		if c == 0 {
+			status = "empty"
+			report.Passed = false
+		}
 		report.Checks = append(report.Checks, IntegrityCheck{Table: t, Status: status, Count: c})
 	}
 	report.TableCounts = counts
@@ -304,8 +325,11 @@ type IntegrityCheck struct {
 	Count   int
 	Message string
 }
+
 func mustMarshalJSON(v interface{}) string {
 	b, err := json.Marshal(v)
-	if err != nil { return "{}" }
+	if err != nil {
+		return "{}"
+	}
 	return string(b)
 }

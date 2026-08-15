@@ -22,6 +22,7 @@ export const ALL_STRATEGIES: string[] = [
   'donchian_breakout',
   'keltner_macd',
   'ichimoku_cloud',
+  'vol_grid',
 ]
 
 export const STRATEGY_DISPLAY: Record<string, string> = {
@@ -42,6 +43,7 @@ export const STRATEGY_DISPLAY: Record<string, string> = {
   donchian_breakout: 'Donchian Breakout',
   keltner_macd: 'Keltner MACD',
   ichimoku_cloud: 'Ichimoku Cloud',
+  vol_grid: 'Vol-Adjusted Grid',
 }
 
 // Canonical 18-symbol prop-firm universe (mirrors configs/universe.json).
@@ -51,6 +53,20 @@ export const SYMBOL_OPTIONS = [
   'SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'IWM', 'GLD', 'TLT',
   'EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'BTC-USD', 'ETH-USD', '^_US', '^DAX',
 ]
+
+// Friendly display names for opaque/hyphenated universe tickers. Equity ETFs
+// and stocks fall back to their raw ticker, which is already human-readable.
+export const SYMBOL_DISPLAY: Record<string, string> = {
+  '^_US': 'S&P 500',
+  '^DAX': 'DAX',
+  'BTC-USD': 'Bitcoin',
+  'ETH-USD': 'Ethereum',
+  EURUSD: 'EUR/USD',
+  GBPUSD: 'GBP/USD',
+  USDJPY: 'USD/JPY',
+  AUDUSD: 'AUD/USD',
+  USDCAD: 'USD/CAD',
+}
 
 // Backtest timeframes supported by the engine (mirrors configs/universe.json
 // `timeframes`). Charting uses its own timeframe list in useCandleAggregation.

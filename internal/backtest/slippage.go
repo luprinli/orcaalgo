@@ -50,8 +50,8 @@ func CalibrateSlippageModel(model SlippageModel, observedSlippageBps float64, sa
 }
 
 type FillSimulator struct {
-	model    SlippageModel
-	rng      *rand.Rand
+	model SlippageModel
+	rng   *rand.Rand
 }
 
 // DefaultFillSeed is the fixed seed used by NewFillSimulator. Backtests are
@@ -73,13 +73,13 @@ func NewFillSimulatorWithSeed(model SlippageModel, seed int64) *FillSimulator {
 }
 
 type SimulatedFill struct {
-	OrderID       uint32
-	Symbol        string
-	FillPrice     types.Price
-	FillQuantity  float64
-	SlippageBps   float64
-	LatencyMs     float64
-	Delay         time.Duration
+	OrderID         uint32
+	Symbol          string
+	FillPrice       types.Price
+	FillQuantity    float64
+	SlippageBps     float64
+	LatencyMs       float64
+	Delay           time.Duration
 	SlippageMidBps  float64
 	SlippageLastBps float64
 }
@@ -110,7 +110,7 @@ func (s *FillSimulator) SimulateFillWithTCA(orderID uint32, symbol string, limit
 		slippageBps += randomFactor
 	}
 	if barVolume > 0 && sm.VolumeImpactFactor > 0 && quantity > 0 {
-		slippageBps += sm.VolumeImpactFactor * math.Sqrt(quantity / barVolume)
+		slippageBps += sm.VolumeImpactFactor * math.Sqrt(quantity/barVolume)
 	}
 	if slippageBps < 0 {
 		slippageBps = 0
@@ -239,19 +239,52 @@ func CommoditySlippage() SlippageModel {
 }
 
 func SlippageForSymbol(symbol string) SlippageModel {
+	s := normalizeSymbol(symbol)
 	switch {
-	case symbol == "BTCUSD" || symbol == "ETHUSD":
+	case s == "BTCUSD" || s == "ETHUSD":
 		return CryptoSlippage()
-	case symbol == "XAUUSD" || symbol == "XAGUSD" || symbol == "CL" || symbol == "USO":
+	case s == "XAUUSD" || s == "XAGUSD" || s == "CL" || s == "USO":
 		return CommoditySlippage()
-	case symbol == "EURUSD" || symbol == "GBPUSD" || symbol == "USDJPY" || symbol == "USDCHF" ||
-		symbol == "AUDUSD" || symbol == "USDCAD" || symbol == "NZDUSD":
+	case s == "EURUSD" || s == "GBPUSD" || s == "USDJPY" || s == "USDCHF" ||
+		s == "AUDUSD" || s == "USDCAD" || s == "NZDUSD":
 		return ForexSlippage()
-	case symbol == "IWM" || symbol == "TSLA" || symbol == "NVDA":
+	case s == "IWM" || s == "TSLA" || s == "NVDA":
 		return SmallCapSlippage()
-	case symbol == "GLD" || symbol == "TLT":
+	case s == "GLD" || s == "TLT":
 		return CommoditySlippage()
 	default:
 		return RealisticEquitySlippage()
 	}
+}
+
+// ApplyCalibratedCosts overrides a base SlippageModel's SpreadBps and
+// VolumeImpactFactor with data-calibrated values (from `orca calibrate-costs`
+// via the cost_calibration table). A zero/negative/non-finite coefficient is
+// treated as "uncalibrated" and leaves the base value intact, so a partially
+// identified symbol degrades gracefully to the hand-set preset (HP #9).
+func ApplyCalibratedCosts(base SlippageModel, spreadBps, volumeImpactFactor float64) SlippageModel {
+	if spreadBps > 0 && !math.IsNaN(spreadBps) && !math.IsInf(spreadBps, 0) {
+		base.SpreadBps = spreadBps
+	}
+	if volumeImpactFactor > 0 && !math.IsNaN(volumeImpactFactor) && !math.IsInf(volumeImpactFactor, 0) {
+		base.VolumeImpactFactor = volumeImpactFactor
+	}
+	return base
+}
+
+// normalizeSymbol uppercases a ticker and strips non-alphanumeric separators so
+// that hyphenated/underscored provider forms (e.g. "BTC-USD", "eth_usd") match
+// the canonical forms used in SlippageForSymbol ("BTCUSD").
+func normalizeSymbol(symbol string) string {
+	b := make([]byte, 0, len(symbol))
+	for i := 0; i < len(symbol); i++ {
+		c := symbol[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+			b = append(b, c-32)
+		case (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'):
+			b = append(b, c)
+		}
+	}
+	return string(b)
 }

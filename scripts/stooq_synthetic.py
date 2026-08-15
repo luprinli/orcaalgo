@@ -50,50 +50,55 @@ def _generate_intraday_path(
     rng: np.random.Generator,
     open_price: float,
     close_price: float,
-    sigma_daily: float,
+    sigma_bar: float,
+    mu_bar: float = 0.0,
+    steps_per_bar: int = 60,
     n_steps: int = 390,
-    blend_start_pct: float = 0.5,
-    blend_max_weight: float = 0.5,
 ) -> np.ndarray:
     """Generate an unconstrained intraday price path.
 
-    Uses pure Geometric Brownian Motion with per-symbol σ calibrated from
-    real stooq data. The path is free to break through daily High/Low —
-    no artificial clipping. A soft blend toward the actual daily Close is
-    applied in the final portion of the session to preserve daily OHLC
-    consistency without suppressing breakout scenarios.
+    Uses Geometric Brownian Motion with per-symbol σ and μ calibrated from
+    real stooq returns, then conditions the path to end at the actual daily
+    Close via a Brownian bridge. The path is free to break through daily
+    High/Low — no artificial clipping.
+
+    The bridge (B2 fix) rescales the WHOLE path with a constant per-step
+    log-drift so it ends at Close, preserving the random shape (breakouts stay
+    breakouts). This replaces the previous soft-close blend, whose last-half
+    linear pull toward Close injected a deterministic mean-reversion pattern
+    that favored mean-reversion and suppressed breakouts.
 
     Args:
         rng: NumPy random generator (seeded for reproducibility).
         open_price: Daily Open price.
-        close_price: Daily Close price (soft anchor at session end).
-        sigma_daily: Per-symbol daily volatility from stooq calibration.
+        close_price: Daily Close price (bridge endpoint).
+        sigma_bar: Per-bar volatility from stooq calibration (e.g. per-1h σ).
+        mu_bar: Per-bar drift from stooq calibration (e.g. per-1h mean return).
+        steps_per_bar: Number of 1-minute steps per target bar (60 for 1h, 5 for 5m).
         n_steps: Number of intraday steps (default 390 for 1-minute).
-        blend_start_pct: Fraction of session at which Close blend begins.
-        blend_max_weight: Maximum blend weight at session close.
 
     Returns:
         Array of n_steps prices representing the intraday path.
     """
-    dt = 1.0 / n_steps
+    # Per-step (1-minute) vol and drift so that a bar of `steps_per_bar`
+    # minutes has exactly sigma_bar volatility and ~mu_bar drift. This fixes
+    # the previous units mismatch (B11) where per-bar sigma was applied as if
+    # it were daily sigma (understating intraday vol ~2.5x for 1h, ~8.8x for
+    # 5m), and adds the calibrated drift (B1) so trend-following sees trend.
+    sigma_step = sigma_bar / np.sqrt(steps_per_bar)
+    mu_step = mu_bar / steps_per_bar
     shocks = rng.normal(0, 1, n_steps)
-    # Scale to produce daily volatility = sigma_daily
-    returns = sigma_daily * np.sqrt(dt) * shocks
+    log_returns = (mu_step - 0.5 * sigma_step**2) + sigma_step * shocks
 
     # Pure GBM — unconstrained, free to break through any level
-    path = open_price * np.exp(np.cumsum(returns))
+    path = open_price * np.exp(np.cumsum(log_returns))
 
-    # Soft blend toward Close in the final portion of the session.
-    # The first (blend_start_pct * 100)% of the session is pure GBM.
-    # The remainder blends linearly from 0 to blend_max_weight toward Close.
-    mid = max(int(n_steps * blend_start_pct), 1)
-    tail_len = n_steps - mid
-    if tail_len > 0 and close_price > 0:
-        blend = np.concatenate([np.zeros(mid), np.linspace(0, blend_max_weight, tail_len)])
-        # Target: linear drift from mid-session price to actual Close
-        target_tail = path[mid] + (close_price - path[mid]) * np.linspace(0, 1, tail_len)
-        target_full = np.concatenate([path[:mid], target_tail])
-        path = path * (1.0 - blend) + target_full * blend
+    # Brownian-bridge conditioning (B2): rescale the whole path so it ends at
+    # Close, preserving the random shape with a constant per-step log-drift
+    # (no last-half mean-reversion pull).
+    if close_price > 0 and path[-1] > 0:
+        t = np.linspace(0.0, 1.0, n_steps)
+        path = path * np.power(close_price / path[-1], t)
 
     # Floor at near-zero to prevent negative prices in extreme σ scenarios
     path = np.maximum(path, open_price * 0.01)
@@ -116,7 +121,11 @@ def get_db_url() -> str:
 
 def compute_generation_id(symbols: list[str] | None) -> str:
     """Deterministic generation ID for this synthetic gap-fill (no wall-clock term)."""
-    raw = json.dumps({"symbols": sorted(symbols) if symbols else None, "source": "stooq-calibrated"}, sort_keys=True)
+    raw = json.dumps({
+        "symbols": sorted(symbols) if symbols else None,
+        "source": "stooq-calibrated",
+        "algo": "gbm-bridge-v2",  # B1 drift + B11 sigma-units + B2 Brownian bridge
+    }, sort_keys=True)
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
@@ -213,9 +222,9 @@ def calibrate_all_symbols(conn: Any) -> dict[int, dict[str, Any]]:
     ticker_map = {r[0]: r[1] for r in cur.fetchall()}
 
     for sym_id in set(list(sym_ret_cc_1h.keys()) + list(sym_ret_cc_5m.keys())):
-        # Close-to-Close vol
-        sigma_cc_1h, _, _ = _compute_ewma_vol(np.array(sym_ret_cc_1h.get(sym_id, [])))
-        sigma_cc_5m, _, _ = _compute_ewma_vol(np.array(sym_ret_cc_5m.get(sym_id, [])))
+        # Close-to-Close vol + drift
+        sigma_cc_1h, mu_1h, _ = _compute_ewma_vol(np.array(sym_ret_cc_1h.get(sym_id, [])))
+        sigma_cc_5m, mu_5m, _ = _compute_ewma_vol(np.array(sym_ret_cc_5m.get(sym_id, [])))
 
         # H-L range vol (converted to daily equivalent)
         hl_1h_arr = np.array(sym_ret_hl_1h.get(sym_id, []))
@@ -231,10 +240,11 @@ def calibrate_all_symbols(conn: Any) -> dict[int, dict[str, Any]]:
         calib[sym_id] = {
             "ticker": ticker,
             "sigma_1h": sigma_1h, "sigma_5m": sigma_5m,
+            "mu_1h": mu_1h, "mu_5m": mu_5m,
             "n_1h": len(sym_ret_cc_1h.get(sym_id, [])),
             "n_5m": len(sym_ret_cc_5m.get(sym_id, [])),
         }
-        print(f"  {ticker:<8} σ_1h={sigma_1h:.4f} σ_5m={sigma_5m:.4f}  "
+        print(f"  {ticker:<8} σ_1h={sigma_1h:.4f} σ_5m={sigma_5m:.4f} μ_1h={mu_1h:.6f} μ_5m={mu_5m:.6f}  "
               f"n_1h={calib[sym_id]['n_1h']} n_5m={calib[sym_id]['n_5m']}")
 
     return calib
@@ -273,9 +283,18 @@ def generate_for_symbol(
 ) -> dict[str, int]:
     """Generate synthetic intraday bars for one symbol's gap periods."""
     cur = conn.cursor()
-    rng = np.random.default_rng(42)
+    # Per-symbol deterministic seed (B3): a shared seed 42 made every symbol's
+    # synthetic shock sequence identical (scaled only by per-symbol sigma),
+    # injecting spurious cross-symbol correlation into pairs/cross-sectional
+    # strategies. Deriving the seed from sym_id + generation_id keeps runs
+    # reproducible while de-correlating symbols.
+    rng = np.random.default_rng(
+        int(hashlib.sha256(f"{sym_id}:{generation_id}".encode()).hexdigest()[:8], 16)
+    )
     sigma_h = calib["sigma_1h"]
     sigma_m = calib["sigma_5m"]
+    mu_h = calib["mu_1h"]
+    mu_m = calib["mu_5m"]
     stats: dict[str, int] = {}
 
     # Read 1d bars from start to tier2_end for this symbol (stooq daily when
@@ -293,6 +312,20 @@ def generate_for_symbol(
     if not daily_bars:
         return stats
 
+    # Deduplicate by calendar date. A prior stooq_seed run left duplicate 1d
+    # bars per date (two rows with different timestamps for the same session),
+    # which would otherwise generate duplicate intraday timestamps and violate
+    # the (symbol_id, timeframe, time, source) unique index on candles.
+    seen_dates: set[Any] = set()
+    deduped: list[tuple] = []
+    for bar in daily_bars:
+        d = bar[0].date()
+        if d in seen_dates:
+            continue
+        seen_dates.add(d)
+        deduped.append(bar)
+    daily_bars = deduped
+
     # Tier 1 (1H): calibrate from 1H returns, fill to tier1_end
     all_rows_1h = []
     for bar_time, o_r, h_r, l_r, c_r, vol in daily_bars:
@@ -301,7 +334,7 @@ def generate_for_symbol(
         o = o_r / PRICE_SCALE
         c = c_r / PRICE_SCALE
 
-        path = _generate_intraday_path(rng, o, c, sigma_h)
+        path = _generate_intraday_path(rng, o, c, sigma_h, mu_h, 60)
 
         ts_base = bar_time.replace(hour=13, minute=30, second=0, microsecond=0)
         for i in range(7):
@@ -326,7 +359,7 @@ def generate_for_symbol(
             o = o_r / PRICE_SCALE
             c = c_r / PRICE_SCALE
 
-            path = _generate_intraday_path(rng, o, c, sigma_m)
+            path = _generate_intraday_path(rng, o, c, sigma_m, mu_m, 5)
 
             ts_base = bar_time.replace(hour=13, minute=30, second=0, microsecond=0)
             for i in range(bpd):
@@ -440,6 +473,8 @@ def _write_calibration_sidecar(
                 "ticker": v["ticker"],
                 "sigma_1h": v["sigma_1h"],
                 "sigma_5m": v["sigma_5m"],
+                "mu_1h": v["mu_1h"],
+                "mu_5m": v["mu_5m"],
                 "n_1h": v["n_1h"],
                 "n_5m": v["n_5m"],
             }

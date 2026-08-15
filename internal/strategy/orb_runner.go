@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"math"
+	"time"
 
 	"github.com/lee-econ/orca-core/internal/types"
 )
@@ -20,6 +21,8 @@ type OrbRunner struct {
 	openingLow       float64
 	rangeSet         bool
 	barsInRange      int
+	skipDay          bool
+	lastDay          time.Time
 }
 
 func NewOrbRunner() *OrbRunner {
@@ -38,14 +41,31 @@ func NewOrbRunner() *OrbRunner {
 
 func (r *OrbRunner) Name() string { return "opening_range_breakout" }
 func (r *OrbRunner) Type() string { return "breakout" }
-func (r *OrbRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *OrbRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *OrbRunner) Reset() {
 	r.BaseRunner.Reset()
+	r.resetOpeningRange()
+	r.lastDay = time.Time{}
+}
+
+// resetOpeningRange clears the accumulated opening-range state so a fresh
+// range can form for the new day.
+func (r *OrbRunner) resetOpeningRange() {
 	r.openingHigh = 0
 	r.openingLow = math.MaxFloat64
 	r.rangeSet = false
 	r.barsInRange = 0
+	r.skipDay = false
+}
+
+// sameDay reports whether two timestamps fall on the same UTC calendar day.
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.UTC().Date()
+	by, bm, bd := b.UTC().Date()
+	return ay == by && am == bm && ad == bd
 }
 
 func (r *OrbRunner) Params() map[string]float64 {
@@ -91,6 +111,30 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
+	// Reset the opening range at the start of each new trading day. Without
+	// this, the range formed over the first few bars of the entire backtest
+	// never resets, producing a stale multi-month range and the sub-1% win
+	// rates observed in the matrix.
+	if !r.lastDay.IsZero() && !sameDay(r.lastDay, candle.Time) {
+		// End-of-day exit: force-close any position carried overnight at the
+		// new day's first bar. The prior implementation keyed this off UTC
+		// minute-of-day vs CloseExitMinutes (a session-relative value), which
+		// fired immediately on every intraday bar and turned every ORB entry
+		// into a one-bar exit (~2-7% win rate).
+		if r.PositionOpen {
+			exitSide := "SELL"
+			if r.CurrentSide == "SELL" {
+				exitSide = "BUY"
+			}
+			r.ClosePosition()
+			r.resetOpeningRange()
+			r.lastDay = candle.Time
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+		}
+		r.resetOpeningRange()
+	}
+	r.lastDay = candle.Time
+
 	if !r.rangeSet {
 		r.barsInRange++
 		if candle.High.Float64() > r.openingHigh {
@@ -104,14 +148,18 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 			// Minimum volatility requirement: reject if opening range is too narrow.
 			rangePct := (r.openingHigh - r.openingLow) / candle.Close.Float64() * 100.0
 			if r.MinRangePct > 0 && rangePct < r.MinRangePct {
+				r.skipDay = true
 				return nil
 			}
 		}
 		return nil
 	}
 
+	if r.skipDay {
+		return nil
+	}
+
 	r.PushPriceOnly(candle.Close)
-	minutesInDay := candle.Time.Hour()*60 + candle.Time.Minute()
 	sc := StopLossChecker{}
 	tc := TakeProfitChecker{}
 
@@ -120,19 +168,9 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if r.CurrentSide == "BUY" {
 			if tc.IsTakeProfitHit(candle.Close, r.TakeProfit, "BUY") || sc.IsStopLossHit(candle.Close, r.StopLoss, "BUY") {
 				exitSide = "SELL"
-			} else if candle.Close.Float64() < r.openingHigh && candle.Low.Float64() < r.openingHigh {
-				exitSide = "SELL"
 			}
 		} else {
 			if tc.IsTakeProfitHit(candle.Close, r.TakeProfit, "SELL") || sc.IsStopLossHit(candle.Close, r.StopLoss, "SELL") {
-				exitSide = "BUY"
-			} else if candle.Close.Float64() > r.openingLow && candle.High.Float64() > r.openingLow {
-				exitSide = "BUY"
-			}
-		}
-		if float64(minutesInDay) >= r.CloseExitMinutes {
-			exitSide = "SELL"
-			if r.CurrentSide == "SELL" {
 				exitSide = "BUY"
 			}
 		}
@@ -150,19 +188,24 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	bufferPct := r.EntryBufferPct / 100.0
 	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
-	stopDist := atr * r.AtrMultiplier
+	stopMult, profitMult := r.RegimeExitMults(regime)
+	stopDist := atr * r.AtrMultiplier * stopMult
 	if stopDist < rangeHeight/2 {
 		stopDist = rangeHeight / 2
 	}
-	profitDist := rangeHeight * r.TargetMultiplier
+	// Target is relative to the stop distance (per the ParamDef: "risk:reward
+	// target multiplier relative to stop distance"). Applying it to rangeHeight
+	// produced a 4:1 R:R (target = 2x range, stop = range/2); applying it to
+	// stopDist yields the intended 2:1 R:R.
+	profitDist := stopDist * r.TargetMultiplier * profitMult
 
 	if candle.Close.Float64() >= r.openingHigh*(1.0+bufferPct) {
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-stopDist), types.PriceFromFloat(candle.Close.Float64()+profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() - stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() + profitDist)}
 	}
 	if candle.Close.Float64() <= r.openingLow*(1.0-bufferPct) {
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+stopDist), types.PriceFromFloat(candle.Close.Float64()-profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() + stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() - profitDist)}
 	}
 
 	return nil

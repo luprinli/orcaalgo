@@ -65,6 +65,7 @@ type BacktestResultRecord struct {
 	StrategyHash   string          `json:"strategy_hash,omitempty"`
 	Parameters     json.RawMessage `json:"parameters,omitempty"`
 	Metrics        json.RawMessage `json:"metrics"`
+	SignalFunnel   json.RawMessage `json:"signal_funnel,omitempty"`
 	EquityCurve    json.RawMessage `json:"equity_curve,omitempty"`
 	Trades         json.RawMessage `json:"trades,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
@@ -126,14 +127,20 @@ func (r *Repository) GetBacktestRun(ctx context.Context, id string) (*BacktestRu
 	br.Symbols = pgArrayToStrings(syms)
 	br.StartDate = sd
 	br.EndDate = ed
-	if config != nil { br.Config = config }
-	if results != nil { br.ResultsJSON = results }
+	if config != nil {
+		br.Config = config
+	}
+	if results != nil {
+		br.ResultsJSON = results
+	}
 	br.ErrorMessage = errMsg
 	return br, nil
 }
 
 func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType string) ([]*BacktestRunRecord, error) {
-	if limit <= 0 { limit = 50 }
+	if limit <= 0 {
+		limit = 50
+	}
 	query := `SELECT id, strategy_id, run_type, status, strategy_ids::text, symbols::text, start_date, end_date, initial_capital, coalesce(config::text,'{}')::jsonb, sharpe_ratio, sortino_ratio, max_drawdown, max_drawdown_duration, total_return, win_rate, profit_factor, avg_trade, avg_win, avg_loss, num_trades, num_wins, num_losses, gate_passed, results_json, error_message, timeframe, created_at, updated_at, completed_at FROM backtest_runs`
 	args := []interface{}{limit}
 	if runType != "" {
@@ -143,7 +150,9 @@ func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType st
 		query += ` ORDER BY created_at DESC LIMIT $1`
 	}
 	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var runs []*BacktestRunRecord
@@ -158,9 +167,14 @@ func (r *Repository) ListBacktestRuns(ctx context.Context, limit int, runType st
 		}
 		br.StrategyIDs = pgArrayToStrings(sIDs)
 		br.Symbols = pgArrayToStrings(syms)
-		br.StartDate = sd; br.EndDate = ed
-		if config != nil { br.Config = config }
-		if results != nil { br.ResultsJSON = results }
+		br.StartDate = sd
+		br.EndDate = ed
+		if config != nil {
+			br.Config = config
+		}
+		if results != nil {
+			br.ResultsJSON = results
+		}
 		br.ErrorMessage = errMsg
 		runs = append(runs, br)
 	}
@@ -174,9 +188,9 @@ func (r *Repository) DeleteBacktestRun(ctx context.Context, id string) error {
 
 func (r *Repository) InsertBacktestResult(ctx context.Context, btr *BacktestResultRecord) error {
 	_, err := r.pool.Exec(ctx,
-		`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'dev'), COALESCE($10, 1), COALESCE($11, 1), now())`,
-		btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.EquityCurve, btr.Trades,
+		`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, signal_funnel, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10, ''), 'dev'), COALESCE($11, 1), COALESCE($12, 1), now())`,
+		btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.SignalFunnel, btr.EquityCurve, btr.Trades,
 		btr.EngineVersion, btr.RetentionClass, btr.SchemaVersion,
 	)
 	return err
@@ -184,15 +198,17 @@ func (r *Repository) InsertBacktestResult(ctx context.Context, btr *BacktestResu
 
 func (r *Repository) GetBacktestResults(ctx context.Context, runID string) ([]*BacktestResultRecord, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades, created_at
+		`SELECT id, run_id, strategy_id, result_type, trial_index, parameters, metrics, signal_funnel, equity_curve, trades, created_at
 		 FROM backtest_results WHERE run_id=$1 ORDER BY trial_index`, runID)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer rows.Close()
 
 	var results []*BacktestResultRecord
 	for rows.Next() {
 		rec := &BacktestResultRecord{}
-		if err := rows.Scan(&rec.ID, &rec.RunID, &rec.StrategyID, &rec.ResultType, &rec.TrialIndex, &rec.Parameters, &rec.Metrics, &rec.EquityCurve, &rec.Trades, &rec.CreatedAt); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.RunID, &rec.StrategyID, &rec.ResultType, &rec.TrialIndex, &rec.Parameters, &rec.Metrics, &rec.SignalFunnel, &rec.EquityCurve, &rec.Trades, &rec.CreatedAt); err != nil {
 			return nil, err
 		}
 		results = append(results, rec)
@@ -201,7 +217,9 @@ func (r *Repository) GetBacktestResults(ctx context.Context, runID string) ([]*B
 }
 
 func cnd(runType string) string {
-	if runType != "" { return " WHERE run_type='" + runType + "'" }
+	if runType != "" {
+		return " WHERE run_type='" + runType + "'"
+	}
 	return ""
 }
 
@@ -251,9 +269,9 @@ func (r *Repository) InsertBacktestResultsBatch(ctx context.Context, results []B
 	for i := range results {
 		btr := &results[i]
 		batch.Queue(
-			`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE(NULLIF($9, ''), 'dev'), COALESCE($10, 1), COALESCE($11, 1), now())`,
-			btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.EquityCurve, btr.Trades,
+			`INSERT INTO backtest_results (run_id, strategy_id, result_type, trial_index, parameters, metrics, signal_funnel, equity_curve, trades, engine_version, retention_class, schema_version, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10, ''), 'dev'), COALESCE($11, 1), COALESCE($12, 1), now())`,
+			btr.RunID, btr.StrategyID, btr.ResultType, btr.TrialIndex, btr.Parameters, btr.Metrics, btr.SignalFunnel, btr.EquityCurve, btr.Trades,
 			btr.EngineVersion, btr.RetentionClass, btr.SchemaVersion,
 		)
 	}

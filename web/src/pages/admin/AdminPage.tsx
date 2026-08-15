@@ -44,6 +44,8 @@ export default function AdminPage() {
   const [jobs, setJobs] = useState<{ name: string; schedule: string; last_run?: string; last_error?: string }[]>([])
   const [corpActions, setCorpActions] = useState<{ ticker: string; action_date: string; split_ratio: number; cash_dividend: number }[]>([])
   const [corpForm, setCorpForm] = useState({ symbol: '', action_date: '', split_ratio: '1.0', cash_dividend: '0' })
+  const [costCalibration, setCostCalibration] = useState<{ ticker: string; timeframe: string; spread_bps: number | null; roll_spread_bps: number | null; impact_eta: number | null; adverse_select_bps: number | null; estimator: string; calibrated_at: string }[]>([])
+  const [benchmarkEvals, setBenchmarkEvals] = useState<{ id: number; strategy_id: string; benchmark_kind: string; benchmark_symbols: string; information_ratio: number | null; alpha_annualized: number | null; beta: number | null; deflated_active_sharpe: number | null; n_trials: number | null; passed: boolean; evaluated_at: string }[]>([])
   const [modelList, setModelList] = useState<{ model_hash: string; model_type: string; model_name: string; brier_score: number; roc_auc: number; created_at: string }[]>([])
 
   const fetchHealth = useCallback(async () => {
@@ -154,6 +156,8 @@ export default function AdminPage() {
 		alerts: 'Alerts',
 		jobs: 'Jobs',
 		corporate: 'Corporate Actions',
+		costs: 'Cost Calibration',
+		benchmarkEvals: 'Benchmark Evals',
 	}
 
   return (
@@ -164,7 +168,7 @@ export default function AdminPage() {
 
       <Tabs value={tab} onValueChange={(v) => { setTab(v as typeof tab); setMsg('') }} className="w-full">
         <TabsList className="mb-4 flex-wrap">
-          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate', 'infrastructure', 'alerts', 'jobs', 'corporate'] as const).map(mt => (
+          {(['health', 'users', 'audit', 'errors', 'email', 'seed', 'models', 'reconciliation', 'dataValidate', 'infrastructure', 'alerts', 'jobs', 'corporate', 'costs', 'benchmarkEvals'] as const).map(mt => (
             <TabsTrigger key={mt} value={mt}>{tabLabels[mt]}</TabsTrigger>
           ))}
         </TabsList>
@@ -505,6 +509,70 @@ export default function AdminPage() {
                     <TableCell>{a.action_date?.slice(0, 10)}</TableCell>
                     <TableCell className="tabular-nums">{a.split_ratio}</TableCell>
                     <TableCell className="tabular-nums">{a.cash_dividend}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="costs">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Cost Calibration</CardTitle>
+            <Button variant="outline" onClick={async () => { try { const r = await admin.costCalibration(); setCostCalibration(r.cost_calibration ?? []) } catch (e) { setMsg(String(e)) } }}>Refresh</Button>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">Per-symbol spread and impact coefficients produced by <code>orca calibrate-costs</code>, seeding the backtest slippage model.</p>
+            {costCalibration.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No cost calibration recorded. Run <code>orca calibrate-costs</code>.</p>
+            ) : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Ticker</TableHead><TableHead>Timeframe</TableHead><TableHead>Spread (bps)</TableHead><TableHead>Roll Spread (bps)</TableHead><TableHead>Impact η</TableHead><TableHead>Adverse Sel. (bps)</TableHead><TableHead>Estimator</TableHead><TableHead>Calibrated At</TableHead></TableRow></TableHeader>
+                <TableBody>{costCalibration.map((c, i) => (
+                  <TableRow key={i}>
+                    <TableCell>{c.ticker}</TableCell>
+                    <TableCell>{c.timeframe}</TableCell>
+                    <TableCell className="tabular-nums">{c.spread_bps?.toFixed(3) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{c.roll_spread_bps?.toFixed(3) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{c.impact_eta?.toFixed(4) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{c.adverse_select_bps?.toFixed(3) ?? '—'}</TableCell>
+                    <TableCell>{c.estimator}</TableCell>
+                    <TableCell>{c.calibrated_at ? new Date(c.calibrated_at).toLocaleString() : ''}</TableCell>
+                  </TableRow>
+                ))}</TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="benchmarkEvals">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Benchmark Evals</CardTitle>
+            <Button variant="outline" onClick={async () => { try { const r = await admin.benchmarkEvals(); setBenchmarkEvals(r.benchmark_evals ?? []) } catch (e) { setMsg(String(e)) } }}>Refresh</Button>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-4">Market-based benchmark filter verdicts (from <code>orca benchmark-filter</code> via the promotion gate).</p>
+            {benchmarkEvals.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No benchmark evaluations recorded.</p>
+            ) : (
+              <Table>
+                <TableHeader><TableRow><TableHead>Strategy</TableHead><TableHead>Kind</TableHead><TableHead>Symbols</TableHead><TableHead>IR</TableHead><TableHead>Alpha (ann.)</TableHead><TableHead>Beta</TableHead><TableHead>Deflated AS</TableHead><TableHead>Trials</TableHead><TableHead>Passed</TableHead><TableHead>Evaluated At</TableHead></TableRow></TableHeader>
+                <TableBody>{benchmarkEvals.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell>{e.strategy_id}</TableCell>
+                    <TableCell>{e.benchmark_kind}</TableCell>
+                    <TableCell>{e.benchmark_symbols}</TableCell>
+                    <TableCell className="tabular-nums">{e.information_ratio?.toFixed(3) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{e.alpha_annualized?.toFixed(4) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{e.beta?.toFixed(3) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{e.deflated_active_sharpe?.toFixed(4) ?? '—'}</TableCell>
+                    <TableCell className="tabular-nums">{e.n_trials ?? '—'}</TableCell>
+                    <TableCell style={{ color: e.passed ? 'var(--trading-success)' : 'var(--trading-danger)' }}>{e.passed ? 'PASS' : 'FAIL'}</TableCell>
+                    <TableCell>{e.evaluated_at ? new Date(e.evaluated_at).toLocaleString() : ''}</TableCell>
                   </TableRow>
                 ))}</TableBody>
               </Table>

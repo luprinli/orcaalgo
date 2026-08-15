@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"runtime"
 	"sort"
 	"sync"
 	"time"
@@ -55,11 +54,74 @@ func cartesianProduct(strategies, symbols, timeframes []string) []batchTuple {
 	for _, s := range strategies {
 		for _, sym := range symbols {
 			for _, tf := range timeframes {
+				if !strategyTimeframeAllowed(s, tf) {
+					continue
+				}
 				combos = append(combos, batchTuple{Strategy: s, Symbol: sym, Timeframe: tf})
 			}
 		}
 	}
 	return combos
+}
+
+// intradayStrategyTimeframes is the set of timeframes a session/range/VWAP-based
+// strategy may run on (up to 1h). Such strategies are meaningless on 4h/daily
+// bars — a 15-minute ORB on a daily bar produced the spurious "best" rows that
+// passed the visual Sharpe test but breached the drawdown gate.
+var intradayStrategyTimeframes = map[string]bool{
+	"5m": true, "15m": true, "30m": true, "1h": true,
+}
+
+// dailyStrategyTimeframes is the set of timeframes a swing/daily strategy may
+// run on (1h and longer). These strategies are not meaningful on sub-hourly
+// bars where their lookbacks degrade into noise.
+var dailyStrategyTimeframes = map[string]bool{
+	"1h": true, "4h": true, "1d": true,
+}
+
+// intradayOnlyStrategies are restricted to intradayStrategyTimeframes.
+var intradayOnlyStrategies = map[string]bool{
+	"opening_range_breakout": true,
+	"orb_15m":                true,
+	"session_scalp":          true,
+	"volume_scalp":           true,
+	"intraday_mr":            true,
+	"vwap_mr":                true,
+	"session_momentum":       true,
+}
+
+// dailyOnlyStrategies are restricted to dailyStrategyTimeframes.
+var dailyOnlyStrategies = map[string]bool{
+	"trend_following":       true,
+	"ma_crossover":          true,
+	"donchian_breakout":     true,
+	"ichimoku_cloud":        true,
+	"keltner_macd":          true,
+	"dragon_trend":          true,
+	"volatility_harvesting": true,
+	"vix_futures_carry":     true,
+	"pairs_trading":         true,
+	"momentum_12_1":         true,
+	"fx_carry":              true,
+}
+
+// strategyTimeframeAllowed reports whether a strategy is permitted to run on
+// the given timeframe. Unlisted strategies (e.g. grid, rsi2_reversion) are
+// timeframe-agnostic and allowed on all timeframes.
+func strategyTimeframeAllowed(strategyID, timeframe string) bool {
+	if intradayOnlyStrategies[strategyID] {
+		return intradayStrategyTimeframes[timeframe]
+	}
+	if dailyOnlyStrategies[strategyID] {
+		return dailyStrategyTimeframes[timeframe]
+	}
+	return true
+}
+
+// StrategyTimeframeAllowed is the exported wrapper so the matrix-runner CLI
+// applies the same timeframe restrictions as the API matrix endpoint.
+func StrategyTimeframeAllowed(strategyID, timeframe string) bool {
+	return strategyTimeframeAllowed(strategyID, timeframe)
 }
 
 func CartesianProduct(strategies, symbols, timeframes []string) []BatchTuple {
@@ -81,10 +143,7 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 	}
 	enginePool := config.EnginePool
 	if enginePool <= 0 {
-		enginePool = runtime.NumCPU()
-		if enginePool > 8 {
-			enginePool = 8
-		}
+		enginePool = MatrixWorkers(DefaultDBPoolMax)
 	}
 
 	results := make([]ComboResult, 0, len(config.Params))
@@ -111,16 +170,16 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 				g.Go(func() error {
 					defer sem.Release(1)
 					btConfig := BacktestConfig{
-						StrategyID:     config.StrategyID,
-						Symbols:        []string{sym},
-						StartDate:      config.StartDate,
-						EndDate:        config.EndDate,
-						InitialCapital: config.InitialCapital,
-						Timeframe:      config.Timeframe,
-						StrategyParams: params,
+						StrategyID:      config.StrategyID,
+						Symbols:         []string{sym},
+						StartDate:       config.StartDate,
+						EndDate:         config.EndDate,
+						InitialCapital:  config.InitialCapital,
+						Timeframe:       config.Timeframe,
+						StrategyParams:  params,
 						PropFirmEnabled: config.PropFirmEnabled,
-						GateProfile:    config.GateProfile,
-						FixedSeed:      config.FixedSeed,
+						GateProfile:     config.GateProfile,
+						FixedSeed:       config.FixedSeed,
 					}
 					engine := NewEngineWithFixedSeed(db, config.FixedSeed)
 					result, err := engine.Run(ctx, btConfig)
@@ -136,45 +195,67 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 						return nil
 					}
 					chunkResults[i] = ComboResult{
-						Symbol:             sym,
-						StrategyID:         config.StrategyID,
-						Timeframe:          config.Timeframe,
-						SharpeRatio:        result.SharpeRatio,
-						SortinoRatio:       result.SortinoRatio,
-						MaxDrawdown:        result.MaxDrawdown,
-						MaxDrawdownDur:     result.MaxDrawdownDuration,
-						TotalReturn:        result.TotalReturnPct,
-						WinRate:            result.WinRate,
-						ProfitFactor:       result.ProfitFactor,
-						AvgTrade:           result.AvgTrade,
-						AvgWin:             result.AvgWin,
-						AvgLoss:            result.AvgLoss,
-						NumTrades:          result.NumTrades,
-						NumWins:            result.NumWins,
-						NumLosses:          result.NumLosses,
-						AvgMAE:             result.AvgMAE,
-						AvgMFE:             result.AvgMFE,
-						Warnings:           result.Warnings,
-						AdverseSelectRate:  result.AdverseSelectionRate,
-						StrategyParams:     result.StrategyParams,
-						EquityCurve:        result.EquityCurve,
-						Trades:             result.Trades,
-						MtmSharpeRatio:     result.MtmSharpeRatio,
-						MtmMaxDrawdown:     result.MtmMaxDrawdown,
-						MLFeatureEnabled:   result.MLFeatureEnabled,
-						TotalFees:          result.TotalFees,
-						AvgSlippageBps:     result.AvgSlippageBps,
-						CalmarRatio:        result.CalmarRatio,
-						CandleCount:        result.CandleCount,
-						GrossReturnPct:     grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
-						EngineVersion:      result.EngineVersion,
+						Symbol:              sym,
+						StrategyID:          config.StrategyID,
+						Timeframe:           config.Timeframe,
+						SharpeRatio:         result.SharpeRatio,
+						SortinoRatio:        result.SortinoRatio,
+						MaxDrawdown:         result.MaxDrawdown,
+						MaxDrawdownDur:      result.MaxDrawdownDuration,
+						TotalReturn:         result.TotalReturnPct,
+						WinRate:             result.WinRate,
+						ProfitFactor:        result.ProfitFactor,
+						AvgTrade:            result.AvgTrade,
+						AvgWin:              result.AvgWin,
+						AvgLoss:             result.AvgLoss,
+						NumTrades:           result.NumTrades,
+						NumWins:             result.NumWins,
+						NumLosses:           result.NumLosses,
+						AvgMAE:              result.AvgMAE,
+						AvgMFE:              result.AvgMFE,
+						Warnings:            result.Warnings,
+						AdverseSelectRate:   result.AdverseSelectionRate,
+						StrategyParams:      result.StrategyParams,
+						EquityCurve:         result.EquityCurve,
+						Trades:              result.Trades,
+						MtmSharpeRatio:      result.MtmSharpeRatio,
+						MtmMaxDrawdown:      result.MtmMaxDrawdown,
+						MLFeatureEnabled:    result.MLFeatureEnabled,
+						TotalFees:           result.TotalFees,
+						AvgSlippageBps:      result.AvgSlippageBps,
+						CalmarRatio:         result.CalmarRatio,
+						CandleCount:         result.CandleCount,
+						GrossReturnPct:      grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
+						EngineVersion:       result.EngineVersion,
+						FirstCandleTime:     result.FirstCandleTime,
+						LastCandleTime:      result.LastCandleTime,
+						DataGenerationID:    result.DataGenerationID,
+						DeclaredBarsPerDay:  result.DeclaredBarsPerDay,
+						EffectiveBarsPerDay: result.EffectiveBarsPerDay,
+						SignalAttempts:      result.SignalDiag.SignalAttempts,
+						SignalsPassed:       result.SignalDiag.SignalsPassed,
+						RegimeRejected:      result.SignalDiag.RegimeRejected,
+						VolHalted:           result.SignalDiag.VolHalted,
+						PipelineRejected:    result.SignalDiag.PipelineRejected,
+						MLRejected:          result.SignalDiag.MLRejected,
+						FillRejected:        result.SignalDiag.FillRejected,
+						CandlesSeen:         result.SignalDiag.CandlesSeen,
+						StrategyNil:         result.SignalDiag.StrategyNil,
+						ExitSignalZeroQty:   result.SignalDiag.ExitSignalZeroQty,
+						TradesOpened:        result.SignalDiag.TradesOpened,
+						CapitalZero:         result.SignalDiag.CapitalZero,
+						RateLimited:         result.SignalDiag.RateLimited,
+						BaseSizeZero:        result.SignalDiag.BaseSizeZero,
+						QuantityTooSmall:    result.SignalDiag.QuantityTooSmall,
+						ExposureBlocked:     result.SignalDiag.ExposureBlocked,
+						PipelineRejects:     result.SignalDiag.PipelineRejects,
 					}
-		return nil
-	})
-}
-}
-_ = g.Wait()
-results = append(results, chunkResults...)
+					return nil
+				})
+			}
+		}
+		_ = g.Wait()
+		results = append(results, chunkResults...)
 	}
 
 	return results, nil
@@ -201,59 +282,53 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 	// Skipped when config.SkipLightOptimize is true.
 	optimizedParams := make(map[string]map[string]float64)
 	if !config.SkipLightOptimize {
-	seenStrats := make(map[string]bool)
-	for _, c := range combos {
-		if seenStrats[c.Strategy] {
-			continue
-		}
-		seenStrats[c.Strategy] = true
+		seenStrats := make(map[string]bool)
+		for _, c := range combos {
+			if seenStrats[c.Strategy] {
+				continue
+			}
+			seenStrats[c.Strategy] = true
 
-		repSymbols := SelectRepresentativeSymbols(config.Symbols, LightOptSymbolCount())
-		lightCfg := LightOptimizeConfig{
-			StrategyID:         c.Strategy,
-			Symbols:            repSymbols,
-			ValidationSymbols:  DiffStrings(config.Symbols, repSymbols),
-			Timeframe:          pickDominantTimeframe(config.Timeframes),
-			StartDate:          config.StartDate,
-			EndDate:            config.StartDate.AddDate(0, LightOptWindowMonths(), 0),
-			InitialCapital:     config.InitialCapital,
-			PropFirmEnabled:    config.PropFirmEnabled,
-			GateProfile:        config.GateProfile,
-			EnableCache:        true,
-			MaxCombos:          LightOptBudget(),
-			PerBacktestTimeout: LightOptTimeout(),
-			PlateauPatience:    LightOptPlateauPatience(),
-			TrainFraction:      LightOptTrainFraction(),
-			ObjectiveWeights:   LightOptWeights(),
-			CacheTTL:           LightOptCacheTTL(),
-		}
-		if lightCfg.EndDate.After(config.EndDate) {
-			lightCfg.EndDate = config.EndDate
-		}
+			repSymbols := SelectRepresentativeSymbols(config.Symbols, LightOptSymbolCount())
+			lightCfg := LightOptimizeConfig{
+				StrategyID:         c.Strategy,
+				Symbols:            repSymbols,
+				ValidationSymbols:  DiffStrings(config.Symbols, repSymbols),
+				Timeframe:          pickDominantTimeframe(config.Timeframes),
+				StartDate:          config.StartDate,
+				EndDate:            config.StartDate.AddDate(0, LightOptWindowMonths(), 0),
+				InitialCapital:     config.InitialCapital,
+				PropFirmEnabled:    config.PropFirmEnabled,
+				GateProfile:        config.GateProfile,
+				EnableCache:        true,
+				MaxCombos:          LightOptBudget(),
+				PerBacktestTimeout: LightOptTimeout(),
+				PlateauPatience:    LightOptPlateauPatience(),
+				TrainFraction:      LightOptTrainFraction(),
+				ObjectiveWeights:   LightOptWeights(),
+				CacheTTL:           LightOptCacheTTL(),
+			}
+			if lightCfg.EndDate.After(config.EndDate) {
+				lightCfg.EndDate = config.EndDate
+			}
 
-		params := RunLightOptimize(ctx, db, lightCfg)
-		if params == nil {
-			continue
+			params := RunLightOptimize(ctx, db, lightCfg)
+			if params == nil {
+				continue
+			}
+			optimizedParams[c.Strategy] = params
+			if onProgress != nil {
+				onProgress(len(combos)-1, "optimized", "", &ComboResult{
+					StrategyID: c.Strategy, Optimized: true,
+				})
+			}
 		}
-		optimizedParams[c.Strategy] = params
-		if onProgress != nil {
-			onProgress(len(combos)-1, "optimized", "", &ComboResult{
-				StrategyID: c.Strategy, Optimized: true,
-			})
-		}
-	}
 	} // end skipLightOptimize guard
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	maxWorkers := runtime.NumCPU()
-	if maxWorkers > 8 {
-		maxWorkers = 8
-	}
-	if maxWorkers < 2 {
-		maxWorkers = 2
-	}
+	maxWorkers := MatrixWorkers(DefaultDBPoolMax)
 
 	sem := semaphore.NewWeighted(int64(maxWorkers))
 	g, ctx := errgroup.WithContext(ctx)
@@ -320,15 +395,12 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				KellyFraction:   kellyFrac,
 				ApplyGate:       applyGate,
 				GateProfile:     config.GateProfile,
-				StopLoss: &StopLossConfig{
-					Type:          "atr",
-					ATRPeriod:     14,
-					ATRMultiplier: 2.0,
-				},
-				TakeProfit: &TakeProfitConfig{
-					Type:    "risk_reward",
-					RRRatio: 2.0,
-				},
+				// No engine-wide StopLoss/TakeProfit: every strategy self-manages
+				// its own stop/target/trailing/z-score exits. Imposing a uniform
+				// 2xATR stop + 2:1 R:R target on top of per-strategy exits was a
+				// dual-exit conflict (engine fired its own levels before the
+				// runner's) and, for trend-following, capped winners at a fixed
+				// 2:1 target that contradicts the trailing-stop design.
 			}
 			if combo.Strategy == "pairs_trading" || combo.Strategy == "stat_arb" {
 				if sec := defaultSecondarySymbol(combo.Symbol); sec != "" {
@@ -340,9 +412,12 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				btConfig.StrategyParams = optParams
 			}
 			engine := NewEngine(db)
-			if config.WirePipeline {
-				engine.WirePipeline()
-			}
+			// HP#17: the canonical RiskPipeline must be wired in backtest paths
+			// (matching the orchestrator, which already wires it). The inline
+			// sizing fallback bypassed regime gating, notional caps, and the
+			// prop-firm gate, producing the unaccounted signal-funnel gap and
+			// under-counting risk rejections (PipelineRejected == 0).
+			engine.WirePipeline()
 			result, err := engine.Run(ctx, btConfig)
 			monitor.RecordBacktestDuration(time.Since(start).Seconds())
 			mu.Lock()
@@ -361,24 +436,22 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				return nil
 			}
 
-			// Optional walk-forward validation for optimized combos, mirroring the
-			// CLI matrix-runner --walk-forward flag. Populates WfIS/WfOOS columns.
-			var wfIS, wfOOS float64
-			if config.WalkForward {
-				if _, ok := optimizedParams[combo.Strategy]; ok {
-					wfCfg := WalkForwardConfig{
-						Config:             btConfig,
-						TrainWindows:       3,
-						TrainYears:         1,
-						TestYears:          2,
-						StepMonths:         6,
-						PurgeTradingDays:   5,
-						EmbargoTradingDays: 2,
-					}
-					if wfRes, wfErr := engine.RunWalkForward(ctx, wfCfg); wfErr == nil && wfRes != nil && wfRes.TotalWindows > 0 {
-						wfIS = wfRes.OverallSharpe
-						wfOOS = wfRes.AvgOOSSharpe
-					}
+			// Embedded walk-forward validation: per-window IS optimization -> OOS.
+			// Uses a capped combination budget to stay tractable inside the full
+			// matrix; the top-N pass (RunWalkForwardOnTopCombos) uses the full
+			// budget for final promotion decisions.
+			var wfIS, wfOOS, wfAnchorOOS float64
+			var wfBestParams string
+			var wfMultiplicityWarn bool
+			if config.WalkForward && result.NumTrades >= 20 {
+				owfCfg := NewOptimizedWalkForwardConfig(btConfig, combo.Strategy)
+				owfCfg.MaxCombinations = LightOptBudget()
+				if wfRes, wfErr := engine.RunOptimizedWalkForward(ctx, owfCfg); wfErr == nil && wfRes != nil && wfRes.TotalWindows > 0 {
+					wfIS = wfRes.OverallSharpe
+					wfOOS = wfRes.AvgOOSSharpe
+					wfAnchorOOS = wfRes.AvgAnchorOOSSharpe
+					wfBestParams = encodeWfBestParams(wfRes)
+					wfMultiplicityWarn = wfRes.hasMultiplicityWarning()
 				}
 			}
 			monitor.RecordMatrixCombo("completed")
@@ -388,58 +461,83 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				warnings = append(warnings, "disabled: strategy is disabled by default (HP agenda)")
 			}
 			results[i] = ComboResult{
-				Symbol:             combo.Symbol,
-				StrategyID:         combo.Strategy,
-				Timeframe:          combo.Timeframe,
-				SharpeRatio:        result.SharpeRatio,
-				SortinoRatio:       result.SortinoRatio,
-				MaxDrawdown:        result.MaxDrawdown,
-				MaxDrawdownDur:     result.MaxDrawdownDuration,
-				WinRate:            result.WinRate,
-				AvgTrade:           result.AvgTrade,
-				AvgWin:             result.AvgWin,
-				AvgLoss:            result.AvgLoss,
-				NumTrades:          result.NumTrades,
-				NumWins:            result.NumWins,
-				NumLosses:          result.NumLosses,
-				AvgMAE:             result.AvgMAE,
-				AvgMFE:             result.AvgMFE,
-				Warnings:           result.Warnings,
-				GatePassed:         gateBool(result.MetricGateStatus),
-				AdverseSelectRate:  result.AdverseSelectionRate,
-				StrategyParams:     result.StrategyParams,
-				Optimized:          len(btConfig.StrategyParams) > 0,
-				EquityCurve:        result.EquityCurve,
-				Trades:             result.Trades,
-				LongTrades:         result.LongShort.LongTrades,
-				ShortTrades:        result.LongShort.ShortTrades,
-				LongWinRate:        result.LongShort.LongWinRate,
-				ShortWinRate:       result.LongShort.ShortWinRate,
-				LongGrossPnL:       clampAbs(result.LongShort.LongGrossPnL, config.InitialCapital*100),
-				ShortGrossPnL:      clampAbs(result.LongShort.ShortGrossPnL, config.InitialCapital*100),
-				LongPF:             clampAbs(result.LongShort.LongPF, 1000),
-				ShortPF:            clampAbs(result.LongShort.ShortPF, 1000),
-				ProfitFactor:       clampAbs(result.ProfitFactor, 1000),
-				TotalReturn:        clampAbs(result.TotalReturnPct, 10000),
-				ZeroPnLTrades:      result.NumTrades - result.NumWins - result.NumLosses,
-				ExpectedPF:         computeExpectedPF(result.WinRate, result.AvgWin, result.AvgLoss),
-				RewardRiskRatio:    computeRewardRisk(result.AvgWin, result.AvgLoss),
-				DailyVolatility:    computeDailyVolatility(result.DailyReturns),
-				TrainPct:           result.TrainPct,
-				MtmSharpeRatio:     result.MtmSharpeRatio,
-				MtmMaxDrawdown:     result.MtmMaxDrawdown,
-				MLFeatureEnabled:   result.MLFeatureEnabled,
-				TotalFees:          result.TotalFees,
-				AvgSlippageBps:     result.AvgSlippageBps,
-				CalmarRatio:        result.CalmarRatio,
-				CandleCount:        result.CandleCount,
-				GrossReturnPct:     grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
-				DataSource:         config.DataSource,
-				EngineVersion:      result.EngineVersion,
-				DataGenerationID:   result.DataGenerationID,
-				WfISSharpe:         wfIS,
-				WfOOSSharpe:        wfOOS,
+				Symbol:              combo.Symbol,
+				StrategyID:          combo.Strategy,
+				Timeframe:           combo.Timeframe,
+				SharpeRatio:         result.SharpeRatio,
+				SortinoRatio:        result.SortinoRatio,
+				MaxDrawdown:         result.MaxDrawdown,
+				MaxDrawdownDur:      result.MaxDrawdownDuration,
+				WinRate:             result.WinRate,
+				AvgTrade:            result.AvgTrade,
+				AvgWin:              result.AvgWin,
+				AvgLoss:             result.AvgLoss,
+				NumTrades:           result.NumTrades,
+				NumWins:             result.NumWins,
+				NumLosses:           result.NumLosses,
+				AvgMAE:              result.AvgMAE,
+				AvgMFE:              result.AvgMFE,
+				Warnings:            result.Warnings,
+				GatePassed:          gateBool(result.MetricGateStatus),
+				AdverseSelectRate:   result.AdverseSelectionRate,
+				StrategyParams:      result.StrategyParams,
+				Optimized:           len(btConfig.StrategyParams) > 0,
+				EquityCurve:         result.EquityCurve,
+				Trades:              result.Trades,
+				LongTrades:          result.LongShort.LongTrades,
+				ShortTrades:         result.LongShort.ShortTrades,
+				LongWinRate:         result.LongShort.LongWinRate,
+				ShortWinRate:        result.LongShort.ShortWinRate,
+				LongGrossPnL:        clampAbs(result.LongShort.LongGrossPnL, config.InitialCapital*100),
+				ShortGrossPnL:       clampAbs(result.LongShort.ShortGrossPnL, config.InitialCapital*100),
+				LongPF:              clampAbs(result.LongShort.LongPF, 1000),
+				ShortPF:             clampAbs(result.LongShort.ShortPF, 1000),
+				ProfitFactor:        clampAbs(result.ProfitFactor, 1000),
+				TotalReturn:         clampAbs(result.TotalReturnPct, 10000),
+				ZeroPnLTrades:       result.NumTrades - result.NumWins - result.NumLosses,
+				ExpectedPF:          computeExpectedPF(result.WinRate, result.AvgWin, result.AvgLoss),
+				RewardRiskRatio:     computeRewardRisk(result.AvgWin, result.AvgLoss),
+				DailyVolatility:     computeDailyVolatility(result.DailyReturns),
+				TrainPct:            result.TrainPct,
+				MtmSharpeRatio:      result.MtmSharpeRatio,
+				MtmMaxDrawdown:      result.MtmMaxDrawdown,
+				MLFeatureEnabled:    result.MLFeatureEnabled,
+				TotalFees:           result.TotalFees,
+				AvgSlippageBps:      result.AvgSlippageBps,
+				CalmarRatio:         result.CalmarRatio,
+				CandleCount:         result.CandleCount,
+				GrossReturnPct:      grossReturnPct(result.TotalReturnPct, result.TotalFees, config.InitialCapital),
+				DataSource:          config.DataSource,
+				EngineVersion:       result.EngineVersion,
+				DataGenerationID:    result.DataGenerationID,
+				FirstCandleTime:     result.FirstCandleTime,
+				LastCandleTime:      result.LastCandleTime,
+				DeclaredBarsPerDay:  result.DeclaredBarsPerDay,
+				EffectiveBarsPerDay: result.EffectiveBarsPerDay,
+				SignalAttempts:      result.SignalDiag.SignalAttempts,
+				SignalsPassed:       result.SignalDiag.SignalsPassed,
+				RegimeRejected:      result.SignalDiag.RegimeRejected,
+				VolHalted:           result.SignalDiag.VolHalted,
+				PipelineRejected:    result.SignalDiag.PipelineRejected,
+				MLRejected:          result.SignalDiag.MLRejected,
+				FillRejected:        result.SignalDiag.FillRejected,
+				CandlesSeen:         result.SignalDiag.CandlesSeen,
+				StrategyNil:         result.SignalDiag.StrategyNil,
+				ExitSignalZeroQty:   result.SignalDiag.ExitSignalZeroQty,
+				TradesOpened:        result.SignalDiag.TradesOpened,
+				CapitalZero:         result.SignalDiag.CapitalZero,
+				RateLimited:         result.SignalDiag.RateLimited,
+				BaseSizeZero:        result.SignalDiag.BaseSizeZero,
+				QuantityTooSmall:    result.SignalDiag.QuantityTooSmall,
+				ExposureBlocked:     result.SignalDiag.ExposureBlocked,
+				PipelineRejects:     result.SignalDiag.PipelineRejects,
+				WfISSharpe:          wfIS,
+				WfOOSSharpe:         wfOOS,
+				WfAnchorOOSSharpe:   wfAnchorOOS,
+				WfBestParams:        wfBestParams,
+				WfMultiplicityWarn:  wfMultiplicityWarn,
 			}
+			results[i].Implausible = IsComboImplausible(results[i])
 			if onProgress != nil {
 				onProgress(i, "completed", "", &results[i])
 			}
@@ -566,29 +664,24 @@ func RunWalkForwardOnTopCombos(results []ComboResult, topN int, db Database, bas
 
 	var wfResults []WalkForwardResult
 	for _, c := range ranked {
-		wfCfg := WalkForwardConfig{
-			Config: BacktestConfig{
-				StrategyID:     c.StrategyID,
-				Symbols:        []string{c.Symbol},
-				StartDate:      baseConfig.StartDate,
-				EndDate:        baseConfig.EndDate,
-				InitialCapital: baseConfig.InitialCapital,
-				Timeframe:      c.Timeframe,
-				DataSource:     baseConfig.DataSource,
-				SizingPercent:  baseConfig.SizingPercent,
-				KellyFraction:  baseConfig.KellyFraction,
-				GateProfile:    baseConfig.GateProfile,
-			},
-			TrainWindows: 3,
-			PurgeTradingDays: 5,
-			EmbargoTradingDays: 10,
-		}
+		owfCfg := NewOptimizedWalkForwardConfig(BacktestConfig{
+			StrategyID:     c.StrategyID,
+			Symbols:        []string{c.Symbol},
+			StartDate:      baseConfig.StartDate,
+			EndDate:        baseConfig.EndDate,
+			InitialCapital: baseConfig.InitialCapital,
+			Timeframe:      c.Timeframe,
+			DataSource:     baseConfig.DataSource,
+			SizingPercent:  baseConfig.SizingPercent,
+			KellyFraction:  baseConfig.KellyFraction,
+			GateProfile:    baseConfig.GateProfile,
+		}, c.StrategyID)
 		engine := NewEngine(db)
-		wfResult, err := engine.RunWalkForward(context.Background(), wfCfg)
+		wfResult, err := engine.RunOptimizedWalkForward(context.Background(), owfCfg)
 		if err != nil {
 			continue
 		}
-		wfResults = append(wfResults, *wfResult)
+		wfResults = append(wfResults, wfResult.WalkForwardResult)
 	}
 	return wfResults, nil
 }

@@ -23,20 +23,32 @@ type BaseRunner struct {
 	CurrentSide  string
 	EntryTime    time.Time
 
-	irVersion          string
-	canonicalVersion   string
-	instanceHash       string
+	// Regime-conditional exit multipliers (regime_gating_deep_dive.md §3.2):
+	// widen stops in HighVol/Crisis (avoid noise whipsaw) and loosen targets in
+	// Trending (let winners run). Default 1.0 = no change; the optimizer sweeps
+	// them via RegimeParamDefs (stop_mult_highvol / stop_mult_crisis /
+	// profit_mult_trending).
+	StopMultHighVol    float64
+	StopMultCrisis     float64
+	ProfitMultTrending float64
+
+	irVersion        string
+	canonicalVersion string
+	instanceHash     string
 }
 
 func NewBaseRunner(bufferSize int) *BaseRunner {
 	return &BaseRunner{
-		BufferSize:       bufferSize,
-		PriceHistory:     make([]float64, bufferSize),
-		HighHistory:      make([]float64, bufferSize),
-		LowHistory:       make([]float64, bufferSize),
-		VolumeHistory:    make([]float64, bufferSize),
-		irVersion:        "qst-ir/0.4",
-		canonicalVersion: "qst-canonical/0.4",
+		BufferSize:         bufferSize,
+		PriceHistory:       make([]float64, bufferSize),
+		HighHistory:        make([]float64, bufferSize),
+		LowHistory:         make([]float64, bufferSize),
+		VolumeHistory:      make([]float64, bufferSize),
+		StopMultHighVol:    1.0,
+		StopMultCrisis:     1.0,
+		ProfitMultTrending: 1.0,
+		irVersion:          "qst-ir/0.4",
+		canonicalVersion:   "qst-canonical/0.4",
 	}
 }
 
@@ -108,7 +120,8 @@ func (b *BaseRunner) ClosePosition() {
 	b.PositionOpen = false
 }
 
-func (b *BaseRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
+func (b *BaseRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {
+}
 
 func (b *BaseRunner) OnCancel(orderID string, reason string) {}
 
@@ -139,6 +152,40 @@ func (b *BaseRunner) IsTimeExit(maxMinutes float64, currentTime time.Time) bool 
 		return false
 	}
 	return currentTime.Sub(b.EntryTime).Minutes() >= maxMinutes
+}
+
+// SetRegimeExitParams consumes the shared regime-conditional exit multipliers
+// from an optimizer/param map (stop_mult_highvol, stop_mult_crisis,
+// profit_mult_trending).
+func (b *BaseRunner) SetRegimeExitParams(params map[string]float64) {
+	if params == nil {
+		return
+	}
+	if v, ok := params["stop_mult_highvol"]; ok {
+		b.StopMultHighVol = v
+	}
+	if v, ok := params["stop_mult_crisis"]; ok {
+		b.StopMultCrisis = v
+	}
+	if v, ok := params["profit_mult_trending"]; ok {
+		b.ProfitMultTrending = v
+	}
+}
+
+// RegimeExitMults returns the stop and take-profit multipliers for a regime:
+// widen stops in HighVol/Crisis, loosen targets in Trending. Returns (1,1) for
+// Calm. Callers multiply their stopDist/profitDist by these.
+func (b *BaseRunner) RegimeExitMults(regime int8) (stopMult, profitMult float64) {
+	stopMult, profitMult = 1.0, 1.0
+	switch regime {
+	case 2:
+		stopMult = b.StopMultHighVol
+	case 3:
+		stopMult = b.StopMultCrisis
+	case 1:
+		profitMult = b.ProfitMultTrending
+	}
+	return stopMult, profitMult
 }
 
 func clearSlice(s []float64) {

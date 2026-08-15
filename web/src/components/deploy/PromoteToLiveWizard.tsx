@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { strategies, accounts, orchestrator, strategyStatus, symbols as symbolsApi } from '../../api/client'
+import { strategies, accounts, orchestrator, strategyStatus, symbols as symbolsApi, backtests } from '../../api/client'
 import type { DeployStrategyResponse, PreflightResponse, Strategy } from '../../types/api'
 import OrchestrationProgressBar from '../backtest/OrchestrationProgressBar'
 import { useOrchestrationPoll } from '../../hooks/useOrchestrationPoll'
@@ -35,6 +35,7 @@ export default function PromoteToLiveWizard({
   const [preflight, setPreflight] = useState<PreflightResponse | null>(null)
   const [preflightLoading, setPreflightLoading] = useState(false)
   const [gateOverride, setGateOverride] = useState(false)
+  const [benchmarkPassed, setBenchmarkPassed] = useState<boolean | null>(null)
   const [deployResult, setDeployResult] = useState<DeployStrategyResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [accountBalances, setAccountBalances] = useState<Record<string, number>>({})
@@ -93,13 +94,23 @@ export default function PromoteToLiveWizard({
     })()
   }, [])
 
+  useEffect(() => {
+    let active = true
+    backtests.benchmarkEval(backtestId).then(b => {
+      if (active) setBenchmarkPassed(b.passed)
+    }).catch(() => {
+      if (active) setBenchmarkPassed(null)
+    })
+    return () => { active = false }
+  }, [backtestId])
+
   const checks = [
     { label: 'Sharpe Ratio', required: `≥ ${GATES.sharpeMin}`, actual: sharpe.toFixed(2), passed: sharpe >= GATES.sharpeMin },
     { label: 'Max Drawdown', required: `≤ ${GATES.maxDDMax}%`, actual: `${maxDD.toFixed(1)}%`, passed: maxDD <= GATES.maxDDMax },
     { label: 'Pass Probability', required: `≥ ${GATES.passProbMin}%`, actual: `${passProb.toFixed(0)}%`, passed: passProb >= GATES.passProbMin },
     { label: 'Profit Factor', required: `≥ ${GATES.profitFactorMin}`, actual: profitFactor.toFixed(2), passed: profitFactor >= GATES.profitFactorMin },
   ]
-  const allPass = gateOverride || checks.every((c) => c.passed)
+  const allPass = gateOverride || (checks.every((c) => c.passed) && benchmarkPassed !== false)
 
   const handleRunPreflight = async () => {
     setPreflightLoading(true)
@@ -231,6 +242,13 @@ export default function PromoteToLiveWizard({
               <input type="checkbox" checked={gateOverride} onChange={(e) => setGateOverride(e.target.checked)} />
               Override gates (skip quality checks)
             </label>
+            <div className="flex-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+              <span>Benchmark Filter</span>
+              <span className="text-muted">must pass (vs. SPY)</span>
+              <span style={{ color: benchmarkPassed === false ? 'var(--trading-danger)' : benchmarkPassed === true ? 'var(--trading-success)' : 'var(--trading-warning, #d29922)', fontWeight: 600 }}>
+                {benchmarkPassed === null ? '…' : benchmarkPassed ? '✓ pass' : '✗ fail'}
+              </span>
+            </div>
           </div>
         )}
 

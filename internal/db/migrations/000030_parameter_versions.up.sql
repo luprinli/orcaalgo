@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS strategy_params_version (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    strategy_id     TEXT NOT NULL REFERENCES strategies(id) ON DELETE CASCADE,
+    strategy_id     TEXT NOT NULL,
     version_tag     TEXT NOT NULL,
     params          JSONB NOT NULL DEFAULT '{}',
     in_sample_start DATE,

@@ -16,6 +16,11 @@ const (
 	defaultMemBudgetMB   = 2048
 	defaultPerBacktestMB = 128
 	defaultDBReserve     = 4
+	// DefaultDBPoolMax is the DB connection-pool size the matrix worker pool is
+	// sized against. It mirrors db.Config.PoolMax's default (repository_core.go).
+	// Keep this in sync if the DB pool default changes. Bumped from 20 to 40 so
+	// 16 matrix workers x ~4 concurrent loads never starve the pool.
+	DefaultDBPoolMax = 40
 	// The execution framework (bounded global worker pool + LRU candle cache +
 	// admission control + chunked streaming) makes the full realistic universe
 	// (~11 strategies x 62 symbols x 7 timeframes ≈ 4,466 combos) safe to run with

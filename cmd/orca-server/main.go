@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/api"
+	"github.com/lee-econ/orca-core/internal/audit"
+	"github.com/lee-econ/orca-core/internal/breaker"
 	"github.com/lee-econ/orca-core/internal/broker"
 	"github.com/lee-econ/orca-core/internal/broker/alpaca"
 	"github.com/lee-econ/orca-core/internal/broker/paper"
@@ -58,6 +60,26 @@ func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
 
+	// Route circuit-breaker transitions into the audit trail (R7). Always logged
+	// via slog; additionally persisted to the SQLite append-only audit log when
+	// ORCA_AUDIT_LOG_PATH is configured.
+	var auditLog *audit.AuditLog
+	if p := os.Getenv("ORCA_AUDIT_LOG_PATH"); p != "" {
+		if al, err := audit.Open(p); err != nil {
+			slog.Warn("audit log unavailable", "error", err)
+		} else {
+			auditLog = al
+			defer auditLog.Close()
+		}
+	}
+	breaker.SetGlobalObserver(func(e breaker.BreakerEvent) {
+		slog.Warn("circuit breaker transition",
+			"from", int(e.From), "to", int(e.To), "warn", e.Warn, "reason", e.Reason)
+		if auditLog != nil {
+			_ = auditLog.Append("breaker_transition", e)
+		}
+	})
+
 	if env == "production" {
 		slog.Warn("running in production mode — seed/sample endpoints disabled, log verbosity reduced")
 	}
@@ -74,7 +96,7 @@ func main() {
 	slog.Info("database connected", "host", db.DefaultConfig().Host)
 
 	if err := repo.RunMigrations(context.Background()); err != nil {
-		slog.Warn("migration check", "error", err)
+		slog.Warn("migrations", "error", err)
 	} else {
 		slog.Info("migrations OK")
 	}
@@ -97,7 +119,9 @@ func main() {
 	}
 
 	dataMode := os.Getenv("ORCA_DATA_MODE")
-	if dataMode == "" { dataMode = "stooq" }
+	if dataMode == "" {
+		dataMode = "stooq"
+	}
 	slog.Info("data mode", "mode", dataMode)
 	if dataMode == "stooq" || dataMode == "mock" {
 		if err := seeder.Run(context.Background(), false); err != nil {
@@ -206,24 +230,32 @@ func main() {
 	}
 	go func() {
 		slog.Info("metrics server starting", "addr", metricsPort)
-		if err := http.ListenAndServe(metricsPort, mux); err != nil { slog.Error("metrics error", "error", err) }
+		if err := http.ListenAndServe(metricsPort, mux); err != nil {
+			slog.Error("metrics error", "error", err)
+		}
 	}()
 	go func() {
-		if err := wsClientConnect(ctx, ringBuf, metrics); err != nil { slog.Error("ws connect error", "error", err) }
+		if err := wsClientConnect(ctx, ringBuf, metrics); err != nil {
+			slog.Error("ws connect error", "error", err)
+		}
 	}()
 	go pipeline.Run(ctx)
 	simFeed := monitor.NewSimulatedFeed(wsHub)
 	go simFeed.Run(ctx)
 	go func() {
 		slog.Info("API server starting", "addr", ":8080")
-		if err := server.Run(":8080"); err != nil { log.Fatalf("server error: %v", err) }
+		if err := server.Run(":8080"); err != nil {
+			log.Fatalf("server error: %v", err)
+		}
 	}()
 	go func() {
 		vixClient := ingest.NewVIXClient()
-		t := time.NewTicker(60 * time.Second); defer t.Stop()
+		t := time.NewTicker(60 * time.Second)
+		defer t.Stop()
 		for {
 			select {
-			case <-ctx.Done(): return
+			case <-ctx.Done():
+				return
 			case <-t.C:
 				vix, _, err := vixClient.FetchLatest(ctx, os.Getenv("POLYGON_API_KEY"))
 				if err != nil {
@@ -238,10 +270,12 @@ func main() {
 	}()
 	go func() {
 		sentClient := ingest.NewSentimentClient()
-		t := time.NewTicker(3600 * time.Second); defer t.Stop()
+		t := time.NewTicker(3600 * time.Second)
+		defer t.Stop()
 		for {
 			select {
-			case <-ctx.Done(): return
+			case <-ctx.Done():
+				return
 			case <-t.C:
 				score, _, err := sentClient.Fetch(ctx)
 				if err != nil {
@@ -255,10 +289,12 @@ func main() {
 		}
 	}()
 	go func() {
-		t := time.NewTicker(5 * time.Second); defer t.Stop()
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
 		for {
 			select {
-			case <-ctx.Done(): return
+			case <-ctx.Done():
+				return
 			case <-t.C:
 				regime := int8(0)
 				confidence := 0.85
@@ -268,37 +304,37 @@ func main() {
 				sentMux.Lock()
 				sent := lastSentiment
 				sentMux.Unlock()
-			wsHub.Broadcast("risk", map[string]interface{}{
-				"halted": ks.IsHalted(), "connections": len(wsHub.Clients()),
-				"regime": regime, "confidence": confidence,
-				"vix": vix, "sentiment": sent,
-				"daily_loss_used": 0.0, "drawdown_used": 0.0,
-				"daily_limit_pct": 5.0, "max_dd_pct": 10.0,
-				"consistency_multiplier": 1.0,
-				"tick_count": pipeline.GetTickCount(),
-				"balance": 100000.0, "equity": 100000.0, "daily_pnl_pct": 0.0,
-			})
-			wsHub.Broadcast("ticks", map[string]interface{}{"tick_count": pipeline.GetTickCount(), "time": time.Now().Format(time.RFC3339)})
-			pos, _ := adapter.GetPositions(ctx)
-			if pos != nil {
-				wsHub.Broadcast("positions", map[string]interface{}{"positions": pos})
-			}
-			orders, _ := adapter.GetPositions(ctx)
-			if orders != nil {
-				wsHub.Broadcast("orders", map[string]interface{}{"orders": orders})
-			} else {
-				wsHub.Broadcast("orders", map[string]interface{}{"orders": []interface{}{}})
-			}
-			wsHub.Broadcast("pnl_history", map[string]interface{}{
-				"daily_pnl_pct": 0.0,
-				"cumulative_pnl": 0.0,
-				"equity": 100000.0,
-				"time": time.Now().Format(time.RFC3339),
-			})
-			wsHub.Broadcast("strategy_metrics", map[string]interface{}{
-				"strategies": []interface{}{},
-				"updated_at": time.Now().Format(time.RFC3339),
-			})
+				wsHub.Broadcast("risk", map[string]interface{}{
+					"halted": ks.IsHalted(), "connections": len(wsHub.Clients()),
+					"regime": regime, "confidence": confidence,
+					"vix": vix, "sentiment": sent,
+					"daily_loss_used": 0.0, "drawdown_used": 0.0,
+					"daily_limit_pct": 5.0, "max_dd_pct": 10.0,
+					"consistency_multiplier": 1.0,
+					"tick_count":             pipeline.GetTickCount(),
+					"balance":                100000.0, "equity": 100000.0, "daily_pnl_pct": 0.0,
+				})
+				wsHub.Broadcast("ticks", map[string]interface{}{"tick_count": pipeline.GetTickCount(), "time": time.Now().Format(time.RFC3339)})
+				pos, _ := adapter.GetPositions(ctx)
+				if pos != nil {
+					wsHub.Broadcast("positions", map[string]interface{}{"positions": pos})
+				}
+				orders, _ := adapter.GetPositions(ctx)
+				if orders != nil {
+					wsHub.Broadcast("orders", map[string]interface{}{"orders": orders})
+				} else {
+					wsHub.Broadcast("orders", map[string]interface{}{"orders": []interface{}{}})
+				}
+				wsHub.Broadcast("pnl_history", map[string]interface{}{
+					"daily_pnl_pct":  0.0,
+					"cumulative_pnl": 0.0,
+					"equity":         100000.0,
+					"time":           time.Now().Format(time.RFC3339),
+				})
+				wsHub.Broadcast("strategy_metrics", map[string]interface{}{
+					"strategies": []interface{}{},
+					"updated_at": time.Now().Format(time.RFC3339),
+				})
 			}
 		}
 	}()
@@ -371,9 +407,13 @@ func wsClientConnect(ctx context.Context, ringBuf *ingest.RingBuffer, metrics *m
 		wsClient.SetAuth(apiKey, apiSecret)
 	}
 
-	wsClient.RegisterSymbol("AAPL", 1); wsClient.RegisterSymbol("MSFT", 2); wsClient.RegisterSymbol("SPY", 3)
+	wsClient.RegisterSymbol("AAPL", 1)
+	wsClient.RegisterSymbol("MSFT", 2)
+	wsClient.RegisterSymbol("SPY", 3)
 	wsClient.Subscribe("AAPL", "MSFT", "SPY")
-	if err := wsClient.Connect(ctx); err != nil { return err }
+	if err := wsClient.Connect(ctx); err != nil {
+		return err
+	}
 	wsClient.ReadLoop(ctx)
 	return nil
 }

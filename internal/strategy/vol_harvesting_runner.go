@@ -43,19 +43,19 @@ type VolHarvestingRunner struct {
 
 func NewVolHarvestingRunner() *VolHarvestingRunner {
 	return &VolHarvestingRunner{
-		BaseRunner:       NewBaseRunner(128),
-		VIXThreshold:       20.0,
-		MaxVega:          0.02,
-		StopATRMult:      2.0,
-		ProfitATRMult:    3.0,
-		MeanRevLookback:  10,
-		MeanRevEntryZ:    1.5,
-		MeanRevExitZ:     0.5,
+		BaseRunner:      NewBaseRunner(128),
+		VIXThreshold:    20.0,
+		MaxVega:         0.02,
+		StopATRMult:     2.0,
+		ProfitATRMult:   3.0,
+		MeanRevLookback: 10,
+		MeanRevEntryZ:   1.5,
+		MeanRevExitZ:    0.5,
 	}
 }
 
-func (r *VolHarvestingRunner) Name() string     { return "volatility_harvesting" }
-func (r *VolHarvestingRunner) Type() string     { return "volatility_harvesting" }
+func (r *VolHarvestingRunner) Name() string              { return "volatility_harvesting" }
+func (r *VolHarvestingRunner) Type() string              { return "volatility_harvesting" }
 func (r *VolHarvestingRunner) Version() (string, string) { return r.BaseRunner.Version() }
 
 func (r *VolHarvestingRunner) Reset() {
@@ -64,13 +64,13 @@ func (r *VolHarvestingRunner) Reset() {
 
 func (r *VolHarvestingRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"vix_threshold":      r.VIXThreshold,
-		"max_vega":           r.MaxVega,
-		"stop_atr_mult":      r.StopATRMult,
-		"profit_atr_mult":    r.ProfitATRMult,
-		"mean_rev_lookback":  float64(r.MeanRevLookback),
-		"mean_rev_entry_z":   r.MeanRevEntryZ,
-		"mean_rev_exit_z":    r.MeanRevExitZ,
+		"vix_threshold":     r.VIXThreshold,
+		"max_vega":          r.MaxVega,
+		"stop_atr_mult":     r.StopATRMult,
+		"profit_atr_mult":   r.ProfitATRMult,
+		"mean_rev_lookback": float64(r.MeanRevLookback),
+		"mean_rev_entry_z":  r.MeanRevEntryZ,
+		"mean_rev_exit_z":   r.MeanRevExitZ,
 	}
 }
 
@@ -163,10 +163,11 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	// Entry: mean-reversion after vol spike.
 	// Short vol means fading the extreme move.
+	stopMult, profitMult := r.RegimeExitMults(regime)
 	if zScore <= -r.MeanRevEntryZ {
 		// Oversold after vol spike → go LONG (fade the move).
-		stopPrice := currentPrice - atr*r.StopATRMult
-		profitPrice := currentPrice + atr*r.ProfitATRMult
+		stopPrice := currentPrice - atr*r.StopATRMult*stopMult
+		profitPrice := currentPrice + atr*r.ProfitATRMult*profitMult
 		r.OpenPosition("BUY", price,
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),
@@ -176,8 +177,8 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	if zScore >= r.MeanRevEntryZ {
 		// Overbought after vol spike → go SHORT (fade the move).
-		stopPrice := currentPrice + atr*r.StopATRMult
-		profitPrice := currentPrice - atr*r.ProfitATRMult
+		stopPrice := currentPrice + atr*r.StopATRMult*stopMult
+		profitPrice := currentPrice - atr*r.ProfitATRMult*profitMult
 		r.OpenPosition("SELL", price,
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),

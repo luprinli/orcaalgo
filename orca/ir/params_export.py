@@ -43,6 +43,17 @@ def extract_params(gkr_dir: str | Path = "configs/strategies") -> dict:
                 params["range_minutes"] = node.params.get("range_minutes", 5)
                 params["breakout_pct"] = node.params.get("breakout_pct", 0.5)
 
+        # Per-strategy regime participation (regime_gating_deep_dive.md §2). The
+        # risk_profile.regime_multipliers tuple is (Calm, Trending, HighVol, Crisis)
+        # and maps 1:1 onto the engine's regime_w_* participation weights.
+        if ir.risk_profile is not None:
+            rp = ir.risk_profile
+            params["risk_per_trade_pct"] = rp.risk_per_trade_pct
+            params["kelly_multiplier"] = rp.kelly_multiplier
+            names = ["regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"]
+            for name, mult in zip(names, rp.regime_multipliers):
+                params[name] = mult
+
         result["strategies"].append({
             "id": strat_id,
             "kind": _infer_kind(strat_id),

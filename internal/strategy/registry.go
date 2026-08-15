@@ -148,12 +148,18 @@ func GlobalRegistry() *Registry {
 			"volatility_harvesting":  func() Strategy { return NewVolHarvestingRunner() },
 			"vol_arb":                func() Strategy { return NewVolHarvestingRunner() },
 			"dragon_trend":           func() Strategy { return NewDragonTrendRunner() },
-			"vwap_mr":                func() Strategy { return &MeanReversionRunner{
-				Lookback: 20, EntryZ: 1.5, ExitZ: 0.5, MaxHold: 40, TrendPeriod: 100, Mode: "vwap",
-				closeHistory: make([]float64, 220), volumeHistory: make([]float64, 220),
-			}},
-			"volume_scalp":      func() Strategy { return NewVolumeScalpRunner() },
-			"vix_futures_carry": func() Strategy { return NewVIXFuturesCarryRunner() },
+			"vwap_mr": func() Strategy {
+				return &MeanReversionRunner{
+					Lookback: 20, EntryZ: 1.5, ExitZ: 0.5, MaxHold: 40, TrendPeriod: 100, Mode: "vwap",
+					closeHistory: make([]float64, 220), volumeHistory: make([]float64, 220),
+				}
+			},
+			"volume_scalp":         func() Strategy { return NewVolumeScalpRunner() },
+			"vix_futures_carry":    func() Strategy { return NewVIXFuturesCarryRunner() },
+			"momentum_12_1":        func() Strategy { return NewMomentumRunner() },
+			"time_series_momentum": func() Strategy { return NewMomentumRunner() },
+			"fx_carry":             func() Strategy { return NewCarryRunner() },
+			"session_momentum":     func() Strategy { return NewSessionMomentumRunner() },
 		}
 		for name, fn := range factories {
 			globalReg.factories[name] = fn

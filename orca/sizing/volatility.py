@@ -4,8 +4,12 @@ import numpy as np
 
 from orca.math.ewma import ewma_volatility
 
+__all__ = ["diversification_scaling", "ewma_volatility", "vol_adjusted_size"]
 
-def vol_adjusted_size(kelly_fraction: float, vol: float, baseline_vol: float, max_size: float) -> float:
+
+def vol_adjusted_size(
+    kelly_fraction: float, vol: float, baseline_vol: float, max_size: float
+) -> float:
     if baseline_vol <= 0:
         return min(kelly_fraction, max_size)
     vol_ratio = vol / baseline_vol

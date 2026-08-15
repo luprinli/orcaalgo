@@ -90,6 +90,8 @@ export interface BacktestRequest {
   propfirm_enabled?: boolean
   optimize?: boolean
   sizing_percent?: number
+  benchmark_kind?: string
+  benchmark_symbol?: string
 }
 
 export interface ComboResult {
@@ -112,6 +114,7 @@ export interface ComboResult {
   num_losses?: number
   error?: string
   gate_passed?: boolean
+  implausible?: boolean
   adverse_selection_rate?: number
   optimized?: boolean
   best_params?: Record<string, number>
@@ -143,12 +146,35 @@ export interface ComboResult {
   engine_version?: string
   wf_is_sharpe?: number
   wf_oos_sharpe?: number
+  wf_anchor_oos_sharpe?: number
+  wf_best_params?: string
+  wf_multiplicity_warning?: boolean
   first_candle_time?: string
   last_candle_time?: string
   declared_bars_per_day?: number
   effective_bars_per_day?: number
   mtm_sharpe_ratio?: number
   mtm_max_drawdown?: number
+  train_pct?: number
+  ml_feature_enabled?: boolean
+  data_generation_id?: string
+  signal_attempts?: number
+  signals_passed?: number
+  regime_rejected?: number
+  vol_halted?: number
+  pipeline_rejected?: number
+  ml_rejected?: number
+  fill_rejected?: number
+  candles_seen?: number
+  strategy_nil?: number
+  exit_signal_zero_qty?: number
+  trades_opened?: number
+  capital_zero?: number
+  rate_limited?: number
+  base_size_zero?: number
+  quantity_too_small?: number
+  exposure_blocked?: number
+  pipeline_rejects?: Record<string, number>
 }
 
 export interface MatrixResultsResponse {
@@ -346,11 +372,16 @@ export interface WalkForwardWindow {
   test_end?: string
   in_sample_sharpe?: number
   out_sample_sharpe?: number
+  out_sample_sortino?: number
   oos_win_rate?: number
   oos_return_pct?: number
+  oos_max_dd?: number
   oos_profit_factor?: number
   oos_trades?: number
   passed_compliance?: boolean
+  multiplicity_warning?: boolean
+  anchor_oos_sharpe?: number
+  anchor_passed_compliance?: boolean
 }
 
 export interface WalkForwardResponse {

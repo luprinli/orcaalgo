@@ -1,9 +1,9 @@
 package backtest
 
 import (
-	strategy "github.com/lee-econ/orca-core/internal/strategy"
 	"github.com/lee-econ/orca-core/internal/ml"
 	"github.com/lee-econ/orca-core/internal/risk"
+	strategy "github.com/lee-econ/orca-core/internal/strategy"
 )
 
 // EngineBuilder uses the Builder pattern to construct Engine instances
@@ -64,6 +64,7 @@ func (b *EngineBuilder) Build() *Engine {
 		exposure:      risk.NewExposureTracker(5.0, 0.25),
 		kellyMult:     0.25,
 		positionSizer: risk.NewPositionSizer(nil),
+		regimeMatrix:  risk.NewRegimeActivationMatrix(),
 		metaCfg:       ml.DefaultMetaLabelerConfig(),
 	}
 

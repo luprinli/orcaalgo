@@ -98,7 +98,22 @@ func (r *Repository) loadCandles(ctx context.Context, symbols []string, start, e
 			 ) d
 			 ORDER BY d.time ASC`
 
-		rows, err := r.pool.Query(ctx, query, args...)
+		// Transient pool/connection failures under matrix concurrency can drop a
+		// read-only candle query; retry with exponential backoff before treating it
+		// as a real data gap.
+		var rows pgx.Rows
+		var err error
+		const maxCandleQueryRetries = 5
+		for attempt := 0; attempt < maxCandleQueryRetries; attempt++ {
+			rows, err = r.pool.Query(ctx, query, args...)
+			if err == nil {
+				break
+			}
+			if attempt >= maxCandleQueryRetries-1 || ctx.Err() != nil {
+				break
+			}
+			time.Sleep(time.Duration(1<<attempt) * 100 * time.Millisecond)
+		}
 		if err != nil {
 			scanErrors = append(scanErrors, fmt.Sprintf("%s/%s: query err (%v)", sym, timeframe, err))
 			continue

@@ -1158,6 +1158,53 @@ def ingest_vix_cmd(
     typer.echo(f"Inserted {inserted} VIX log rows ({start_date} → {end_date})")
 
 
+@app.command("ingest-risk-free")
+def ingest_risk_free_cmd(
+    start: str = typer.Option("2021-07-01", "--start", help="Start date (YYYY-MM-DD)"),
+    end: str = typer.Option("2026-08-14", "--end", help="End date (YYYY-MM-DD)"),
+    name: str = typer.Option("risk_free_3m", "--name", help="Series name in benchmark_series"),
+) -> None:
+    """Fetch the ^IRX 13-week T-bill yield and insert into benchmark_series."""
+    from datetime import date as _date
+
+    import psycopg2
+
+    from orca.data.risk_free_ingestion import fetch_risk_free_yield
+
+    start_date = _date.fromisoformat(start)
+    end_date = _date.fromisoformat(end)
+
+    logs = fetch_risk_free_yield(start_date, end_date)
+    if not logs:
+        typer.echo("No risk-free data fetched.")
+        raise typer.Exit(1)
+
+    conn = psycopg2.connect(
+        __import__("os").environ.get(
+            "ORCA_DB_URL", "postgresql://orca:orca@localhost:5432/orca_core"
+        )
+    )
+    try:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """
+                INSERT INTO benchmark_series (name, timestamp, value, source)
+                VALUES %s
+                ON CONFLICT (name, timestamp) DO NOTHING
+                """,
+                [(name, l["timestamp"], l["value"], l["source"]) for l in logs],
+                page_size=500,
+            )
+            inserted = cur.rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    typer.echo(f"Inserted {inserted} risk-free rows into benchmark_series['{name}'] "
+               f"({start_date} → {end_date})")
+
+
 @app.command("validate-data-integrity")
 def validate_data_integrity_cmd(
     start: str = typer.Option(None, "--start", help="Start date (YYYY-MM-DD, default: 60 days ago)"),
@@ -1189,23 +1236,215 @@ def validate_data_integrity_cmd(
         raise typer.Exit(code=1)
 
 
+@app.command("calibrate-costs")
+def calibrate_costs_cmd(
+    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to calibrate (default: all with candle data)"),
+    timeframe: str = typer.Option("1d", "--timeframe", help="Candle timeframe to calibrate from"),
+    output_dir: str = typer.Option("configs/costs", "--output-dir", help="Output directory for per-symbol JSON"),
+    json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
+) -> None:
+    """Calibrate per-symbol spread and impact costs from DB candles.
+
+    Computes Corwin-Schultz spread, Roll spread, and square-root impact eta from
+    OHLCV candles and writes ``{output_dir}/{symbol}.json``. These coefficients
+    seed ``SlippageModel`` (HP #9 backtest cost realism).
+    """
+    import json as _json
+
+    from orca.costs.calibrate import calibrate_symbol_costs
+    from orca.data.db_integration import get_connection
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            if symbols:
+                placeholders = ",".join(["%s"] * len(symbols))
+                cur.execute(
+                    f"SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id "
+                    f"WHERE s.ticker IN ({placeholders}) AND c.timeframe = %s",
+                    [*symbols, timeframe],
+                )
+            else:
+                cur.execute(
+                    "SELECT DISTINCT s.ticker FROM candles c JOIN symbols s ON c.symbol_id = s.id "
+                    "WHERE c.timeframe = %s",
+                    (timeframe,),
+                )
+            available = [r[0] for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+    if not available:
+        typer.echo(f"No symbols found with {timeframe} data. Run seed or ingest first.", err=True)
+        raise typer.Exit(1)
+
+    import numpy as np
+
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    results: dict[str, dict] = {}
+    for symbol in available:
+        conn = get_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume
+                    FROM candles c JOIN symbols s ON c.symbol_id = s.id
+                    WHERE s.ticker = %s AND c.timeframe = %s
+                    ORDER BY c.time ASC
+                    """,
+                    (symbol, timeframe),
+                )
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        if not rows:
+            typer.echo(f"  {symbol}: no {timeframe} data")
+            continue
+
+        arr = np.array(rows, dtype=np.float64)
+        open_p, high_p, low_p, close_p, volume = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], arr[:, 4]
+        for col in (open_p, high_p, low_p, close_p):
+            col /= 100000.0
+
+        cal = calibrate_symbol_costs(high_p, low_p, close_p, volume, timeframe=timeframe)
+        cal.pop("per_bar_spread", None)
+        results[symbol] = cal
+        Path(output_dir, f"{symbol}.json").write_text(_json.dumps(cal, indent=2, default=str))
+        typer.echo(
+            f"  {symbol}: spread_bps={cal['spread_bps']:.3f} "
+            f"roll_bps={cal['roll_spread_bps'] if cal['roll_spread_bps'] == cal['roll_spread_bps'] else 'n/a'} "
+            f"eta={cal['impact_eta']:.4f} (n={cal['n_bars']})"
+        )
+
+    if json_output:
+        typer.echo(_json.dumps(results, indent=2, default=str))
+
+
+@app.command("benchmark-filter")
+def benchmark_filter_cmd(
+    input_file: str = typer.Option(
+        "-",
+        "--input",
+        help="JSON file with {strategy, benchmark, spec, n_trials} or '-' for stdin",
+    ),
+) -> None:
+    """Apply the market-based benchmark filter to aligned return series.
+
+    Reads a JSON object from stdin (or --input file)::
+
+        {"strategy": [...], "benchmark": [...], "spec": {"kind": "..."}, "n_trials": 1}
+
+    Prints the verdict JSON and exits 1 when the filter fails.
+    """
+    import json as _json
+    import sys as _sys
+
+    import numpy as np
+
+    from orca.benchmark import BenchmarkSpec, apply_benchmark_filter
+
+    if input_file == "-":
+        raw = _sys.stdin.read()
+    else:
+        raw = Path(input_file).read_text(encoding="utf-8")
+    data = _json.loads(raw)
+
+    strategy = np.asarray(data["strategy"], dtype=np.float64)
+    benchmark = np.asarray(data["benchmark"], dtype=np.float64)
+    spec = BenchmarkSpec(**data.get("spec", {}))
+    n_trials = int(data.get("n_trials", 1))
+
+    try:
+        verdict = apply_benchmark_filter(strategy, benchmark, spec, n_trials=n_trials)
+    except (ValueError, KeyError) as e:
+        typer.echo(_json.dumps({"error": str(e)}), err=True)
+        raise typer.Exit(code=1) from e
+    typer.echo(_json.dumps(verdict.as_dict(), indent=2))
+    if not verdict.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command("backtest-stats")
+def backtest_stats_cmd(
+    returns_file: str = typer.Option(
+        "-", "--returns-file", help="JSON file of daily returns (or '-' for stdin)"
+    ),
+    n_trials: int = typer.Option(
+        1, "--n-trials", help="Number of strategies/combinations tried (deflation)"
+    ),
+) -> None:
+    """Compute statistical-robustness stats (Sharpe SE, DSR, MinTRL) for a return series.
+
+    Reads a JSON array of per-period returns from ``--returns-file`` (or stdin
+    when ``-``) and prints the summary as JSON. Used by the Go API via subprocess
+    for the ``/backtests/:id/robustness`` endpoint.
+    """
+    import json as _json
+    import sys as _sys
+
+    import numpy as np
+
+    from orca.sizing.robustness import backtest_robustness_stats
+
+    if returns_file == "-":
+        raw = _sys.stdin.read()
+    else:
+        raw = Path(returns_file).read_text(encoding="utf-8")
+    returns = np.asarray(_json.loads(raw), dtype=np.float64)
+    stats = backtest_robustness_stats(returns, n_trials=n_trials)
+    typer.echo(_json.dumps(stats))
+
+
+@app.command("features")
+def features_cmd(
+    category: str | None = typer.Option(None, "--category", help="Filter by category (trend/momentum/volatility/volume/return)"),
+    json_output: bool = typer.Option(False, "--json", help="Output feature registry as JSON"),
+) -> None:
+    """List self-documenting feature/indicator metadata (R9)."""
+    import json as _json
+
+    from orca.features import list_features
+
+    features = list_features(category=category)
+    if json_output:
+        typer.echo(_json.dumps(features, indent=2))
+        return
+    for f in features:
+        params = ",".join(f["params"])
+        typer.echo(
+            f"{f['key']:<16} {f['category']:<12} {f['name']:<30} "
+            f"params=[{params}] engine={f['engine']}"
+        )
+
+
 @app.command("promote-gate")
 def promote_gate_cmd(
     matrix_csv: str = typer.Argument(..., help="Path to the matrix results CSV"),
     alpha: float = typer.Option(0.05, "--alpha", help="FDR/FWER significance level"),
     min_trades: int = typer.Option(20, "--min-trades", help="Minimum trades for reliability"),
+    require_dsr: bool = typer.Option(False, "--require-dsr", help="Require Deflated Sharpe Ratio >= threshold"),
+    dsr_threshold: float = typer.Option(0.95, "--dsr-threshold", help="DSR significance threshold"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
     """Apply the multiple-testing + walk-forward promotion gate to a matrix CSV.
 
     A combination is promotion-eligible only if it is BH-significant over the
-    full sweep and walk-forward OOS does not degrade >20%. Exits 0 only when at
-    least one survivor exists; otherwise exits 1 (no promotion).
+    full sweep and walk-forward OOS does not degrade >20%. Deflated Sharpe Ratio
+    is always reported; pass --require-dsr to make it a hard veto. Exits 0 only
+    when at least one survivor exists; otherwise exits 1 (no promotion).
     """
     import json as _json
     from orca.sizing.promotion_gate import apply_promotion_gate
 
-    result = apply_promotion_gate(matrix_csv, alpha=alpha, min_trades=min_trades)
+    result = apply_promotion_gate(
+        matrix_csv,
+        alpha=alpha,
+        min_trades=min_trades,
+        require_dsr=require_dsr,
+        dsr_threshold=dsr_threshold,
+    )
     if json_output:
         typer.echo(_json.dumps(result.as_dict(), indent=2))
     else:
@@ -1213,11 +1452,13 @@ def promote_gate_cmd(
         typer.echo(f"Reliable candidates (Sharpe>0, trades>={min_trades}): {result.n_candidates}")
         typer.echo(f"BH-significant (FDR {alpha:.0%}): {result.bh_significant}")
         typer.echo(f"Bonferroni-significant (FWER {alpha:.0%}): {result.bonferroni_significant}")
-        typer.echo(f"Survivors (BH + walk-forward): {len(result.survivors)}")
+        typer.echo(f"DSR-significant (DSR>={dsr_threshold:.0%}): {result.n_dsr_significant}")
+        typer.echo(f"Survivors (BH + walk-forward{' + DSR' if require_dsr else ''}): {len(result.survivors)}")
         for s in result.survivors:
             typer.echo(
                 f"  {s['strategy']:<22} {s['symbol']:<8} {s['timeframe']:<4} "
-                f"Sharpe={s['sharpe']:.4f} trades={s['trades']} p={s['p_value']:.2e}"
+                f"Sharpe={s['sharpe']:.4f} se={s['sharpe_se'] if s['sharpe_se'] else 'n/a'} "
+                f"DSR={s['deflated_sharpe_ratio']:.4f} trades={s['trades']} p={s['p_value']:.2e}"
             )
 
     if not result.passed:

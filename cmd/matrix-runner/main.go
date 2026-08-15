@@ -13,15 +13,17 @@ import (
 	"time"
 
 	"github.com/lee-econ/orca-core/internal/backtest"
+	"github.com/lee-econ/orca-core/internal/benchmark"
 	"github.com/lee-econ/orca-core/internal/config"
 	"github.com/lee-econ/orca-core/internal/db"
 )
 
 func main() {
-	optimize := flag.Bool("optimize", false, "Run light optimizer per combo and re-run with optimized params")
-	walkForward := flag.Bool("walk-forward", false, "Run walk-forward validation per combo (trainPct=0.66, nWindows=3)")
-	pipeline := flag.Bool("pipeline", false, "Wire the RiskPipeline for per-signal gating (default: inline sizing fallback, matching the frontend matrix)")
+	optimize := flag.Bool("optimize", false, "Quick full-period light optimization, then re-run with those params (fast approximation; use --walk-forward for OOS-validated params)")
+	walkForward := flag.Bool("walk-forward", false, "Embedded walk-forward: per-window IS optimization -> OOS with IVS plateau detection (canonical, single source of truth)")
+	pipeline := flag.Bool("pipeline", true, "Wire the RiskPipeline for per-signal gating (HP#17 canonical path; disable with --pipeline=false)")
 	dataSource := flag.String("data-source", "stooq", "Data source for candles (stooq | yahoo | synthetic)")
+	benchmarkSymbol := flag.String("benchmark", "", "Benchmark ticker for the market-based filter (e.g. SPY). Empty disables BenchmarkPass/IR/Alpha columns.")
 	flag.Parse()
 
 	cfg := db.DefaultConfig()
@@ -39,7 +41,9 @@ func main() {
 	outputPath, _ = filepath.Abs(outputPath)
 
 	today := time.Now().UTC().Truncate(24 * time.Hour)
-	start := today.AddDate(-1, 0, 0)
+	// Default 3-year window, matching the frontend matrix runner's default so the
+	// CLI and API produce comparable baselines out of the box.
+	start := today.AddDate(-3, 0, 0)
 	end := today
 	// Honor explicit window overrides (set by scripts/run-matrix.ps1). Walk-
 	// forward needs a multi-year window, so MATRIX_START/MATRIX_END matter here.
@@ -58,8 +62,15 @@ func main() {
 	strategies := envList("MATRIX_STRATEGIES", configDefaultStrategies())
 	timeframes := configDefaultTimeframes()
 
-	total := len(strategies) * len(symbols) * len(timeframes)
-	fmt.Printf("Matrix: %d combos (%d strategies x %d symbols x %d timeframes)\n", total, len(strategies), len(symbols), len(timeframes))
+	total := 0
+	for _, s := range strategies {
+		for _, tf := range timeframes {
+			if backtest.StrategyTimeframeAllowed(s, tf) {
+				total += len(symbols)
+			}
+		}
+	}
+	fmt.Printf("Matrix: %d combos (%d strategies x %d symbols x %d timeframes, timeframe-restricted)\n", total, len(strategies), len(symbols), len(timeframes))
 	fmt.Printf("Period: %s to %s\n", start.Format("2006-01-02"), end.Format("2006-01-02"))
 	fmt.Printf("Output: %s\n", outputPath)
 	if *optimize {
@@ -78,31 +89,47 @@ func main() {
 	defer f.Close()
 	w := csv.NewWriter(f)
 
-	header := []string{"Strategy", "Symbol", "Tf", "Trades", "Wins", "Losses", "Sharpe", "Sortino", "MaxDD%", "Return%", "WinRate", "ProfitFactor", "AvgWin", "AvgLoss", "LongTrades", "ShortTrades", "LongWinRate", "ShortWinRate", "LongGrossPnL", "ShortGrossPnL", "LongPF", "ShortPF", "MFE", "MAE", "GatePassed", "Optimized", "TrainPct", "Params", "Reliable", "TotalFees", "AvgSlippageBps", "CalmarRatio", "CandleCount", "Status", "MtmMaxDD%", "MtmSharpe", "FirstCandle", "LastCandle", "SigAttempts", "SigPassed", "PipelineRej", "VolHaltRej", "MLRejected", "DeclaredBPD", "EffectiveBPD", "Warnings", "DataGenID"}
+	header := []string{"Strategy", "Symbol", "Tf", "Trades", "Wins", "Losses", "Sharpe", "Sortino", "MaxDD%", "Return%", "WinRate", "ProfitFactor", "AvgWin", "AvgLoss", "LongTrades", "ShortTrades", "LongWinRate", "ShortWinRate", "LongGrossPnL", "ShortGrossPnL", "LongPF", "ShortPF", "MFE", "MAE", "GatePassed", "Optimized", "TrainPct", "Params", "Reliable", "TotalFees", "AvgSlippageBps", "CalmarRatio", "CandleCount", "Status", "MtmMaxDD%", "MtmSharpe", "FirstCandle", "LastCandle", "SigAttempts", "SigPassed", "PipelineRej", "VolHaltRej", "MLRejected", "RegimeRej", "FillRej", "StrategyNil", "ExitZeroQty", "PipelineRejBreakdown", "DeclaredBPD", "EffectiveBPD", "Warnings", "DataGenID"}
 	if *walkForward {
 		header = append(header, "WfISSharpe", "WfOOSSharpe", "WfPassedWindows", "WfTotalWindows", "WfReturnPct")
+	}
+	if *benchmarkSymbol != "" {
+		header = append(header, "BenchmarkPass", "BenchmarkIR", "BenchmarkAlpha")
 	}
 	w.Write(header)
 
 	ctx := context.Background()
+
+	var benchReturns map[string]float64
+	if *benchmarkSymbol != "" {
+		benchReturns = loadBenchmarkDailyReturns(ctx, dbAdapter, *benchmarkSymbol, start, end)
+		if len(benchReturns) > 0 {
+			fmt.Printf("Benchmark eval: %s (%d daily bars)\n", *benchmarkSymbol, len(benchReturns))
+		} else {
+			fmt.Printf("Benchmark eval: WARNING no daily bars for %s — BenchmarkPass/IR/Alpha will be N/A\n", *benchmarkSymbol)
+		}
+	}
 	var completed int64
 	startTime := time.Now()
 
 	for _, s := range strategies {
 		for _, sym := range symbols {
 			for _, tf := range timeframes {
+				if !backtest.StrategyTimeframeAllowed(s, tf) {
+					continue
+				}
 				config := backtest.BacktestConfig{
 					StrategyID: s, Symbols: []string{sym},
 					StartDate: start, EndDate: end, InitialCapital: 100000,
 					Timeframe: tf, DataSource: *dataSource, SizingPercent: 0.02, KellyFraction: 0.25,
-					WarmUpBars: 50,
-					ApplyGate:  true,
+					WarmUpBars:  50,
+					ApplyGate:   true,
 					GateProfile: "research",
 				}
 
 				optimized := false
 				params := ""
-				wfResults := &backtest.WalkForwardResult{}
+				wfResults := &backtest.OptimizedWalkForwardResult{}
 
 				if *optimize {
 					optResult := runLightOptimizeCombo(ctx, dbAdapter, config)
@@ -113,11 +140,11 @@ func main() {
 					}
 				}
 
-			engine := backtest.NewEngine(dbAdapter)
-			if *pipeline {
-				engine.WirePipeline()
-			}
-			result, err := engine.Run(ctx, config)
+				engine := backtest.NewEngine(dbAdapter)
+				if *pipeline {
+					engine.WirePipeline()
+				}
+				result, err := engine.Run(ctx, config)
 				n := atomic.AddInt64(&completed, 1)
 
 				if err != nil {
@@ -131,24 +158,23 @@ func main() {
 						"0.00", "0.0000", "0.0000", "0",
 						fmt.Sprintf("error: %v", err),
 						"N/A", "N/A", "N/A", "N/A",
-						"0", "0", "0", "0", "0",
+						"0", "0", "0", "0", "0", "0", "0", "0", "0", "",
 						"N/A", "N/A", "", "",
 					}
 					if *walkForward {
 						errRow = append(errRow, "N/A", "N/A", "0", "0", "N/A")
+					}
+					if *benchmarkSymbol != "" {
+						errRow = append(errRow, "N/A", "N/A", "N/A")
 					}
 					w.Write(errRow)
 					continue
 				}
 
 				if *walkForward && (optimized || len(result.StrategyParams) > 0 || (result.NumTrades >= 20 && result.SharpeRatio > 0)) {
-					wfConfig := config
-					if len(result.StrategyParams) > 0 {
-						wfConfig.StrategyParams = result.StrategyParams
-					}
-					wfResults = runWalkForwardCombo(ctx, dbAdapter, wfConfig, engine)
+					wfResults = runWalkForwardCombo(ctx, dbAdapter, config, engine)
 					if wfResults == nil {
-						wfResults = &backtest.WalkForwardResult{}
+						wfResults = &backtest.OptimizedWalkForwardResult{}
 					}
 				}
 
@@ -216,6 +242,11 @@ func main() {
 					fmt.Sprintf("%d", result.SignalDiag.PipelineRejected),
 					fmt.Sprintf("%d", result.SignalDiag.VolHalted),
 					fmt.Sprintf("%d", result.SignalDiag.MLRejected),
+					fmt.Sprintf("%d", result.SignalDiag.RegimeRejected),
+					fmt.Sprintf("%d", result.SignalDiag.FillRejected),
+					fmt.Sprintf("%d", result.SignalDiag.StrategyNil),
+					fmt.Sprintf("%d", result.SignalDiag.ExitSignalZeroQty),
+					pipelineRejectBreakdown(result.SignalDiag.PipelineRejects),
 					fmt.Sprintf("%.1f", result.DeclaredBarsPerDay),
 					fmt.Sprintf("%.1f", result.EffectiveBarsPerDay),
 					warningsStr,
@@ -234,6 +265,11 @@ func main() {
 					} else {
 						row = append(row, "N/A", "N/A", "0", "0", "N/A")
 					}
+				}
+
+				if *benchmarkSymbol != "" {
+					bp, ir, alpha := evalBenchmark(ctx, result, benchReturns, *benchmarkSymbol)
+					row = append(row, bp, ir, alpha)
 				}
 
 				w.Write(row)
@@ -268,21 +304,65 @@ func runLightOptimizeCombo(ctx context.Context, db backtest.Database, baseCfg ba
 	return backtest.RunLightOptimize(ctx, db, optCfg)
 }
 
-func runWalkForwardCombo(ctx context.Context, db backtest.Database, baseCfg backtest.BacktestConfig, engine *backtest.Engine) *backtest.WalkForwardResult {
-	wfCfg := backtest.WalkForwardConfig{
-		Config:             baseCfg,
-		TrainWindows:       3,
-		TrainYears:         1,
-		TestYears:          2,
-		StepMonths:         6,
-		PurgeTradingDays:   5,
-		EmbargoTradingDays: 2,
-	}
-	result, err := engine.RunWalkForward(ctx, wfCfg)
+func runWalkForwardCombo(ctx context.Context, db backtest.Database, baseCfg backtest.BacktestConfig, engine *backtest.Engine) *backtest.OptimizedWalkForwardResult {
+	owfCfg := backtest.NewOptimizedWalkForwardConfig(baseCfg, baseCfg.StrategyID)
+	result, err := engine.RunOptimizedWalkForward(ctx, owfCfg)
 	if err != nil {
 		return nil
 	}
 	return result
+}
+
+// loadBenchmarkDailyReturns loads 1d stooq candles for the benchmark symbol and
+// returns close-to-close decimal returns keyed by "2006-01-02" date. Computed
+// once per run — the benchmark series is identical across all combos.
+func loadBenchmarkDailyReturns(ctx context.Context, db backtest.Database, symbol string, start, end time.Time) map[string]float64 {
+	candles, err := db.LoadCandlesFiltered(ctx, []string{symbol}, start, end, "stooq")
+	if err != nil || len(candles) == 0 || len(candles[0]) < 2 {
+		return nil
+	}
+	bars := candles[0]
+	out := make(map[string]float64, len(bars)-1)
+	for i := 1; i < len(bars); i++ {
+		prev := bars[i-1].Close.Float64()
+		cur := bars[i].Close.Float64()
+		if prev > 0 {
+			out[bars[i].Time.Format("2006-01-02")] = cur/prev - 1.0
+		}
+	}
+	return out
+}
+
+// evalBenchmark computes the market-based benchmark filter verdict for one combo
+// by aligning its daily returns to the (shared) benchmark series and shelling
+// out to `orca benchmark-filter`. Returns CSV cells (pass, IR, alpha).
+func evalBenchmark(ctx context.Context, result *backtest.BacktestResult, benchReturns map[string]float64, symbol string) (string, string, string) {
+	if result == nil || len(benchReturns) == 0 {
+		return "N/A", "N/A", "N/A"
+	}
+	var strat, bench []float64
+	for _, d := range result.DailyReturns {
+		if r, ok := benchReturns[d.Date.Format("2006-01-02")]; ok {
+			strat = append(strat, d.Return/100.0)
+			bench = append(bench, r)
+		}
+	}
+	if len(strat) < 3 {
+		return "N/A", "N/A", "N/A"
+	}
+	verdict, err := benchmark.Evaluate(ctx, strat, bench, "equity_index", symbol, 0, 1)
+	if err != nil {
+		return "N/A", "N/A", "N/A"
+	}
+	ir := "N/A"
+	alpha := "N/A"
+	if verdict.Metrics.InformationRatio != nil {
+		ir = fmt.Sprintf("%.4f", *verdict.Metrics.InformationRatio)
+	}
+	if verdict.Metrics.AlphaAnnualized != nil {
+		alpha = fmt.Sprintf("%.4f", *verdict.Metrics.AlphaAnnualized)
+	}
+	return fmt.Sprintf("%t", verdict.Passed), ir, alpha
 }
 
 func configDefaultTickers() []string {
@@ -353,6 +433,19 @@ func trim(s string) string {
 // JSON form `"kelly_fraction":0.25`; Go's `%v` map formatting would not.
 func jsonParams(v interface{}) string {
 	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// pipelineRejectBreakdown renders the reason-keyed pipeline rejection counts as
+// a compact JSON object (e.g. {"exposure:equity_negative":3}), or "" when empty.
+func pipelineRejectBreakdown(m map[string]int) string {
+	if len(m) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(m)
 	if err != nil {
 		return ""
 	}

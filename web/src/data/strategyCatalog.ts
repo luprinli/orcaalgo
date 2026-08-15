@@ -25,4 +25,7 @@ export const STRATEGY_CATALOG: StrategyCatalogEntry[] = [
   { typeKey: 'donchian_breakout', displayName: 'Donchian Breakout', inEngine: true, regimes: ['All'], description: 'Donchian channel breakout with entry buffer.' },
   { typeKey: 'keltner_macd', displayName: 'Keltner MACD', inEngine: true, regimes: ['All'], description: 'Keltner channel with MACD confirmation.' },
   { typeKey: 'ichimoku_cloud', displayName: 'Ichimoku Cloud', inEngine: true, regimes: ['All'], description: 'Ichimoku cloud strategy.' },
+  { typeKey: 'momentum_12_1', displayName: 'Time-Series Momentum (12-1)', inEngine: true, regimes: ['Calm', 'Trending'], description: 'Long-only absolute momentum with trend filter and ATR trailing stop.' },
+  { typeKey: 'fx_carry', displayName: 'FX Carry', inEngine: true, regimes: ['Calm', 'HighVol'], description: 'Interest-rate carry with trend filter and trailing stop.' },
+  { typeKey: 'session_momentum', displayName: 'Session Momentum', inEngine: true, regimes: ['Calm', 'Trending', 'HighVol'], description: 'Intraday session-open drift with volume confirmation.' },
 ]

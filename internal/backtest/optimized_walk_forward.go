@@ -2,8 +2,10 @@ package backtest
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -67,22 +69,19 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 			combinations = combinations[:config.MaxCombinations]
 		}
 
-		var allScores []ParamScore
-
-		for _, params := range combinations {
-			trainCfg := config.Config
-			trainCfg.StartDate = w.TrainStart
-			trainCfg.EndDate = w.TrainEnd
-			trainCfg.StrategyParams = params
-
-			trainResult, err := e.Run(ctx, trainCfg)
-			if err != nil || trainResult == nil {
-				continue
-			}
-
-			score := ComputeObjective(trainResult, config.ObjectiveType, config.ObjectiveWeights)
-			allScores = append(allScores, ParamScore{Params: params, Score: score})
+		// Anchor baseline: default params on the OOS window. Optimized OOS that
+		// does not beat this fixed-parameter baseline is overfit noise.
+		anchorCfg := config.Config
+		anchorCfg.StartDate = w.TestStart
+		anchorCfg.EndDate = w.TestEnd
+		anchorOOSSharpe := -1e9
+		var anchorPassed bool
+		if anchorResult, aerr := e.Run(ctx, anchorCfg); aerr == nil && anchorResult != nil {
+			anchorOOSSharpe = anchorResult.SharpeRatio
+			anchorPassed = anchorResult.ComplianceReport != nil && anchorResult.ComplianceReport.Passed
 		}
+
+		allScores := e.evaluateISCombinations(ctx, config, w, combinations)
 
 		if len(allScores) == 0 {
 			continue
@@ -125,7 +124,7 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		testCfg := config.Config
 		testCfg.StartDate = w.TestStart
 		testCfg.EndDate = w.TestEnd
-		testCfg.StrategyParams = selectedParams
+		ApplyOptimizationParams(&testCfg, selectedParams)
 
 		var bestOOSScore float64 = -1e9
 		var bestOOSTestResult *BacktestResult
@@ -138,7 +137,7 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 				evalCfg := testCfg
 				evalCfg.StartDate = w.TestStart
 				evalCfg.EndDate = w.TestEnd
-				evalCfg.StrategyParams = params
+				ApplyOptimizationParams(&evalCfg, params)
 				testResult, err := e.Run(ctx, evalCfg)
 				if err != nil || testResult == nil {
 					continue
@@ -176,6 +175,8 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 			OOSTrades:       bestOOSTestResult.NumTrades,
 			PassedCompliance:      bestOOSTestResult.ComplianceReport != nil && bestOOSTestResult.ComplianceReport.Passed,
 			MultiplicityWarning:   allScores[0].Score <= scoreThreshold,
+			AnchorOOSSharpe:       anchorOOSSharpe,
+			AnchorPassedCompliance: anchorPassed,
 		}
 
 		result.Windows = append(result.Windows, wr)
@@ -188,10 +189,13 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		}
 	}
 
-	var totalIS, totalOOS float64
+	var totalIS, totalOOS, totalAnchor float64
 	for _, w := range result.Windows {
 		totalIS += w.InSampleSharpe
 		totalOOS += w.OutSampleSharpe
+		if w.AnchorOOSSharpe > -1e8 {
+			totalAnchor += w.AnchorOOSSharpe
+		}
 	}
 	if len(result.Windows) > 0 {
 		result.OverallSharpe = totalIS / float64(len(result.Windows))
@@ -199,13 +203,120 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		if result.OverallSharpe > 0 {
 			result.SharpeDegradation = (result.OverallSharpe - result.AvgOOSSharpe) / result.OverallSharpe * 100
 		}
+		result.AvgAnchorOOSSharpe = totalAnchor / float64(len(result.Windows))
 	}
 
 	return result, nil
 }
 
-func RunIVS(scoredParams []ParamScore, searchSpace SearchSpace, cfg IVSConfig) (map[string]float64, bool) {
-	if len(scoredParams) == 0 {
+// evaluateISCombinations runs the in-sample (train-window) evaluation for every
+// candidate parameter set, in parallel when a database is available (a fresh
+// engine per combination), falling back to a serial run on the receiver engine
+// otherwise. This is the expensive inner loop of the embedded walk-forward.
+func (e *Engine) evaluateISCombinations(ctx context.Context, config OptimizedWalkForwardConfig, w WalkForwardWindow, combinations []map[string]float64) []ParamScore {
+	if e.db == nil || len(combinations) < 2 {
+		var scores []ParamScore
+		for _, params := range combinations {
+			trainCfg := config.Config
+			trainCfg.StartDate = w.TrainStart
+			trainCfg.EndDate = w.TrainEnd
+			ApplyOptimizationParams(&trainCfg, params)
+			trainResult, err := e.Run(ctx, trainCfg)
+			if err != nil || trainResult == nil {
+				continue
+			}
+			score := ComputeObjective(trainResult, config.ObjectiveType, config.ObjectiveWeights)
+			scores = append(scores, ParamScore{Params: params, Score: score})
+		}
+		return scores
+	}
+
+	allScores := make([]ParamScore, len(combinations))
+	var mu sync.Mutex
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for idx, params := range combinations {
+		wg.Add(1)
+		go func(idx int, params map[string]float64) {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+
+			trainCfg := config.Config
+			trainCfg.StartDate = w.TrainStart
+			trainCfg.EndDate = w.TrainEnd
+			ApplyOptimizationParams(&trainCfg, params)
+
+			engine := NewEngine(e.db)
+			trainResult, err := engine.Run(ctx, trainCfg)
+			if err != nil || trainResult == nil {
+				return
+			}
+			score := ComputeObjective(trainResult, config.ObjectiveType, config.ObjectiveWeights)
+
+			mu.Lock()
+			allScores[idx] = ParamScore{Params: params, Score: score}
+			mu.Unlock()
+		}(idx, params)
+	}
+	wg.Wait()
+
+	out := allScores[:0]
+	for _, s := range allScores {
+		if s.Params != nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// hasMultiplicityWarning reports whether any window flagged a multiplicity
+// warning (best IS score within 2 std of the median — the "best" params are
+// not clearly better than chance after multiple-testing correction).
+func (r *OptimizedWalkForwardResult) hasMultiplicityWarning() bool {
+	for _, w := range r.Windows {
+		if w.MultiplicityWarning {
+			return true
+		}
+	}
+	return false
+}
+
+// encodeWfBestParams serializes the IVS-robust parameter island (falling back
+// to the raw best params) from the window with the highest OOS Sharpe, for
+// persistence and promotion. It is the single source of truth for "which params
+// survived walk-forward".
+func encodeWfBestParams(r *OptimizedWalkForwardResult) string {
+	if r == nil || len(r.Windows) == 0 {
+		return ""
+	}
+	bestIdx := 0
+	for i := 1; i < len(r.Windows); i++ {
+		if r.Windows[i].OutSampleSharpe > r.Windows[bestIdx].OutSampleSharpe {
+			bestIdx = i
+		}
+	}
+	var params map[string]float64
+	if bestIdx < len(r.IVSRobustParamsPerWindow) && r.IVSRobustParamsPerWindow[bestIdx] != nil {
+		params = r.IVSRobustParamsPerWindow[bestIdx]
+	} else if bestIdx < len(r.BestParamsPerWindow) {
+		params = r.BestParamsPerWindow[bestIdx]
+	}
+	if params == nil {
+		return ""
+	}
+	b, err := json.Marshal(params)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func RunIVS(scoredParams []ParamScore, searchSpace SearchSpace, cfg IVSConfig) (map[string]float64, bool) {	if len(scoredParams) == 0 {
 		return nil, false
 	}
 
@@ -351,20 +462,21 @@ func sortedParamNames(space SearchSpace) []string {
 	return names
 }
 
-func DefaultOptimizedWalkForwardConfig(strategyID string, symbols []string, startDate, endDate time.Time, initialCapital float64) OptimizedWalkForwardConfig {
+// NewOptimizedWalkForwardConfig builds an OptimizedWalkForwardConfig with the
+// canonical optimization defaults (strategy search space, composite objective,
+// IVS plateau detection) wired to the given base backtest config. It is the
+// single source of truth for the embedded IS-optimization → OOS walk-forward
+// used by the matrix, CLI, and job runner.
+func NewOptimizedWalkForwardConfig(base BacktestConfig, strategyID string) OptimizedWalkForwardConfig {
 	return OptimizedWalkForwardConfig{
 		WalkForwardConfig: WalkForwardConfig{
-			Config: BacktestConfig{
-				StrategyID:     strategyID,
-				Symbols:        symbols,
-				StartDate:      startDate,
-				EndDate:        endDate,
-				InitialCapital: initialCapital,
-			},
-			TrainWindows: 5,
-			TrainYears:   1,
-			TestYears:    1,
-			StepMonths:   3,
+			Config:             base,
+			TrainWindows:       3,
+			TrainYears:         1,
+			TestYears:          1,
+			StepMonths:         6,
+			PurgeTradingDays:   5,
+			EmbargoTradingDays: 2,
 		},
 		OptimizationConfig: OptimizationConfig{
 			StrategyID:      strategyID,
@@ -379,4 +491,18 @@ func DefaultOptimizedWalkForwardConfig(strategyID string, symbols []string, star
 		},
 		IVSConfig: DefaultIVSConfig(),
 	}
+}
+
+func DefaultOptimizedWalkForwardConfig(strategyID string, symbols []string, startDate, endDate time.Time, initialCapital float64) OptimizedWalkForwardConfig {
+	cfg := NewOptimizedWalkForwardConfig(BacktestConfig{
+		StrategyID:     strategyID,
+		Symbols:        symbols,
+		StartDate:      startDate,
+		EndDate:        endDate,
+		InitialCapital: initialCapital,
+	}, strategyID)
+	// Job-runner defaults: longer anchor and more roll windows.
+	cfg.WalkForwardConfig.TrainWindows = 5
+	cfg.WalkForwardConfig.StepMonths = 3
+	return cfg
 }

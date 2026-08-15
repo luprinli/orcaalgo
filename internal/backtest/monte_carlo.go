@@ -46,9 +46,9 @@ type MCResult struct {
 
 func newMCResult(cfg MCConfig, iters []MCIterationResult) *MCResult {
 	summary := computeMCSummary(iters, cfg)
-	passProb := 1.0
+	passProb := 100.0
 	if summary.BustProbability > 0 {
-		passProb = 1.0 - summary.BustProbability
+		passProb = (1.0 - summary.BustProbability) * 100.0
 	}
 	return &MCResult{
 		Config:         cfg,

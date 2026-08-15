@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lee-econ/orca-core/internal/risk"
 	strategy "github.com/lee-econ/orca-core/internal/strategy"
 )
 
@@ -19,13 +20,13 @@ const (
 )
 
 type ParamConstraint struct {
-	Name         string
-	Type         ParamType
-	Min          float64
-	Max          float64
-	Step         float64
+	Name              string
+	Type              ParamType
+	Min               float64
+	Max               float64
+	Step              float64
 	CategoricalValues []string
-	Condition   *ConditionalRule
+	Condition         *ConditionalRule
 }
 
 type ConditionalRule struct {
@@ -72,37 +73,129 @@ func (s SearchSpace) checkCondition(combo map[string]float64) bool {
 		if !lok || !rok {
 			continue
 		}
-		switch c.Condition.Operator {
-		case "lt":
-			if !(leftVal < rightVal) {
-				return false
-			}
-		case "gt":
-			if !(leftVal > rightVal) {
-				return false
-			}
-		case "lte":
-			if !(leftVal <= rightVal) {
-				return false
-			}
-		case "gte":
-			if !(leftVal >= rightVal) {
-				return false
-			}
+		if !compareCondition(c.Condition.Operator, leftVal, rightVal) {
+			return false
 		}
 	}
 	return true
 }
 
+// compareCondition evaluates a comparison operator between two numeric values.
+func compareCondition(op string, left, right float64) bool {
+	switch op {
+	case "lt":
+		return left < right
+	case "gt":
+		return left > right
+	case "lte":
+		return left <= right
+	case "gte":
+		return left >= right
+	case "eq":
+		return left == right
+	case "neq":
+		return left != right
+	default:
+		return true
+	}
+}
+
+// GenerateAllCombinations enumerates all condition-satisfying combinations with
+// prefix pruning (§VIII.8 item 4). When a combo fails a condition, all combos
+// that share the same prefix up to the highest condition parameter are skipped
+// (they must fail the same condition), instead of enumerating the full Cartesian
+// product and filtering afterward. This bounds the effective space for
+// walk-forward/optimization sweeps with many parameters.
 func (s SearchSpace) GenerateAllCombinations() []map[string]float64 {
-	raw := s.generateAllRaw()
-	filtered := make([]map[string]float64, 0, len(raw))
-	for _, combo := range raw {
-		if s.checkCondition(combo) {
-			filtered = append(filtered, combo)
+	var names []string
+	for name := range s {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	posByName := make(map[string]int, len(names))
+	for i, n := range names {
+		posByName[n] = i
+	}
+
+	grids := make([][]float64, len(names))
+	for i, name := range names {
+		grids[i] = s[name].Grid()
+	}
+
+	type cond struct {
+		left, right int
+		op          string
+	}
+	var conds []cond
+	for _, c := range s {
+		if c.Condition == nil {
+			continue
+		}
+		conds = append(conds, cond{
+			left:  posByName[c.Condition.LeftParam],
+			right: posByName[c.Condition.RightParam],
+			op:    c.Condition.Operator,
+		})
+	}
+
+	var results []map[string]float64
+	indices := make([]int, len(names))
+
+	for {
+		combo := make(map[string]float64, len(names))
+		for i, name := range names {
+			if s[name].Type == ParamInteger {
+				combo[name] = float64(int(grids[i][indices[i]]))
+			} else {
+				combo[name] = grids[i][indices[i]]
+			}
+		}
+
+		valid := true
+		prunePos := len(names) - 1
+		for _, c := range conds {
+			leftVal, lok := combo[names[c.left]]
+			rightVal, rok := combo[names[c.right]]
+			if !lok || !rok {
+				continue
+			}
+			if !compareCondition(c.op, leftVal, rightVal) {
+				valid = false
+				if c.left > prunePos {
+					prunePos = c.left
+				}
+				if c.right > prunePos {
+					prunePos = c.right
+				}
+			}
+		}
+
+		if valid {
+			results = append(results, combo)
+		} else {
+			// Skip the subtree sharing this prefix: reset trailing params and
+			// advance from prunePos rather than the rightmost position.
+			for i := prunePos + 1; i < len(names); i++ {
+				indices[i] = 0
+			}
+		}
+
+		pos := prunePos
+		for pos >= 0 {
+			indices[pos]++
+			if indices[pos] < len(grids[pos]) {
+				break
+			}
+			indices[pos] = 0
+			pos--
+		}
+		if pos < 0 {
+			break
 		}
 	}
-	return filtered
+
+	return results
 }
 
 func (s SearchSpace) generateAllRaw() []map[string]float64 {
@@ -210,38 +303,38 @@ func (s SearchSpace) GenerateCombinations(method SearchMethod, budget int, seed 
 type ObjectiveType string
 
 const (
-	ObjectiveSharpe      ObjectiveType = "sharpe"
-	ObjectiveSortino     ObjectiveType = "sortino"
+	ObjectiveSharpe       ObjectiveType = "sharpe"
+	ObjectiveSortino      ObjectiveType = "sortino"
 	ObjectiveProfitFactor ObjectiveType = "profit_factor"
-	ObjectiveWinRate     ObjectiveType = "win_rate"
-	ObjectiveMinDD       ObjectiveType = "min_drawdown"
-	ObjectiveDDRatio     ObjectiveType = "sharpe_over_dd"
-	ObjectiveComposite   ObjectiveType = "composite"
+	ObjectiveWinRate      ObjectiveType = "win_rate"
+	ObjectiveMinDD        ObjectiveType = "min_drawdown"
+	ObjectiveDDRatio      ObjectiveType = "sharpe_over_dd"
+	ObjectiveComposite    ObjectiveType = "composite"
 )
 
 type SearchMethod string
 
 const (
-	SearchGrid    SearchMethod = "grid"
-	SearchRandom  SearchMethod = "random"
+	SearchGrid     SearchMethod = "grid"
+	SearchRandom   SearchMethod = "random"
 	SearchBayesian SearchMethod = "bayesian"
 )
 
 type OptimizationConfig struct {
-	StrategyID      string
-	SearchSpace     SearchSpace
-	ObjectiveType   ObjectiveType
-	MaxCombinations int
+	StrategyID       string
+	SearchSpace      SearchSpace
+	ObjectiveType    ObjectiveType
+	MaxCombinations  int
 	ObjectiveWeights map[ObjectiveType]float64
-	SearchMethod    SearchMethod
-	RandomSeed      int64
+	SearchMethod     SearchMethod
+	RandomSeed       int64
 }
 
 type OptimizationResult struct {
 	BestParams        map[string]float64
 	BestScore         float64
 	TotalCombinations int
-	Evaluated          int
+	Evaluated         int
 }
 
 type ParamScore struct {
@@ -302,7 +395,8 @@ func DefaultSearchSpace(strategyID string) SearchSpace {
 		// Unknown strategy: no search space (nothing to optimize, including sizing).
 		return nil
 	}
-	return addUniversalParams(space)
+	space = addUniversalParams(space)
+	return addRegimeParams(space, strategyID)
 }
 
 // UniversalParamDefs are optimization parameters that apply to EVERY strategy
@@ -343,6 +437,51 @@ func addUniversalParams(space SearchSpace) SearchSpace {
 	return space
 }
 
+// RegimeParamDefs returns the per-regime participation weights (0..1) and
+// regime-conditional exit multipliers for a strategy, defaulting participation to
+// the strategy's current binary Allowed pattern (regime_gating_deep_dive.md §2-3).
+func RegimeParamDefs(strategyID string) []strategy.ParamDef {
+	entry := risk.NewRegimeActivationMatrix().Get(strategyID)
+	names := []string{"regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"}
+	labels := []string{"Calm", "Trending", "HighVol", "Crisis"}
+	defs := make([]strategy.ParamDef, 0, 7)
+	for i, name := range names {
+		def := 0.0
+		if entry.Allowed[i] {
+			def = 1.0
+		}
+		defs = append(defs, strategy.ParamDef{
+			Name: name, Type: strategy.ParamContinuous,
+			Default: def, Min: 0, Max: 1.0, Step: 0.25,
+			Group: "Regime", Description: "Participation weight in " + labels[i] + " regime (0=block, 1=full size)",
+		})
+	}
+	defs = append(defs,
+		strategy.ParamDef{Name: "stop_mult_highvol", Type: strategy.ParamContinuous, Default: 1.0, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Regime", Description: "Stop-loss width multiplier in HighVol regime"},
+		strategy.ParamDef{Name: "stop_mult_crisis", Type: strategy.ParamContinuous, Default: 1.0, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Regime", Description: "Stop-loss width multiplier in Crisis regime"},
+		strategy.ParamDef{Name: "profit_mult_trending", Type: strategy.ParamContinuous, Default: 1.0, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Regime", Description: "Take-profit distance multiplier in Trending regime"},
+	)
+	return defs
+}
+
+// addRegimeParams injects the regime participation weights into a search space,
+// so regime gating is optimizable per strategy.
+func addRegimeParams(space SearchSpace, strategyID string) SearchSpace {
+	if space == nil {
+		space = make(SearchSpace)
+	}
+	for _, d := range RegimeParamDefs(strategyID) {
+		if _, exists := space[d.Name]; exists {
+			continue
+		}
+		space[d.Name] = ParamConstraint{
+			Name: d.Name, Type: ParamContinuous,
+			Min: d.Min, Max: d.Max, Step: d.Step,
+		}
+	}
+	return space
+}
+
 // ApplyOptimizationParams applies a parameter combination to a BacktestConfig.
 // Universal parameters (e.g. sizing_percent, kelly_fraction) are mapped onto the
 // corresponding BacktestConfig fields; all remaining parameters are passed
@@ -357,9 +496,15 @@ func ApplyOptimizationParams(cfg *BacktestConfig, params map[string]float64) {
 	for name, val := range params {
 		switch name {
 		case "sizing_percent":
+			// Per-strategy sizing (report R1). Also set the engine-wide field for
+			// backward compatibility; resolveSizingPercent prefers the per-strategy
+			// StrategyParams value.
 			cfg.SizingPercent = val
+			stratParams[name] = val
 		case "kelly_fraction":
+			// Per-strategy Kelly (report R2, HP#6 cap applied in resolveKellyFraction).
 			cfg.KellyFraction = val
+			stratParams[name] = val
 		default:
 			stratParams[name] = val
 		}

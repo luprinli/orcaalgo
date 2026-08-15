@@ -11,6 +11,7 @@ type KeltnerMACDRunner struct {
 	KeltnerPeriod   float64
 	MacdRequirement bool
 	AtrMultiplier   float64
+	ProfitATRMult   float64
 	peakPrice       types.Price
 }
 
@@ -20,12 +21,15 @@ func NewKeltnerMACDRunner() *KeltnerMACDRunner {
 		KeltnerPeriod:   20,
 		MacdRequirement: true,
 		AtrMultiplier:   2.0,
+		ProfitATRMult:   2.0,
 	}
 }
 
 func (r *KeltnerMACDRunner) Name() string { return "keltner_macd" }
 func (r *KeltnerMACDRunner) Type() string { return "trend" }
-func (r *KeltnerMACDRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *KeltnerMACDRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *KeltnerMACDRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -37,6 +41,7 @@ func (r *KeltnerMACDRunner) Params() map[string]float64 {
 		"keltner_period":   r.KeltnerPeriod,
 		"macd_requirement": boolToFloat(r.MacdRequirement),
 		"atr_multiplier":   r.AtrMultiplier,
+		"profit_atr_mult":  r.ProfitATRMult,
 	}
 }
 
@@ -50,6 +55,9 @@ func (r *KeltnerMACDRunner) SetParams(params map[string]float64) {
 	if v, ok := params["atr_multiplier"]; ok {
 		r.AtrMultiplier = v
 	}
+	if v, ok := params["profit_atr_mult"]; ok {
+		r.ProfitATRMult = v
+	}
 }
 
 func (r *KeltnerMACDRunner) ParamDefs() []ParamDef {
@@ -57,6 +65,7 @@ func (r *KeltnerMACDRunner) ParamDefs() []ParamDef {
 		{Name: "keltner_period", Type: ParamInteger, Default: 20, Min: 10, Max: 50, Step: 5, Group: "Entry", Description: "Keltner Channel lookback period"},
 		{Name: "macd_requirement", Type: ParamInteger, Default: 1, Min: 0, Max: 1, Step: 1, Group: "Filter", Description: "Require MACD confirmation (1=yes, 0=no)"},
 		{Name: "atr_multiplier", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 4.0, Step: 0.5, Group: "Risk", Description: "ATR multiplier for trailing stop"},
+		{Name: "profit_atr_mult", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 5.0, Step: 0.5, Group: "Exit", Description: "ATR multiplier for take-profit distance"},
 	}
 }
 
@@ -118,13 +127,15 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	r.peakPrice = price
+	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	if price.Float64() > upperKC {
 		if r.MacdRequirement && !macdBullish {
 			return nil
 		}
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
@@ -132,8 +143,9 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if r.MacdRequirement && macdBullish {
 			return nil
 		}
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 

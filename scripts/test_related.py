@@ -40,6 +40,8 @@ PYTHON_TEST_MAP: dict[str, list[str]] = {
 GO_PACKAGE_MAP: dict[str, str] = {
     "internal/api/":       "./internal/api/...",
     "internal/broker/":    "./internal/broker/...",
+    "internal/breaker/":   "./internal/breaker/...",
+    "internal/benchmark/": "./internal/benchmark/...",
     "internal/backtest/":  "./internal/backtest/...",
     "internal/risk/":      "./internal/risk/...",
     "internal/strategy/":  "./internal/strategy/...",
@@ -53,6 +55,7 @@ GO_PACKAGE_MAP: dict[str, str] = {
     "internal/hash/":      "./internal/hash/...",
     "internal/llm/":       "./internal/llm/...",
     "internal/types/":     "./internal/types/...",
+    "internal/universe/":  "./internal/universe/...",
     "internal/notify/":    "./internal/notify/...",
     "internal/email/":     "./internal/email/...",
     "internal/market/":    "./internal/market/...",

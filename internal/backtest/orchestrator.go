@@ -52,20 +52,20 @@ type orchestratorEngine struct {
 }
 
 type Orchestrator struct {
-	db               Database
-	engines          []*orchestratorEngine
-	enginesByID      map[string]*orchestratorEngine
+	db                Database
+	engines           []*orchestratorEngine
+	enginesByID       map[string]*orchestratorEngine
 	enginesBySymbolTF map[string][]*orchestratorEngine
-	pool             *CapitalPoolSim
-	regimeMatrix     *risk.RegimeActivationMatrix
-	scheduler        *RebalanceScheduler
-	correlation      *CorrelationTracker
-	vixDetector      *VIXAccelerationDetector
-	reevaluator      *StrategyReevaluator
-	registry         *strategy.Registry
-	fillSim          *FillSimulator
-	config           OrchestratorConfig
-	orderIDSeq       uint32
+	pool              *CapitalPoolSim
+	regimeMatrix      *risk.RegimeActivationMatrix
+	scheduler         *RebalanceScheduler
+	correlation       *CorrelationTracker
+	vixDetector       *VIXAccelerationDetector
+	reevaluator       *StrategyReevaluator
+	registry          *strategy.Registry
+	fillSim           *FillSimulator
+	config            OrchestratorConfig
+	orderIDSeq        uint32
 }
 
 func NewOrchestrator(db Database, cfg OrchestratorConfig) (*Orchestrator, error) {
@@ -161,17 +161,17 @@ func (o *Orchestrator) AddStrategy(sym, tf, sid string) error {
 }
 
 type OrchestrationRunResult struct {
-	PoolEquity           []EquityPoint           `json:"pool_equity"`
-	PoolSharpe           float64                 `json:"pool_sharpe"`
-	PoolSortino          float64                 `json:"pool_sortino"`
-	PoolMaxDD            float64                 `json:"pool_maxdd"`
-	PoolReturnPct        float64                 `json:"pool_return_pct"`
-	RebalanceCosts       float64                 `json:"rebalance_costs"`
-	Trades               []Trade                 `json:"trades"`
-	StrategyPnL          map[string]float64      `json:"strategy_pnl"`
-	ActiveCount          []int                   `json:"active_count"`
-	AllocationHistory    []OrchAllocationPoint   `json:"allocation_history"`
-	CorrelationBreaches  []BreachEvent           `json:"correlation_breaches"`
+	PoolEquity          []EquityPoint         `json:"pool_equity"`
+	PoolSharpe          float64               `json:"pool_sharpe"`
+	PoolSortino         float64               `json:"pool_sortino"`
+	PoolMaxDD           float64               `json:"pool_maxdd"`
+	PoolReturnPct       float64               `json:"pool_return_pct"`
+	RebalanceCosts      float64               `json:"rebalance_costs"`
+	Trades              []Trade               `json:"trades"`
+	StrategyPnL         map[string]float64    `json:"strategy_pnl"`
+	ActiveCount         []int                 `json:"active_count"`
+	AllocationHistory   []OrchAllocationPoint `json:"allocation_history"`
+	CorrelationBreaches []BreachEvent         `json:"correlation_breaches"`
 }
 
 type OrchAllocationPoint struct {
@@ -325,7 +325,7 @@ func (o *Orchestrator) Run(ctx context.Context) (*OrchestrationRunResult, error)
 				continue
 			}
 
-			if !o.regimeMatrix.IsAllowed(eng.strategyID, regime) {
+			if o.regimeMatrix.ParticipationForRegime(eng.strategyID, regime) <= 0 {
 				continue
 			}
 
@@ -579,21 +579,21 @@ func (r *OrchestrationRunResult) ToJSON() json.RawMessage {
 }
 
 type EnrichedOrchResult struct {
-	PoolEquity          []EquityPoint         `json:"pool_equity"`
-	Trades             []Trade                `json:"trades"`
-	DailyReturns        []DailyReturn          `json:"daily_returns"`
-	MonthlyReturns      []MonthlyReturn        `json:"monthly_returns"`
-	StrategyPnL         map[string]float64     `json:"strategy_pnl"`
-	AllocationHistory   []OrchAllocationPoint  `json:"allocation_history"`
-	CorrelationBreaches []BreachEvent          `json:"correlation_breaches"`
-	ActiveCount         []int                  `json:"active_count"`
+	PoolEquity          []EquityPoint            `json:"pool_equity"`
+	Trades              []Trade                  `json:"trades"`
+	DailyReturns        []DailyReturn            `json:"daily_returns"`
+	MonthlyReturns      []MonthlyReturn          `json:"monthly_returns"`
+	StrategyPnL         map[string]float64       `json:"strategy_pnl"`
+	AllocationHistory   []OrchAllocationPoint    `json:"allocation_history"`
+	CorrelationBreaches []BreachEvent            `json:"correlation_breaches"`
+	ActiveCount         []int                    `json:"active_count"`
 	PerStrategyStats    map[string]StrategyStats `json:"per_strategy_stats"`
-	WinRate             float64                `json:"win_rate"`
-	ProfitFactor        float64                `json:"profit_factor"`
-	NumTrades           int                    `json:"num_trades"`
-	NumWins             int                    `json:"num_wins"`
-	NumLosses           int                    `json:"num_losses"`
-	MonteCarlo          *MCResult              `json:"monte_carlo,omitempty"`
+	WinRate             float64                  `json:"win_rate"`
+	ProfitFactor        float64                  `json:"profit_factor"`
+	NumTrades           int                      `json:"num_trades"`
+	NumWins             int                      `json:"num_wins"`
+	NumLosses           int                      `json:"num_losses"`
+	MonteCarlo          *MCResult                `json:"monte_carlo,omitempty"`
 }
 
 type StrategyStats struct {
@@ -612,7 +612,7 @@ type MonthlyReturn struct {
 func EnrichResultJSON(result *OrchestrationRunResult) *EnrichedOrchResult {
 	enriched := &EnrichedOrchResult{
 		PoolEquity:          result.PoolEquity,
-		Trades:             result.Trades,
+		Trades:              result.Trades,
 		StrategyPnL:         result.StrategyPnL,
 		AllocationHistory:   result.AllocationHistory,
 		CorrelationBreaches: result.CorrelationBreaches,

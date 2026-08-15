@@ -23,32 +23,41 @@ type WalkForwardWindow struct {
 }
 
 type WalkForwardResult struct {
-	Windows         []WindowResult
-	OverallSharpe   float64
-	OverallWinRate  float64
-	ProfitFactor    float64
-	TotalReturnPct  float64
-	PassedWindows   int
-	TotalWindows    int
-	AvgOOSSharpe    float64
-	SharpeDegradation float64
+	Windows          []WindowResult `json:"windows"`
+	OverallSharpe    float64        `json:"overall_sharpe"`
+	OverallWinRate   float64        `json:"overall_win_rate"`
+	ProfitFactor     float64        `json:"profit_factor"`
+	TotalReturnPct   float64        `json:"total_return_pct"`
+	PassedWindows    int            `json:"passed_windows"`
+	TotalWindows     int            `json:"total_windows"`
+	AvgOOSSharpe     float64        `json:"avg_oos_sharpe"`
+	SharpeDegradation float64       `json:"sharpe_degradation"`
+	// AvgAnchorOOSSharpe is the mean fixed-parameter (default params) OOS Sharpe
+	// across windows — the overfit-detection baseline.
+	AvgAnchorOOSSharpe float64 `json:"avg_anchor_oos_sharpe"`
 }
 
 type WindowResult struct {
-	Window       int
-	TrainStart   time.Time
-	TestStart    time.Time
-	TestEnd      time.Time
-	InSampleSharpe  float64
-	OutSampleSharpe float64
-	OutSampleSortino float64
-	OOSWinRate   float64
-	OOSReturnPct float64
-	OOSMaxDD     float64
-	OOSProfitFactor float64
-	OOSTrades            int
-	PassedCompliance     bool
-	MultiplicityWarning  bool
+	Window            int       `json:"window"`
+	TrainStart        time.Time `json:"train_start"`
+	TestStart         time.Time `json:"test_start"`
+	TestEnd           time.Time `json:"test_end"`
+	InSampleSharpe    float64   `json:"in_sample_sharpe"`
+	OutSampleSharpe   float64   `json:"out_sample_sharpe"`
+	OutSampleSortino  float64   `json:"out_sample_sortino"`
+	OOSWinRate        float64   `json:"oos_win_rate"`
+	OOSReturnPct      float64   `json:"oos_return_pct"`
+	OOSMaxDD          float64   `json:"oos_max_dd"`
+	OOSProfitFactor   float64   `json:"oos_profit_factor"`
+	OOSTrades         int       `json:"oos_trades"`
+	PassedCompliance  bool      `json:"passed_compliance"`
+	MultiplicityWarning bool    `json:"multiplicity_warning"`
+	// AnchorOOSSharpe is the fixed-parameter (default params) out-of-sample
+	// Sharpe for the same window. Comparing optimized OOS against this baseline
+	// detects overfitting: if the optimized OOS does not beat the anchor, the
+	// parameter island is noise.
+	AnchorOOSSharpe        float64 `json:"anchor_oos_sharpe"`
+	AnchorPassedCompliance bool    `json:"anchor_passed_compliance"`
 }
 
 func GenerateWalkForwardWindows(config WalkForwardConfig) []WalkForwardWindow {

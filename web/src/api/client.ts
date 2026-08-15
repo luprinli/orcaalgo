@@ -207,6 +207,39 @@ export const backtests = {
     get<BenchmarkResponse>(`/api/v1/backtests/${id}/benchmark`),
   dailyReturns: (id: string) => get<DailyReturn[]>(`/api/v1/backtests/${id}/daily-returns`),
   monthlyReturns: (id: string) => get<MonthlyReturn[]>(`/api/v1/backtests/${id}/monthly-returns`),
+  robustness: (id: string, nTrials?: number) =>
+    get<{
+      n_returns?: number
+      sharpe?: number
+      sharpe_se?: number
+      sharpe_ci_low?: number
+      sharpe_ci_high?: number
+      deflated_sharpe_ratio?: number
+      expected_max_sharpe?: number
+      min_trl?: number | null
+      n_trials?: number
+      error?: string
+    }>(`/api/v1/backtests/${id}/robustness${nTrials ? `?n_trials=${nTrials}` : ''}`),
+  benchmarkEval: (id: string, params?: { benchmark_symbol?: string; kind?: string; n_trials?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.benchmark_symbol) q.set('benchmark_symbol', params.benchmark_symbol)
+    if (params?.kind) q.set('kind', params.kind)
+    if (params?.n_trials) q.set('n_trials', String(params.n_trials))
+    return post<{
+      passed: boolean
+      kind: string
+      metrics: {
+        n_periods?: number
+        beta?: number
+        alpha_annualized?: number
+        information_ratio?: number
+        tracking_error?: number
+      }
+      deflated_active_sharpe: number
+      n_trials: number
+      error?: string
+    }>(`/api/v1/backtests/${id}/benchmark-eval${q.toString() ? `?${q}` : ''}`)
+  },
   optimization: (id: string) => get<OptimizationFootprint>(`/api/v1/backtests/${id}/optimization`),
   walkForward: (id: string) =>
     request<WalkForwardResponse>('GET', `/api/v1/backtests/${id}/walk-forward`),
@@ -376,6 +409,38 @@ export const admin = {
     ),
   upsertCorporateAction: (data: { symbol: string; action_date: string; split_ratio?: number; cash_dividend?: number }) =>
     post<{ upserted: boolean }>('/api/v1/admin/corporate-actions', data),
+  costCalibration: (symbol?: string) =>
+    get<{
+      cost_calibration: {
+        ticker: string
+        timeframe: string
+        spread_bps: number | null
+        roll_spread_bps: number | null
+        impact_eta: number | null
+        adverse_select_bps: number | null
+        estimator: string
+        calibrated_at: string
+      }[]
+    }>(`/api/v1/admin/cost-calibration${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`),
+  benchmarkEvals: (strategyId?: string) =>
+    get<{
+      benchmark_evals: {
+        id: number
+        strategy_id: string
+        benchmark_spec_hash: string
+        benchmark_kind: string
+        benchmark_symbols: string
+        window_start: string
+        window_end: string
+        information_ratio: number | null
+        alpha_annualized: number | null
+        beta: number | null
+        deflated_active_sharpe: number | null
+        n_trials: number | null
+        passed: boolean
+        evaluated_at: string
+      }[]
+    }>(`/api/v1/admin/benchmark-evals${strategyId ? `?strategy_id=${encodeURIComponent(strategyId)}` : ''}`),
   backtestCacheExport: () => get<{ count: number; results: unknown[] }>('/api/v1/admin/backtest-cache/export'),
   backtestCacheImport: (results: unknown[]) =>
     post<{ inserted: number; skipped: number }>('/api/v1/admin/backtest-cache/import', { results }),

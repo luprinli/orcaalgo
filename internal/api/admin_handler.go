@@ -52,7 +52,9 @@ func (h *AdminHandler) GetHealth(c *gin.Context) {
 	}
 
 	status := http.StatusOK
-	if !healthy { status = http.StatusServiceUnavailable }
+	if !healthy {
+		status = http.StatusServiceUnavailable
+	}
 	c.JSON(status, gin.H{"healthy": healthy, "components": components, "timestamp": time.Now().Format(time.RFC3339)})
 }
 
@@ -65,7 +67,9 @@ func (h *AdminHandler) SeedDatabase(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
 		return
 	}
-	var req struct{ Force bool `json:"force"` }
+	var req struct {
+		Force bool `json:"force"`
+	}
 	c.ShouldBindJSON(&req)
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
@@ -137,6 +141,12 @@ func (h *AdminHandler) RegisterRoutes(router *gin.RouterGroup) {
 		// Corporate actions (R3)
 		admin.GET("/corporate-actions", h.ListCorporateActions)
 		admin.POST("/corporate-actions", h.UpsertCorporateAction)
+
+		// Cost calibration (R2)
+		admin.GET("/cost-calibration", h.ListCostCalibration)
+
+		// Benchmark filter evaluations (Phase 1)
+		admin.GET("/benchmark-evals", h.ListBenchmarkEvals)
 
 		// Backtest cache administration (R8)
 		admin.GET("/backtest-cache/export", h.ExportBacktestCache)
@@ -365,8 +375,8 @@ func (h *AdminHandler) GetSystemHealth(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"overall":  overall,
-		"checks":   checks,
+		"overall":   overall,
+		"checks":    checks,
 		"timestamp": time.Now().Format(time.RFC3339),
 	})
 }
@@ -480,6 +490,46 @@ func (h *AdminHandler) UpsertCorporateAction(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"upserted": true, "symbol": req.Symbol, "action_date": req.ActionDate})
+}
+
+// ListCostCalibration returns calibrated transaction-cost coefficients (R2),
+// optionally filtered by symbol. Coefficients are produced by `orca
+// calibrate-costs` and consumed to seed the backtest SlippageModel.
+func (h *AdminHandler) ListCostCalibration(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	symbol := c.Query("symbol")
+	calibrations, err := h.repo.ListCostCalibration(c.Request.Context(), symbol)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"cost_calibration": calibrations})
+}
+
+// ListBenchmarkEvals returns persisted benchmark filter evaluations (Phase 1),
+// optionally filtered by strategy. Each row is a historical verdict produced by
+// the `orca benchmark-filter` subprocess.
+func (h *AdminHandler) ListBenchmarkEvals(c *gin.Context) {
+	if h.repo == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database not connected"})
+		return
+	}
+	strategyID := c.Query("strategy_id")
+	limit := 100
+	if l := c.Query("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	evals, err := h.repo.ListBenchmarkEvals(c.Request.Context(), strategyID, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"benchmark_evals": evals})
 }
 
 // ExportBacktestCache returns every cached backtest result row as JSON.

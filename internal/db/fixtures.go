@@ -15,27 +15,27 @@ import (
 )
 
 type SeedData struct {
-	AdminUsers      []AdminUserSeed
-	BrokerProviders []BrokerProviderSeed
-	LLMProviders     []LLMProviderSeed
-	Strategies       []StrategySeed
-	Symbols          []SymbolSeed
-	Candles          []CandleSeed
-	MarketTicks      []MarketTickSeed
-	RegimeLogs       []RegimeLogSeed
-	VIXLogs          []VIXLogSeed
-	SentimentLogs    []SentimentLogSeed
-	TradeHistory     []TradeHistorySeed
-	BacktestResults  []BacktestResultSeed
-	UniverseConfigs  []UniverseConfigSeed
+	AdminUsers        []AdminUserSeed
+	BrokerProviders   []BrokerProviderSeed
+	LLMProviders      []LLMProviderSeed
+	Strategies        []StrategySeed
+	Symbols           []SymbolSeed
+	Candles           []CandleSeed
+	MarketTicks       []MarketTickSeed
+	RegimeLogs        []RegimeLogSeed
+	VIXLogs           []VIXLogSeed
+	SentimentLogs     []SentimentLogSeed
+	TradeHistory      []TradeHistorySeed
+	BacktestResults   []BacktestResultSeed
+	UniverseConfigs   []UniverseConfigSeed
 	UniverseSnapshots []UniverseSnapshotSeed
 }
 
 type AdminUserSeed struct {
-	Username     string
-	Password     string
-	Roles        []string
-	TOTPEnabled  bool
+	Username    string
+	Password    string
+	Roles       []string
+	TOTPEnabled bool
 }
 
 type BrokerProviderSeed struct {
@@ -60,11 +60,12 @@ type StrategySeed struct {
 }
 
 type SymbolSeed struct {
-	Ticker    string
-	Exchange  string
-	AssetType string
-	TickSize  float64
-	LotSize   float64
+	Ticker       string
+	Exchange     string
+	AssetType    string
+	TickSize     float64
+	LotSize      float64
+	InterestRate float64
 }
 
 type MarketTickSeed struct {
@@ -79,13 +80,13 @@ type MarketTickSeed struct {
 }
 
 type CandleSeed struct {
-	Time     time.Time
-	Symbol   string
-	Open     types.Price
-	High     types.Price
-	Low      types.Price
-	Close    types.Price
-	Volume   float64
+	Time      time.Time
+	Symbol    string
+	Open      types.Price
+	High      types.Price
+	Low       types.Price
+	Close     types.Price
+	Volume    float64
 	Timeframe string
 }
 
@@ -124,14 +125,14 @@ type SentimentLogSeed struct {
 }
 
 type TradeHistorySeed struct {
-	Time        time.Time
-	Symbol      string
-	Side        string
-	Quantity    float64
-	Price       types.Price
-	HMMRegime   int8
-	StrategyID  string
-	OutcomePnL  float64
+	Time       time.Time
+	Symbol     string
+	Side       string
+	Quantity   float64
+	Price      types.Price
+	HMMRegime  int8
+	StrategyID string
+	OutcomePnL float64
 }
 
 type BacktestResultSeed struct {
@@ -154,14 +155,27 @@ func symbolsFromUniverseConfig() []SymbolSeed {
 	symbols := make([]SymbolSeed, 0, len(u.Symbols))
 	for _, s := range u.Symbols {
 		symbols = append(symbols, SymbolSeed{
-			Ticker:    s.Ticker,
-			Exchange:  s.Exchange,
-			AssetType: s.AssetClass,
-			TickSize:  s.TickSize,
-			LotSize:   s.LotSize,
+			Ticker:       s.Ticker,
+			Exchange:     s.Exchange,
+			AssetType:    s.AssetClass,
+			TickSize:     s.TickSize,
+			LotSize:      s.LotSize,
+			InterestRate: fxInterestRates[s.Ticker],
 		})
 	}
 	return symbols
+}
+
+// fxInterestRates maps FX pairs to the base-currency interest rate (%, approx.
+// central-bank levels) for the `symbols.interest_rate` column (migration 000048).
+// The FX-carry runner currently uses its own static carry map; this is the
+// future live-data source.
+var fxInterestRates = map[string]float64{
+	"AUDUSD": 4.35,
+	"GBPUSD": 4.50,
+	"USDJPY": 0.50,
+	"USDCAD": 3.00,
+	"EURUSD": 2.50,
 }
 
 func GenerateSeedData() *SeedData {
@@ -205,23 +219,26 @@ func GenerateSeedData() *SeedData {
 			{Name: "Donchian Breakout", Type: "donchian_breakout", Parameters: map[string]interface{}{"channel_length": 20}, Enabled: true},
 			{Name: "Keltner MACD", Type: "keltner_macd", Parameters: map[string]interface{}{"keltner_period": 20, "atr_multiplier": 1.5}, Enabled: true},
 			{Name: "Ichimoku Cloud", Type: "ichimoku_cloud", Parameters: map[string]interface{}{"tenkan_period": 9, "kijun_period": 26, "senkou_b_period": 52}, Enabled: true},
+			{Name: "Time-Series Momentum", Type: "momentum_12_1", Parameters: map[string]interface{}{"lookback": 252, "skip_recent": 21, "trend_period": 50}, Enabled: true},
+			{Name: "FX Carry", Type: "fx_carry", Parameters: map[string]interface{}{"trend_period": 100, "min_carry_bps": 0}, Enabled: true},
+			{Name: "Session Momentum", Type: "session_momentum", Parameters: map[string]interface{}{"session_minutes": 30, "drift_threshold_pct": 0.1}, Enabled: true},
 		},
-		Symbols:       symbols,
-		Candles:       append(candles, generateSyntheticCandles(today, symbols)...),
-		MarketTicks:   nil,
-		RegimeLogs:    generateRegimeLogs(today, symbols),
-		VIXLogs:       generateVIXLogs(today, candles),
-		SentimentLogs: generateSentimentLogs(today),
-		TradeHistory: nil,
+		Symbols:         symbols,
+		Candles:         append(candles, generateSyntheticCandles(today, symbols)...),
+		MarketTicks:     nil,
+		RegimeLogs:      generateRegimeLogs(today, symbols),
+		VIXLogs:         generateVIXLogs(today, candles),
+		SentimentLogs:   generateSentimentLogs(today),
+		TradeHistory:    nil,
 		BacktestResults: nil,
 		UniverseConfigs: []UniverseConfigSeed{
 			{
 				Name:      "default",
 				ProfileID: "default",
 				AssetClassFilters: map[string]interface{}{
-					"equity":    map[string]interface{}{"min_notional_volume": 50000000, "min_price": 5.0, "max_price": 5000.0, "min_market_cap": 500000000000, "min_atr_percent": 0.5, "max_atr_percent": 5.0, "min_rsi": 25, "max_rsi": 75},
-					"forex":     map[string]interface{}{"min_notional_volume": 100000000, "min_atr_percent": 0.3, "max_atr_percent": 3.0, "min_rsi": 20, "max_rsi": 80},
-					"crypto":    map[string]interface{}{"min_notional_volume": 10000000, "min_price": 1.0, "max_price": 100000.0, "min_atr_percent": 1.0, "max_atr_percent": 8.0, "min_rsi": 20, "max_rsi": 80},
+					"equity": map[string]interface{}{"min_notional_volume": 50000000, "min_price": 5.0, "max_price": 5000.0, "min_market_cap": 500000000000, "min_atr_percent": 0.5, "max_atr_percent": 5.0, "min_rsi": 25, "max_rsi": 75},
+					"forex":  map[string]interface{}{"min_notional_volume": 100000000, "min_atr_percent": 0.3, "max_atr_percent": 3.0, "min_rsi": 20, "max_rsi": 80},
+					"crypto": map[string]interface{}{"min_notional_volume": 10000000, "min_price": 1.0, "max_price": 100000.0, "min_atr_percent": 1.0, "max_atr_percent": 8.0, "min_rsi": 20, "max_rsi": 80},
 				},
 				DynamicTriggers: map[string]interface{}{
 					"volume_spike_multiplier": 2.5, "volatility_multiplier": 2.0, "news_sentiment_abs_min": 0.7,
@@ -421,9 +438,9 @@ func generateVIXLogs(today time.Time, candles []CandleSeed) []VIXLogSeed {
 	// and ramps down over 3-5 days. This ensures VIX-dependent strategies
 	// have sufficient entry opportunities.
 	spikeEvents := []struct {
-		startDay  int
-		duration  int
-		peakVIX   float64
+		startDay int
+		duration int
+		peakVIX  float64
 	}{
 		{60, 10, 38.0}, {130, 12, 42.0}, {190, 8, 35.0},
 		{250, 14, 45.0}, {310, 10, 32.0}, {360, 11, 40.0},

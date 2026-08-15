@@ -36,7 +36,7 @@ SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2}
 RULE_SEVERITY = {
     1: "CRITICAL", 2: "CRITICAL", 3: "MEDIUM", 4: "CRITICAL",
     5: "HIGH", 6: "CRITICAL", 7: "HIGH", 8: "CRITICAL",
-    9: "HIGH", 10: "HIGH", 11: "CRITICAL",
+    9: "HIGH", 10: "HIGH", 11: "CRITICAL", 12: "HIGH", 13: "CRITICAL",
 }
 
 CANONICAL_MATH_FUNCS = ["kelly", "brier", "platt", "wilson", "ewma"]
@@ -65,7 +65,7 @@ class Violation:
             refs = {
                 1: "§3.1-3.5", 2: "§6.8", 3: "§5.1", 4: "§9.3", 5: "§9.2",
                 6: "§3.1.3", 7: "§2.1.2", 8: "§4.2.2", 9: "§9.1.3", 10: "Antipattern #10",
-                11: "Antipattern #17",
+                11: "Antipattern #17", 12: "§9.1.3", 13: "§9.1.3 (benchmark gate)",
             }
             self.spec_ref = refs.get(self.rule, "")
 
@@ -507,12 +507,93 @@ def check_rule_11(changed_only: bool = False) -> list[Violation]:
     return violations
 
 
+# ─── Rule 12: No look-ahead / temporal-contract leakage (HP #9 / §9.1.3) ──
+def check_rule_12(changed_only: bool = False) -> list[Violation]:
+    """Flag look-ahead-shaped patterns in Python feature/signal code.
+
+    Signals must be computable strictly from information available at (or before)
+    the decision bar. Negative pandas shifts (``.shift(-N)``) and negative numpy
+    rolls (``np.roll(x, -N)``) pull future observations into a feature at time t,
+    violating the temporal contract. Scoped to Python (where look-ahead leaks in
+    feature engineering are most common); intentionally conservative to avoid
+    false positives on legitimate backward/current-bar alignment.
+    """
+    violations = []
+    changed = set(get_changed_files()) if changed_only else None
+    patterns = [
+        (r"\.shift\(\s*-", "negative pandas shift (future observation)"),
+        (r"np\.roll\([^,]+,\s*-", "negative numpy roll (future observation)"),
+    ]
+    for py_file in ROOT.glob("orca/**/*.py"):
+        if "__pycache__" in str(py_file):
+            continue
+        fname = str(py_file)
+        if changed_only and not any(fname.replace("\\", "/").endswith(c) for c in changed):
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            for pat, desc in patterns:
+                if re.search(pat, line):
+                    violations.append(Violation(
+                        12, fname, i,
+                        f"Possible look-ahead: {desc}. Signals/features must use only "
+                        "past/current information (temporal contract, §9.1.3)."
+                    ))
+                    break
+    return violations
+
+
+# ─── Rule 13: No promotion without the market-based benchmark filter ───────
+def check_rule_13(changed_only: bool = False) -> list[Violation]:
+    """Structural guard: the promotion gate must wire the benchmark filter.
+
+    The benchmark filter is a mandatory gate for all promotion-eligible
+    strategies. The Python promotion gate must read the ``BenchmarkPass`` column
+    and exclude non-passing candidates; the Go backtest metrics path must expose
+    the benchmark verdict. This is a presence check (like Rule 8), not an
+    exhaustive call-graph analysis.
+    """
+    violations = []
+    del changed_only
+
+    promotion_gate = ROOT / "orca" / "sizing" / "promotion_gate.py"
+    if not promotion_gate.exists():
+        violations.append(Violation(
+            13, str(promotion_gate), 0,
+            "Promotion gate missing: orca/sizing/promotion_gate.py must exist and "
+            "wire the market-based benchmark filter."
+        ))
+        return violations
+
+    try:
+        content = promotion_gate.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return violations
+
+    if "_benchmark_ok" not in content:
+        violations.append(Violation(
+            13, str(promotion_gate), 0,
+            "Promotion gate does not read the BenchmarkPass column. The benchmark "
+            "filter must be a mandatory veto in apply_promotion_gate (add _benchmark_ok)."
+        ))
+    if "bm is not False" not in content:
+        violations.append(Violation(
+            13, str(promotion_gate), 0,
+            "Promotion gate does not exclude benchmark-failed candidates. "
+            "apply_promotion_gate must require `bm is not False` for survivors."
+        ))
+    return violations
+
+
 # ─── Output formatters ───────────────────────────────────────────────────────
 def format_text(violations: list[Violation], min_severity: str = "HIGH") -> str:
     min_rank = SEVERITY_RANK.get(min_severity, 1)
     filtered = [v for v in violations if SEVERITY_RANK.get(v.severity, 1) <= min_rank]
     if not filtered:
-        return "All 10 hard prohibitions: PASSED"
+        return "All hard prohibitions: PASSED"
     lines = [f"\n{len(filtered)} HARD PROHIBITION VIOLATION(S) FOUND (severity >= {min_severity}):\n"]
     for v in sorted(filtered, key=lambda v: (SEVERITY_RANK.get(v.severity, 99), v.rule, v.file)):
         lines.append(f"  [{v.severity}] [RULE {v.rule}] {v.file}:{v.line}  (§{v.spec_ref})")
@@ -557,7 +638,7 @@ def main():
     checks = [
         check_rule_1, check_rule_2, check_rule_3, check_rule_4, check_rule_5,
         check_rule_6, check_rule_7, check_rule_8, check_rule_9, check_rule_10,
-        check_rule_11,
+        check_rule_11, check_rule_12, check_rule_13,
     ]
 
     violations: list[Violation] = []

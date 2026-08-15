@@ -37,34 +37,34 @@ import (
 )
 
 type Server struct {
-	router         *gin.Engine
-	killSwitch     *risk.KillSwitch
-	wsHub          *monitor.WSHub
-	vault          risk.VaultProvider
-	adapter        broker.Adapter
-	brokerRegistry *broker.BrokerDriverRegistry
-	accountManager *broker.AccountManager
+	router           *gin.Engine
+	killSwitch       *risk.KillSwitch
+	wsHub            *monitor.WSHub
+	vault            risk.VaultProvider
+	adapter          broker.Adapter
+	brokerRegistry   *broker.BrokerDriverRegistry
+	accountManager   *broker.AccountManager
 	multiCapitalPool *risk.MultiAccountCapitalPool
-	repo           *db.Repository
-	backtestEngine *backtest.Engine
-	liveEngine     *engine.LiveEngine
-	eventBus       *reactive.EventBus
-	emailService   email.EmailService
-	notifyManager  *notify.Manager
+	repo             *db.Repository
+	backtestEngine   *backtest.Engine
+	liveEngine       *engine.LiveEngine
+	eventBus         *reactive.EventBus
+	emailService     email.EmailService
+	notifyManager    *notify.Manager
 
-	providerHandler     *ProviderHandler
-	symbolHandler       *SymbolHandler
-	credentialHandler   *CredentialHandler
-	llmHandler          *LLMHandler
-	authHandler         *AuthHandler
-	webhookHandler      *WebhookHandler
-	adminHandler        *AdminHandler
-	propFirmHandler     *PropFirmHandler
-	propFirmManager     *propfirm.Manager
-	dataSourceHandler   *DataSourceHandler
-	settingsHandler     *SettingsHandler
-	notificationHandler   *NotificationHandler
-	auditHandler          *AuditHandler
+	providerHandler        *ProviderHandler
+	symbolHandler          *SymbolHandler
+	credentialHandler      *CredentialHandler
+	llmHandler             *LLMHandler
+	authHandler            *AuthHandler
+	webhookHandler         *WebhookHandler
+	adminHandler           *AdminHandler
+	propFirmHandler        *PropFirmHandler
+	propFirmManager        *propfirm.Manager
+	dataSourceHandler      *DataSourceHandler
+	settingsHandler        *SettingsHandler
+	notificationHandler    *NotificationHandler
+	auditHandler           *AuditHandler
 	backtestHistoryHandler *BacktestHistoryHandler
 	universeHandler        *UniverseHandler
 	universeManager        *universe.UniverseManager
@@ -77,8 +77,8 @@ type Server struct {
 	strategyStatusHandler  *StrategyStatusHandler
 	monitoringHandler      *MonitoringHandler
 	scheduler              *scheduler.Scheduler
-	dataSource            string
-	environment           string
+	dataSource             string
+	environment            string
 }
 
 func (s *Server) SetEnvironment(env string) {
@@ -205,6 +205,8 @@ func (s *Server) registerRoutes() {
 		protected.GET("/backtests/:id/benchmark", s.getBacktestBenchmark)
 		protected.GET("/backtests/:id/daily-returns", s.getBacktestDailyReturns)
 		protected.GET("/backtests/:id/monthly-returns", s.getBacktestMonthlyReturns)
+		protected.GET("/backtests/:id/robustness", s.getBacktestStatisticalRobustness)
+		protected.POST("/backtests/:id/benchmark-eval", s.getBacktestBenchmarkEval)
 		protected.GET("/backtests/:id/optimization", s.getBacktestOptimization)
 		protected.GET("/backtests/:id/walk-forward", s.getBacktestWalkForward)
 
@@ -741,14 +743,14 @@ func (s *Server) getAccounts(c *gin.Context) {
 		for id, st := range adapterStatus {
 			halted := s.killSwitch != nil && s.killSwitch.IsHalted()
 			entry := gin.H{
-				"id":     id,
-				"label":  id,
-				"firm":   "Prop Firm",
-				"type":   "prop",
-				"status": st.BrokerType,
-				"healthy": st.Healthy,
+				"id":       id,
+				"label":    id,
+				"firm":     "Prop Firm",
+				"type":     "prop",
+				"status":   st.BrokerType,
+				"healthy":  st.Healthy,
 				"priority": st.Priority,
-				"halted": halted,
+				"halted":   halted,
 			}
 
 			adapter, ok := s.brokerRegistry.Get(id)
@@ -1038,14 +1040,14 @@ func (s *Server) getSignals(c *gin.Context) {
 
 func (s *Server) submitOptimization(c *gin.Context) {
 	var req struct {
-		StrategyID      string                       `json:"strategy_id"`
-		Objective       string                       `json:"objective"`
-		MaxCombinations int                          `json:"max_combinations"`
-		TrainYears      int                          `json:"train_years"`
-		TestYears       int                          `json:"test_years"`
-		StepMonths      int                          `json:"step_months"`
-		Symbols         []string                     `json:"symbols"`
-		Capital         float64                      `json:"capital"`
+		StrategyID      string   `json:"strategy_id"`
+		Objective       string   `json:"objective"`
+		MaxCombinations int      `json:"max_combinations"`
+		TrainYears      int      `json:"train_years"`
+		TestYears       int      `json:"test_years"`
+		StepMonths      int      `json:"step_months"`
+		Symbols         []string `json:"symbols"`
+		Capital         float64  `json:"capital"`
 		Constraints     map[string]struct {
 			Min  float64 `json:"min"`
 			Max  float64 `json:"max"`
@@ -1118,8 +1120,8 @@ func (s *Server) submitOptimization(c *gin.Context) {
 			Config: backtest.BacktestConfig{
 				StrategyID:     req.StrategyID,
 				Symbols:        req.Symbols,
-			StartDate:      time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
-			EndDate:        time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC),
+				StartDate:      time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC),
+				EndDate:        time.Date(2025, 12, 31, 0, 0, 0, 0, time.UTC),
 				InitialCapital: req.Capital,
 			},
 			TrainWindows: 5,
@@ -1141,16 +1143,21 @@ func (s *Server) submitOptimization(c *gin.Context) {
 		return
 	}
 
+	// Persist the IVS-robust parameter island (single source of truth for
+	// promotion/live params) so the scheduler and live engine consume the same
+	// OOS-validated params the walk-forward produced.
+	s.persistWalkForwardParams(c.Request.Context(), req.StrategyID, result)
+
 	var mcResult *backtest.MonteCarloResult
 	var verdict backtest.MultiMetricVerdict
 	owfResult := &backtest.OptimizedWalkForwardResult{
 		WalkForwardResult: backtest.WalkForwardResult{
-			Windows:         result.Windows,
-			OverallSharpe:   result.OverallSharpe,
-			AvgOOSSharpe:    result.AvgOOSSharpe,
+			Windows:           result.Windows,
+			OverallSharpe:     result.OverallSharpe,
+			AvgOOSSharpe:      result.AvgOOSSharpe,
 			SharpeDegradation: result.SharpeDegradation,
-			PassedWindows:   result.PassedWindows,
-			TotalWindows:    result.TotalWindows,
+			PassedWindows:     result.PassedWindows,
+			TotalWindows:      result.TotalWindows,
 		},
 	}
 
@@ -1169,32 +1176,77 @@ func (s *Server) submitOptimization(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"best_params_per_window": result.BestParamsPerWindow,
-		"overall_sharpe":         result.OverallSharpe,
-		"avg_oos_sharpe":         result.AvgOOSSharpe,
-		"sharpe_degradation":     result.SharpeDegradation,
-		"passed_windows":         result.PassedWindows,
-		"total_windows":          result.TotalWindows,
-		"windows":                result.Windows,
-		"monte_carlo":            mcResult,
-		"verdict":                verdict,
+		"best_params_per_window":       result.BestParamsPerWindow,
+		"ivs_robust_params_per_window": result.IVSRobustParamsPerWindow,
+		"ivs_active":                   result.IVSActive,
+		"overall_sharpe":               result.OverallSharpe,
+		"avg_oos_sharpe":               result.AvgOOSSharpe,
+		"avg_anchor_oos_sharpe":        result.AvgAnchorOOSSharpe,
+		"sharpe_degradation":           result.SharpeDegradation,
+		"passed_windows":               result.PassedWindows,
+		"total_windows":                result.TotalWindows,
+		"windows":                      result.Windows,
+		"monte_carlo":                  mcResult,
+		"verdict":                      verdict,
 	})
+}
+
+// persistWalkForwardParams writes the IVS-robust parameter island (from the
+// window with the highest OOS Sharpe) into strategy_params_version, so the
+// scheduler and live engine consume the same OOS-validated params the embedded
+// walk-forward produced — a single source of truth for promotion.
+func (s *Server) persistWalkForwardParams(ctx context.Context, strategyID string, result *backtest.OptimizedWalkForwardResult) {
+	if s.repo == nil || result == nil || len(result.Windows) == 0 {
+		return
+	}
+	bestIdx := 0
+	for i := 1; i < len(result.Windows); i++ {
+		if result.Windows[i].OutSampleSharpe > result.Windows[bestIdx].OutSampleSharpe {
+			bestIdx = i
+		}
+	}
+	var params map[string]float64
+	if bestIdx < len(result.IVSRobustParamsPerWindow) && result.IVSRobustParamsPerWindow[bestIdx] != nil {
+		params = result.IVSRobustParamsPerWindow[bestIdx]
+	} else if bestIdx < len(result.BestParamsPerWindow) {
+		params = result.BestParamsPerWindow[bestIdx]
+	}
+	if params == nil {
+		return
+	}
+	oosSharpe := result.Windows[bestIdx].OutSampleSharpe
+	oosMaxDD := result.Windows[bestIdx].OOSMaxDD
+	oosReturn := result.Windows[bestIdx].OOSReturnPct
+	pv := &db.ParamVersion{
+		StrategyID:   strategyID,
+		VersionTag:   "walk-forward",
+		Params:       params,
+		OOSSharpe:    &oosSharpe,
+		OOSMaxDD:     &oosMaxDD,
+		OOSReturnPct: &oosReturn,
+		IsActive:     true,
+	}
+	if err := s.repo.SaveParamVersion(ctx, pv); err != nil {
+		slog.Warn("persist walk-forward params failed", "strategy", strategyID, "error", err)
+	}
 }
 
 func (s *Server) submitBacktest(c *gin.Context) {
 	var req struct {
-		Mode          string   `json:"mode"`
-		StrategyID    string   `json:"strategy_id"`
-		StrategyIDs   []string `json:"strategy_ids"`
-		Symbols       []string `json:"symbols" binding:"required"`
-		Timeframes    []string `json:"timeframes"`
-		StartDate     string   `json:"start_date" binding:"required"`
-		EndDate       string   `json:"end_date" binding:"required"`
-		Capital       float64  `json:"capital"`
-		GateProfile   string   `json:"gate_profile"`
-		SizingPercent float64  `json:"sizing_percent"`
-		KellyFraction float64  `json:"kelly_fraction"`
-		LightOptimize *bool    `json:"light_optimize,omitempty"`
+		Mode            string   `json:"mode"`
+		StrategyID      string   `json:"strategy_id"`
+		StrategyIDs     []string `json:"strategy_ids"`
+		Symbols         []string `json:"symbols" binding:"required"`
+		Timeframes      []string `json:"timeframes"`
+		StartDate       string   `json:"start_date" binding:"required"`
+		EndDate         string   `json:"end_date" binding:"required"`
+		Capital         float64  `json:"capital"`
+		GateProfile     string   `json:"gate_profile"`
+		SizingPercent   float64  `json:"sizing_percent"`
+		KellyFraction   float64  `json:"kelly_fraction"`
+		LightOptimize   *bool    `json:"light_optimize,omitempty"`
+		BenchmarkKind   string   `json:"benchmark_kind"`
+		BenchmarkSymbol string   `json:"benchmark_symbol"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1210,6 +1262,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 	if len(req.Timeframes) == 0 {
 		req.Timeframes = []string{"1d"}
 	}
+	benchCfgJSON := benchmarkConfigJSON(req.BenchmarkKind, req.BenchmarkSymbol)
 	ds := s.dataSource
 	if ds == "" {
 		ds = "stooq"
@@ -1277,10 +1330,10 @@ func (s *Server) submitBacktest(c *gin.Context) {
 			}()
 
 			type collectedPair struct {
-				rec    *db.BacktestRunRecord
-				btr    *db.BacktestResultRecord
-				index  int
-				cr     backtest.ComboResult
+				rec   *db.BacktestRunRecord
+				btr   *db.BacktestResultRecord
+				index int
+				cr    backtest.ComboResult
 			}
 			var mu sync.Mutex
 			var collected []collectedPair
@@ -1333,6 +1386,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 								EngineVersion:        "dev",
 								SchemaVersion:        1,
 								UseUniverseSnapshots: false,
+								Config:               benchCfgJSON,
 							}
 							fullMetricsJSON, merr := json.Marshal(result)
 							if merr != nil {
@@ -1350,6 +1404,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 								EngineVersion:  "dev",
 								RetentionClass: 1,
 								Metrics:        fullMetricsJSON,
+								SignalFunnel:   result.SignalFunnelJSON(),
 								EquityCurve:    eqJSON,
 								Trades:         tradesJSON,
 							}
@@ -1428,13 +1483,13 @@ func (s *Server) submitBacktest(c *gin.Context) {
 	tf := req.Timeframes[0]
 
 	baseConfig := backtest.BacktestConfig{
-		StrategyID:     strategyID,
-		Symbols:        req.Symbols,
-		StartDate:      startDate,
-		EndDate:        endDate,
-		InitialCapital: req.Capital,
-		DataSource:     ds,
-		Timeframe:      tf,
+		StrategyID:      strategyID,
+		Symbols:         req.Symbols,
+		StartDate:       startDate,
+		EndDate:         endDate,
+		InitialCapital:  req.Capital,
+		DataSource:      ds,
+		Timeframe:       tf,
 		PropFirmEnabled: true,
 		StopLoss: &backtest.StopLossConfig{
 			Type:          "atr",
@@ -1542,19 +1597,19 @@ func (s *Server) submitBacktest(c *gin.Context) {
 	runID := "bt-" + time.Now().Format("20060102150405") + "-" + strategyID
 	if s.repo != nil {
 		metricsData := gin.H{
-			"sharpe_ratio":    result.SharpeRatio,
-			"max_drawdown":    result.MaxDrawdown,
-			"total_return":    result.TotalReturnPct,
-			"win_rate":        result.WinRate,
-			"num_trades":      result.NumTrades,
-			"profit_factor":   result.ProfitFactor,
-			"sortino_ratio":   result.SortinoRatio,
-			"calmar_ratio":    result.CalmarRatio,
-			"total_fees":      result.TotalFees,
+			"sharpe_ratio":     result.SharpeRatio,
+			"max_drawdown":     result.MaxDrawdown,
+			"total_return":     result.TotalReturnPct,
+			"win_rate":         result.WinRate,
+			"num_trades":       result.NumTrades,
+			"profit_factor":    result.ProfitFactor,
+			"sortino_ratio":    result.SortinoRatio,
+			"calmar_ratio":     result.CalmarRatio,
+			"total_fees":       result.TotalFees,
 			"avg_slippage_bps": result.AvgSlippageBps,
-			"candle_count":    result.CandleCount,
-			"data_source":     ds,
-			"timeframe":       tf,
+			"candle_count":     result.CandleCount,
+			"data_source":      ds,
+			"timeframe":        tf,
 		}
 		metricsJSON, _ := json.Marshal(metricsData)
 		runRecord := &db.BacktestRunRecord{
@@ -1572,6 +1627,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 			WinRate:        result.WinRate,
 			NumTrades:      result.NumTrades,
 			ResultsJSON:    metricsJSON,
+			Config:         benchCfgJSON,
 		}
 		if err := s.repo.CreateBacktestRun(c.Request.Context(), runRecord); err != nil {
 			slog.Error("failed to persist backtest run", "error", err, "component", "router")
@@ -1596,24 +1652,24 @@ func (s *Server) submitBacktest(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"id":            runID,
-		"status":        "completed",
-		"sharpe_ratio":  result.SharpeRatio,
-		"max_drawdown":  result.MaxDrawdown,
-		"total_return":  result.TotalReturnPct,
-		"win_rate":      result.WinRate,
-		"num_trades":    result.NumTrades,
-		"profit_factor": result.ProfitFactor,
-		"sortino_ratio": result.SortinoRatio,
-		"calmar_ratio":  result.CalmarRatio,
-		"total_fees":    result.TotalFees,
+		"id":               runID,
+		"status":           "completed",
+		"sharpe_ratio":     result.SharpeRatio,
+		"max_drawdown":     result.MaxDrawdown,
+		"total_return":     result.TotalReturnPct,
+		"win_rate":         result.WinRate,
+		"num_trades":       result.NumTrades,
+		"profit_factor":    result.ProfitFactor,
+		"sortino_ratio":    result.SortinoRatio,
+		"calmar_ratio":     result.CalmarRatio,
+		"total_fees":       result.TotalFees,
 		"avg_slippage_bps": result.AvgSlippageBps,
-		"candle_count":  result.CandleCount,
-		"data_source":   ds,
-		"timeframe":     tf,
-		"warnings":      result.Warnings,
-		"equity_curve":  result.EquityCurve,
-		"regime_stats":  result.RegimeStats,
+		"candle_count":     result.CandleCount,
+		"data_source":      ds,
+		"timeframe":        tf,
+		"warnings":         result.Warnings,
+		"equity_curve":     result.EquityCurve,
+		"regime_stats":     result.RegimeStats,
 	})
 }
 
@@ -1834,10 +1890,10 @@ func (s *Server) listOrders(c *gin.Context) {
 		return
 	}
 	type orderItem struct {
-		Symbol    string  `json:"symbol"`
-		Quantity  float64 `json:"quantity"`
-		Entry     float64 `json:"entry_price"`
-		Mark      float64 `json:"mark_price"`
+		Symbol   string  `json:"symbol"`
+		Quantity float64 `json:"quantity"`
+		Entry    float64 `json:"entry_price"`
+		Mark     float64 `json:"mark_price"`
 	}
 	var items []orderItem
 	for _, p := range pos {
@@ -1867,15 +1923,15 @@ func (s *Server) resumeTrading(c *gin.Context) {
 
 func (s *Server) placeOrder(c *gin.Context) {
 	var req struct {
-		AccountID   string       `json:"account_id"`
-		Symbol      string       `json:"symbol" binding:"required"`
-		Side        string       `json:"side" binding:"required"`
-		Type        string       `json:"type" binding:"required"`
-		Quantity    float64      `json:"quantity" binding:"required"`
-		LimitPrice  types.Price  `json:"limitPrice"`
-		StopPrice   types.Price  `json:"stopPrice"`
-		TimeInForce string       `json:"timeInForce"`
-		StrategyID  string       `json:"strategy_id"`
+		AccountID   string      `json:"account_id"`
+		Symbol      string      `json:"symbol" binding:"required"`
+		Side        string      `json:"side" binding:"required"`
+		Type        string      `json:"type" binding:"required"`
+		Quantity    float64     `json:"quantity" binding:"required"`
+		LimitPrice  types.Price `json:"limitPrice"`
+		StopPrice   types.Price `json:"stopPrice"`
+		TimeInForce string      `json:"timeInForce"`
+		StrategyID  string      `json:"strategy_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1946,7 +2002,7 @@ func (s *Server) placeOrder(c *gin.Context) {
 	if resp.Status == broker.Filled || resp.Status == broker.PartiallyFilled {
 		if s.wsHub != nil {
 			s.wsHub.Broadcast("fill", gin.H{
-				"account_id":     accountIDUsed,
+				"account_id":      accountIDUsed,
 				"broker_order_id": resp.BrokerOrderID,
 				"symbol":          req.Symbol,
 				"side":            req.Side,
@@ -1959,11 +2015,11 @@ func (s *Server) placeOrder(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"id":              resp.BrokerOrderID,
-		"status":          resp.Status,
-		"filled_qty":      resp.FilledQty,
-		"avg_fill_price":  resp.AvgFillPrice,
-		"account_id":      accountIDUsed,
+		"id":             resp.BrokerOrderID,
+		"status":         resp.Status,
+		"filled_qty":     resp.FilledQty,
+		"avg_fill_price": resp.AvgFillPrice,
+		"account_id":     accountIDUsed,
 	})
 }
 
@@ -2101,7 +2157,7 @@ func (a *backtestRepoAdapter) LoadRegimeLogs(ctx context.Context, start, end tim
 type assetClass int
 
 const (
-	acEquity    assetClass = iota
+	acEquity assetClass = iota
 	acForex
 	acCrypto
 	acCommodity
@@ -2414,10 +2470,10 @@ func (a *backtestRepoAdapter) LoadSentimentLogs(ctx context.Context, start, end 
 
 func (a *backtestRepoAdapter) SaveBacktestResult(ctx context.Context, result *backtest.BacktestResult) error {
 	br := &db.BacktestResult{
-		ID:             result.Config.StrategyID,
-		StrategyID:     result.Config.StrategyID,
-		Config:         result.Config,
-		SharpeRatio:    result.SharpeRatio,
+		ID:          result.Config.StrategyID,
+		StrategyID:  result.Config.StrategyID,
+		Config:      result.Config,
+		SharpeRatio: result.SharpeRatio,
 	}
 	return a.repo.SaveBacktestResult(ctx, br)
 }
@@ -2486,18 +2542,18 @@ func (a *backtestRepoAdapter) LoadAllCandles(ctx context.Context, symbols []stri
 
 func (s *Server) submitMatrix(c *gin.Context) {
 	var req struct {
-		StrategyIDs      []string `json:"strategy_ids"`
-		Symbols          []string `json:"symbols"`
-		Timeframes       []string `json:"timeframes"`
-		StartDate        string   `json:"start_date"`
-		EndDate          string   `json:"end_date"`
-		InitialCapital   float64  `json:"initial_capital"`
-		DataSource       string   `json:"data_source"`
-		GateProfile      string   `json:"gate_profile"`
-		SizingPercent    float64  `json:"sizing_percent"`
-		KellyFraction    float64  `json:"kelly_fraction"`
-		WirePipeline     bool     `json:"wire_pipeline"`
-		WalkForward      bool     `json:"walk_forward"`
+		StrategyIDs    []string `json:"strategy_ids"`
+		Symbols        []string `json:"symbols"`
+		Timeframes     []string `json:"timeframes"`
+		StartDate      string   `json:"start_date"`
+		EndDate        string   `json:"end_date"`
+		InitialCapital float64  `json:"initial_capital"`
+		DataSource     string   `json:"data_source"`
+		GateProfile    string   `json:"gate_profile"`
+		SizingPercent  float64  `json:"sizing_percent"`
+		KellyFraction  float64  `json:"kelly_fraction"`
+		WirePipeline   bool     `json:"wire_pipeline"`
+		WalkForward    bool     `json:"walk_forward"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -2567,10 +2623,10 @@ func (s *Server) submitMatrix(c *gin.Context) {
 
 	go func() {
 		type collectedPair struct {
-			rec    *db.BacktestRunRecord
-			btr    *db.BacktestResultRecord
-			index  int
-			cr     backtest.ComboResult
+			rec   *db.BacktestRunRecord
+			btr   *db.BacktestResultRecord
+			index int
+			cr    backtest.ComboResult
 		}
 		var mu sync.Mutex
 		var collected []collectedPair
@@ -2635,6 +2691,7 @@ func (s *Server) submitMatrix(c *gin.Context) {
 								EngineVersion:  "dev",
 								RetentionClass: 1,
 								Metrics:        fullMetricsJSON,
+								SignalFunnel:   result.SignalFunnelJSON(),
 								EquityCurve:    eqJSON,
 								Trades:         tradesJSON,
 							}
@@ -2701,9 +2758,9 @@ func (s *Server) submitMatrix(c *gin.Context) {
 	}()
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"batch_id":      batchID,
-		"total_combos":  combos,
-		"status":        "running",
+		"batch_id":     batchID,
+		"total_combos": combos,
+		"status":       "running",
 	})
 }
 

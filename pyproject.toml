@@ -37,6 +37,8 @@ orca-halt = "orca.cli:halt"
 dev = [
     "pytest>=7",
     "pytest-cov>=4",
+    "pytest-rerunfailures>=15.0",
+    "pytest-timeout>=2.3",
     "hypothesis>=6",
     "ruff>=0.1",
     "mypy>=1.8",
@@ -62,10 +64,14 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "B", "A", "S", "PYI", "RUF", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
 [tool.mypy]
 strict = true
-python_version = "3.11"
+python_version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-v --tb=short --timeout=300"

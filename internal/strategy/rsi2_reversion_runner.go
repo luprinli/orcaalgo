@@ -9,13 +9,14 @@ import "github.com/lee-econ/orca-core/internal/types"
 type RSI2MeanReversionRunner struct {
 	*BaseRunner
 
-	Oversold       float64
-	Overbought     float64
-	ExitNeutral    float64
-	AtrPeriod      float64
-	AtrMultiplier  float64
-	MaxHoldBars    float64
-	barsInTrade    int
+	Oversold      float64
+	Overbought    float64
+	ExitNeutral   float64
+	AtrPeriod     float64
+	AtrMultiplier float64
+	ProfitATRMult float64
+	MaxHoldBars   float64
+	barsInTrade   int
 }
 
 func NewRSI2MeanReversionRunner() *RSI2MeanReversionRunner {
@@ -26,13 +27,16 @@ func NewRSI2MeanReversionRunner() *RSI2MeanReversionRunner {
 		ExitNeutral:   50.0,
 		AtrPeriod:     14,
 		AtrMultiplier: 1.5,
+		ProfitATRMult: 2.0,
 		MaxHoldBars:   20,
 	}
 }
 
 func (r *RSI2MeanReversionRunner) Name() string { return "rsi2_reversion" }
 func (r *RSI2MeanReversionRunner) Type() string { return "mean_reversion" }
-func (r *RSI2MeanReversionRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *RSI2MeanReversionRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *RSI2MeanReversionRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -41,12 +45,13 @@ func (r *RSI2MeanReversionRunner) Reset() {
 
 func (r *RSI2MeanReversionRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"oversold":       r.Oversold,
-		"overbought":     r.Overbought,
-		"exit_neutral":   r.ExitNeutral,
-		"atr_period":     r.AtrPeriod,
-		"atr_multiplier": r.AtrMultiplier,
-		"max_hold_bars":  r.MaxHoldBars,
+		"oversold":        r.Oversold,
+		"overbought":      r.Overbought,
+		"exit_neutral":    r.ExitNeutral,
+		"atr_period":      r.AtrPeriod,
+		"atr_multiplier":  r.AtrMultiplier,
+		"profit_atr_mult": r.ProfitATRMult,
+		"max_hold_bars":   r.MaxHoldBars,
 	}
 }
 
@@ -66,6 +71,9 @@ func (r *RSI2MeanReversionRunner) SetParams(params map[string]float64) {
 	if v, ok := params["atr_multiplier"]; ok {
 		r.AtrMultiplier = v
 	}
+	if v, ok := params["profit_atr_mult"]; ok {
+		r.ProfitATRMult = v
+	}
 	if v, ok := params["max_hold_bars"]; ok {
 		r.MaxHoldBars = v
 	}
@@ -78,6 +86,7 @@ func (r *RSI2MeanReversionRunner) ParamDefs() []ParamDef {
 		{Name: "exit_neutral", Type: ParamContinuous, Default: 50, Min: 40, Max: 60, Step: 5, Group: "Exit", Description: "RSI(2) exit level — cross above exits BUY, below exits SELL"},
 		{Name: "atr_period", Type: ParamInteger, Default: 14, Min: 7, Max: 28, Step: 7, Group: "Risk", Description: "ATR period for stop-loss distance"},
 		{Name: "atr_multiplier", Type: ParamContinuous, Default: 1.5, Min: 0.5, Max: 3.0, Step: 0.25, Group: "Risk", Description: "ATR multiplier for stop-loss"},
+		{Name: "profit_atr_mult", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 5.0, Step: 0.5, Group: "Exit", Description: "ATR multiplier for take-profit distance"},
 		{Name: "max_hold_bars", Type: ParamInteger, Default: 20, Min: 5, Max: 60, Step: 5, Group: "Exit", Description: "Max bars to hold before force-exiting"},
 	}
 }
@@ -131,19 +140,22 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if rsi2 <= 0 {
 		return nil
 	}
+	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	if rsi2 < r.Oversold {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 		r.barsInTrade = 0
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if rsi2 > r.Overbought {
 		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 		r.barsInTrade = 0
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}

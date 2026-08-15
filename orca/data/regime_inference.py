@@ -7,8 +7,7 @@ into the regime_logs table for use by the RiskPipeline regime gating system.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from typing import Optional
+from typing import Any
 
 import numpy as np
 
@@ -43,8 +42,13 @@ def infer_regimes(
         ann_vol = np.std(window_returns) * np.sqrt(252)
         total_return = close_prices[i] / close_prices[i - lookback] - 1.0
 
-        trend_strength = total_return / max(ann_vol, 0.01)
-        max_dd = _max_drawdown(close_prices[i - lookback:i + 1])
+        # Trend strength is the window-scaled information ratio: the lookback-day
+        # return divided by the lookback-day volatility. Dividing by ann_vol
+        # instead understated it by sqrt(252/lookback) (~3.5x for lookback=20),
+        # which made the "Trending" (state 1) regime effectively unreachable and
+        # regime-gated strategies (trend_following, dragon_trend) fully dormant.
+        window_vol = np.std(window_returns) * np.sqrt(lookback)
+        trend_strength = total_return / max(window_vol, 0.01)
 
         if ann_vol > 0.45:
             regimes[i], confidences[i] = 3, min(0.95, ann_vol / 0.60)
@@ -67,7 +71,7 @@ def _max_drawdown(prices: np.ndarray) -> float:
 def build_regime_logs(
     prices_by_symbol: dict[str, tuple[np.ndarray, np.ndarray]],
     lookback: int = 20,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Build regime log records for all symbols.
 
     Args:

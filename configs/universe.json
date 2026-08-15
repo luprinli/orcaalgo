@@ -18,14 +18,14 @@
     { "ticker": "USDCAD", "exchange": "STOOQ",  "asset_class": "forex_major",   "tick_size": 0.00001,  "lot_size": 1000, "stooq_ticker": "usdcad",  "yahoo_ticker": "USDCAD=X", "tiingo_ticker": "usdcad",  "base_price": 1.36,    "sigma_daily": 0.005 },
     { "ticker": "BTC-USD", "exchange": "CRYPTO", "asset_class": "crypto",       "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "btc.v",   "yahoo_ticker": "BTC-USD",  "tiingo_ticker": "btcusd",  "base_price": 68000.0, "sigma_daily": 0.030 },
     { "ticker": "ETH-USD", "exchange": "CRYPTO", "asset_class": "crypto",       "tick_size": 0.01,     "lot_size": 1,    "stooq_ticker": "eth.v",   "yahoo_ticker": "ETH-USD",  "tiingo_ticker": "ethusd",  "base_price": 3400.0,  "sigma_daily": 0.035 },
-    { "ticker": "^_US",   "exchange": "STOOQ",  "asset_class": "index_agg",     "tick_size": 0.25,     "lot_size": 1,    "stooq_ticker": "^spx",    "yahoo_ticker": "^GSPC",    "tiingo_ticker": "^spx",    "base_price": 5900.0,  "sigma_daily": 0.008 },
     { "ticker": "^DAX",   "exchange": "STOOQ",  "asset_class": "index_eu",      "tick_size": 0.25,     "lot_size": 1,    "stooq_ticker": "^dax",    "yahoo_ticker": "^GDAXI",   "tiingo_ticker": "^dax",    "base_price": 21000.0, "sigma_daily": 0.010 }
   ],
   "strategies": [
-    "grid_trading", "trend_following", "session_scalp", "intraday_mr", "vwap_mr",
-    "opening_range_breakout", "orb_15m", "pairs_trading", "volatility_harvesting",
-    "dragon_trend", "volume_scalp", "vix_futures_carry", "ma_crossover",
-    "rsi2_reversion", "donchian_breakout", "keltner_macd", "ichimoku_cloud"
+    "trend_following", "session_scalp", "intraday_mr", "vwap_mr",
+    "opening_range_breakout", "orb_15m", "volatility_harvesting",
+    "dragon_trend", "volume_scalp", "vix_futures_carry",
+    "rsi2_reversion", "donchian_breakout", "keltner_macd",
+    "momentum_12_1", "fx_carry", "session_momentum"
   ],
   "timeframes": ["5m", "15m", "30m", "1h", "4h", "1d"],
   "data_sources": ["stooq", "yahoo"],
@@ -46,7 +46,6 @@
     "USDJPY": "EURUSD",
     "BTC-USD": "ETH-USD",
     "ETH-USD": "BTC-USD",
-    "^_US": "^DAX",
-    "^DAX": "^_US"
+    "^DAX": "SPY"
   }
 }

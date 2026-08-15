@@ -24,8 +24,10 @@ type OrchMatrixResult struct {
 	SetIndex   int                       `json:"set_index"`
 	Strategies []OrchestratorStrategy    `json:"strategies"`
 	PoolSharpe float64                   `json:"pool_sharpe"`
+	PoolSortino float64                  `json:"pool_sortino"`
 	PoolMaxDD  float64                   `json:"pool_maxdd"`
 	PoolReturn float64                   `json:"pool_return_pct"`
+	RebalanceCosts float64               `json:"rebalance_costs"`
 	NumTrades  int                       `json:"num_trades"`
 	StrategyPnL map[string]float64       `json:"strategy_pnl"`
 	Status     string                    `json:"status"`
@@ -137,8 +139,10 @@ func RunOrchestratorMatrix(dbAdapter Database, repo *db.Repository, cfg OrchMatr
 				r.Error = runErr.Error()
 			} else {
 				r.PoolSharpe = result.PoolSharpe
+				r.PoolSortino = result.PoolSortino
 				r.PoolMaxDD = result.PoolMaxDD
 				r.PoolReturn = result.PoolReturnPct
+				r.RebalanceCosts = result.RebalanceCosts
 				r.NumTrades = len(result.Trades)
 				r.StrategyPnL = result.StrategyPnL
 
@@ -164,6 +168,7 @@ func RunOrchestratorMatrix(dbAdapter Database, repo *db.Repository, cfg OrchMatr
 						&db.OrchestrationResult{
 							PoolSharpe: result.PoolSharpe, PoolSortino: result.PoolSortino,
 							PoolMaxDD: result.PoolMaxDD, PoolReturnPct: result.PoolReturnPct,
+							RebalanceCosts: result.RebalanceCosts,
 						}, enrichedJSON)
 					r.RunID = run.ID
 				}

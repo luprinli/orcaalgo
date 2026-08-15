@@ -8,12 +8,13 @@ import "github.com/lee-econ/orca-core/internal/types"
 type DonchianBreakoutRunner struct {
 	*BaseRunner
 
-	ChannelPeriod   float64
-	EntryBufferPct  float64
-	AtrPeriod       float64
-	AtrMultiplier   float64
-	MinRangePct     float64
-	peakPrice       types.Price
+	ChannelPeriod  float64
+	EntryBufferPct float64
+	AtrPeriod      float64
+	AtrMultiplier  float64
+	ProfitATRMult  float64
+	MinRangePct    float64
+	peakPrice      types.Price
 }
 
 func NewDonchianBreakoutRunner() *DonchianBreakoutRunner {
@@ -23,13 +24,16 @@ func NewDonchianBreakoutRunner() *DonchianBreakoutRunner {
 		EntryBufferPct: 0.05,
 		AtrPeriod:      14,
 		AtrMultiplier:  2.0,
+		ProfitATRMult:  2.0,
 		MinRangePct:    0.5,
 	}
 }
 
 func (r *DonchianBreakoutRunner) Name() string { return "donchian_breakout" }
 func (r *DonchianBreakoutRunner) Type() string { return "breakout" }
-func (r *DonchianBreakoutRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *DonchianBreakoutRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *DonchianBreakoutRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -42,6 +46,7 @@ func (r *DonchianBreakoutRunner) Params() map[string]float64 {
 		"entry_buffer_pct": r.EntryBufferPct,
 		"atr_period":       r.AtrPeriod,
 		"atr_multiplier":   r.AtrMultiplier,
+		"profit_atr_mult":  r.ProfitATRMult,
 		"min_range_pct":    r.MinRangePct,
 	}
 }
@@ -59,6 +64,9 @@ func (r *DonchianBreakoutRunner) SetParams(params map[string]float64) {
 	if v, ok := params["atr_multiplier"]; ok {
 		r.AtrMultiplier = v
 	}
+	if v, ok := params["profit_atr_mult"]; ok {
+		r.ProfitATRMult = v
+	}
 	if v, ok := params["min_range_pct"]; ok {
 		r.MinRangePct = v
 	}
@@ -70,6 +78,7 @@ func (r *DonchianBreakoutRunner) ParamDefs() []ParamDef {
 		{Name: "entry_buffer_pct", Type: ParamContinuous, Default: 0.05, Min: 0, Max: 0.5, Step: 0.05, Group: "Entry", Description: "Buffer percentage beyond band to confirm breakout"},
 		{Name: "atr_period", Type: ParamInteger, Default: 14, Min: 7, Max: 28, Step: 7, Group: "Risk", Description: "ATR lookback for stop/target calculation"},
 		{Name: "atr_multiplier", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 4.0, Step: 0.5, Group: "Risk", Description: "ATR multiplier for stop distance"},
+		{Name: "profit_atr_mult", Type: ParamContinuous, Default: 2.0, Min: 1.0, Max: 5.0, Step: 0.5, Group: "Exit", Description: "ATR multiplier for take-profit distance"},
 		{Name: "min_range_pct", Type: ParamContinuous, Default: 0.2, Min: 0.1, Max: 3.0, Step: 0.1, Group: "Filter", Description: "Minimum channel range as % of mid-price to trade"},
 	}
 }
@@ -135,16 +144,19 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	r.peakPrice = price
+	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	if price.Float64() >= upperDC*(1.0+entryBuffer) {
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if price.Float64() <= lowerDC*(1.0-entryBuffer) {
-		stopDist := atr * r.AtrMultiplier
-		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
+		stopDist := atr * r.AtrMultiplier * stopMult
+		profitDist := stopDist * r.ProfitATRMult * profitMult
+		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 

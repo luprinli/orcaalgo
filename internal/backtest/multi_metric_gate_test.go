@@ -40,12 +40,12 @@ func TestStrictMultiMetricStandard(t *testing.T) {
 
 func TestEvaluateBacktestMultiMetric_Pass(t *testing.T) {
 	result := &BacktestResult{
-		SharpeRatio:    1.8,
-		SortinoRatio:   2.1,
-		MaxDrawdown:    4.5,
-		ProfitFactor:   2.3,
-		NumTrades:      45,
-		WinRate:        62.0,
+		SharpeRatio:  1.8,
+		SortinoRatio: 2.1,
+		MaxDrawdown:  4.5,
+		ProfitFactor: 2.3,
+		NumTrades:    45,
+		WinRate:      62.0,
 	}
 
 	std := DefaultMultiMetricStandard()
@@ -61,11 +61,11 @@ func TestEvaluateBacktestMultiMetric_Pass(t *testing.T) {
 
 func TestEvaluateBacktestMultiMetric_Fail(t *testing.T) {
 	result := &BacktestResult{
-		SharpeRatio:    0.3,
-		MaxDrawdown:    18.0,
-		ProfitFactor:   0.8,
-		NumTrades:      10,
-		WinRate:        35.0,
+		SharpeRatio:  0.3,
+		MaxDrawdown:  18.0,
+		ProfitFactor: 0.8,
+		NumTrades:    10,
+		WinRate:      35.0,
 	}
 
 	std := DefaultMultiMetricStandard()
@@ -91,11 +91,11 @@ func TestEvaluateBacktestMultiMetric_Fail(t *testing.T) {
 
 func TestEvaluateBacktestMultiMetric_Marginal(t *testing.T) {
 	result := &BacktestResult{
-		SharpeRatio:    1.0,
-		MaxDrawdown:    8.0,
-		ProfitFactor:   1.5,
-		NumTrades:      30,
-		WinRate:        50.0,
+		SharpeRatio:  1.0,
+		MaxDrawdown:  8.0,
+		ProfitFactor: 1.5,
+		NumTrades:    30,
+		WinRate:      50.0,
 	}
 
 	std := DefaultMultiMetricStandard()
@@ -120,7 +120,7 @@ func TestEvaluateOOSMultiMetric_Pass(t *testing.T) {
 				{OutSampleSharpe: 1.3, OOSTrades: 18, OOSReturnPct: 3.0, OOSWinRate: 60},
 				{OutSampleSharpe: 1.1, OOSTrades: 12, OOSReturnPct: -1.0, OOSWinRate: 55},
 			},
-			ProfitFactor:    2.1,
+			ProfitFactor:      2.1,
 			SharpeDegradation: 15.0,
 		},
 	}
@@ -144,7 +144,7 @@ func TestEvaluateOOSMultiMetric_Fail(t *testing.T) {
 				{OutSampleSharpe: 0.2, OOSTrades: 5, OOSReturnPct: -10.0, OOSWinRate: 30},
 				{OutSampleSharpe: 0.1, OOSTrades: 3, OOSReturnPct: -15.0, OOSWinRate: 25},
 			},
-			ProfitFactor:     0.6,
+			ProfitFactor:      0.6,
 			SharpeDegradation: 75.0,
 		},
 	}
@@ -229,12 +229,12 @@ func TestMultiMetricVerdict_Summary(t *testing.T) {
 
 func TestEvaluateBacktestMultiMetric_WithSortino(t *testing.T) {
 	result := &BacktestResult{
-		SharpeRatio:    2.0,
-		SortinoRatio:   0.5,
-		MaxDrawdown:    3.0,
-		ProfitFactor:   2.5,
-		NumTrades:      60,
-		WinRate:        65.0,
+		SharpeRatio:  2.0,
+		SortinoRatio: 0.5,
+		MaxDrawdown:  3.0,
+		ProfitFactor: 2.5,
+		NumTrades:    60,
+		WinRate:      65.0,
 	}
 
 	std := StrictMultiMetricStandard()
@@ -253,16 +253,75 @@ func TestMultiMetricStandard_AllPresets(t *testing.T) {
 	}
 
 	result := &BacktestResult{
-		SharpeRatio:    1.0,
-		SortinoRatio:   0.8,
-		MaxDrawdown:    7.0,
-		ProfitFactor:   1.6,
-		NumTrades:      35,
-		WinRate:        55.0,
+		SharpeRatio:  1.0,
+		SortinoRatio: 0.8,
+		MaxDrawdown:  7.0,
+		ProfitFactor: 1.6,
+		NumTrades:    35,
+		WinRate:      55.0,
 	}
 
 	for name, std := range standards {
 		verdict := EvaluateBacktestMultiMetric(result, std)
 		t.Logf("%s standard: %s", name, verdict.Summary())
+	}
+}
+
+func TestEvaluateBacktestMultiMetricWithBenchmark_Gates(t *testing.T) {
+	result := &BacktestResult{
+		SharpeRatio:  1.8,
+		SortinoRatio: 2.1,
+		MaxDrawdown:  4.5,
+		ProfitFactor: 2.3,
+		NumTrades:    45,
+		WinRate:      62.0,
+	}
+	std := DefaultMultiMetricStandard()
+	std.MinInformationRatio = 0.4
+
+	// Passing benchmark IR -> overall pass.
+	passIR := 1.2
+	v := EvaluateBacktestMultiMetricWithBenchmark(result, std, &passIR)
+	if !v.Passed {
+		t.Fatalf("expected pass with benchmark IR 1.2, got %s", v.Summary())
+	}
+
+	// Failing benchmark IR -> overall fail, benchmark metric present.
+	failIR := 0.1
+	v = EvaluateBacktestMultiMetricWithBenchmark(result, std, &failIR)
+	if v.Passed {
+		t.Fatalf("expected fail with benchmark IR 0.1")
+	}
+	found := false
+	for _, mv := range v.Verdicts {
+		if mv.Metric == "benchmark_information_ratio" {
+			found = true
+			if mv.Passed {
+				t.Fatalf("benchmark metric should fail for IR 0.1")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("benchmark_information_ratio metric missing from verdict")
+	}
+}
+
+func TestEvaluateBacktestMultiMetricWithBenchmark_DisabledWhenZero(t *testing.T) {
+	result := &BacktestResult{
+		SharpeRatio:  1.8,
+		MaxDrawdown:  4.5,
+		ProfitFactor: 2.3,
+		NumTrades:    45,
+		WinRate:      62.0,
+	}
+	std := DefaultMultiMetricStandard() // MinInformationRatio == 0
+
+	ir := 0.1
+	v := EvaluateBacktestMultiMetricWithBenchmark(result, std, &ir)
+	// With the benchmark gate disabled, the weak IR must not add a metric.
+	for _, mv := range v.Verdicts {
+		if mv.Metric == "benchmark_information_ratio" {
+			t.Fatalf("benchmark metric should be absent when MinInformationRatio == 0")
+		}
 	}
 }

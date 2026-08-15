@@ -101,6 +101,65 @@ func TestSessionScalpRunner_MaxTradesPerDay(t *testing.T) {
 	}
 }
 
+func TestOrbRunner_ResetsRangePerDay(t *testing.T) {
+	r := NewOrbRunner()
+	r.RangeMinutes = 2
+	r.MinRangePct = 0
+
+	day1 := time.Date(2026, 8, 3, 9, 30, 0, 0, time.UTC)
+
+	// Day 1: two bars form the opening range (high=105, low=95).
+	c1 := Candle{Symbol: "SPY", Time: day1, Open: mkPrice(100), High: mkPrice(102), Low: mkPrice(99), Close: mkPrice(100), Volume: 1000}
+	r.Evaluate(c1, 1)
+	c2 := Candle{Symbol: "SPY", Time: day1.Add(time.Minute), Open: mkPrice(100), High: mkPrice(105), Low: mkPrice(95), Close: mkPrice(100), Volume: 1000}
+	r.Evaluate(c2, 1)
+
+	if !r.rangeSet {
+		t.Fatal("range should be set after 2 bars on day 1")
+	}
+	if r.openingHigh != 105.0 || r.openingLow != 95.0 {
+		t.Fatalf("day1 range = [%v, %v], want [95, 105]", r.openingLow, r.openingHigh)
+	}
+
+	// Day 2: the first bar must reset the range and start forming anew.
+	day2 := day1.Add(24 * time.Hour)
+	c3 := Candle{Symbol: "SPY", Time: day2, Open: mkPrice(200), High: mkPrice(201), Low: mkPrice(199), Close: mkPrice(200), Volume: 1000}
+	r.Evaluate(c3, 1)
+
+	if r.rangeSet {
+		t.Fatal("range should reset at the start of day 2")
+	}
+	if r.openingHigh != 201.0 || r.openingLow != 199.0 {
+		t.Fatalf("day2 range should re-form from [199, 201], got [%v, %v]", r.openingLow, r.openingHigh)
+	}
+}
+
+func TestOrbRunner_SkipsNarrowRangeDay(t *testing.T) {
+	r := NewOrbRunner()
+	r.RangeMinutes = 1
+	r.MinRangePct = 0.3
+
+	c := Candle{Symbol: "SPY", Time: time.Date(2026, 8, 3, 9, 30, 0, 0, time.UTC), Open: mkPrice(100), High: mkPrice(100.1), Low: mkPrice(99.9), Close: mkPrice(100), Volume: 1000}
+	r.Evaluate(c, 1)
+
+	if !r.skipDay {
+		t.Fatal("narrow range should mark the day as skipped")
+	}
+
+	// A breakout bar later the same day must be ignored.
+	c2 := Candle{Symbol: "SPY", Time: time.Date(2026, 8, 3, 10, 0, 0, 0, time.UTC), Open: mkPrice(100), High: mkPrice(110), Low: mkPrice(100), Close: mkPrice(110), Volume: 1000}
+	if sig := r.Evaluate(c2, 1); sig != nil {
+		t.Error("skipped day should not emit a signal")
+	}
+
+	// The next day clears the skip flag.
+	c3 := Candle{Symbol: "SPY", Time: time.Date(2026, 8, 4, 9, 30, 0, 0, time.UTC), Open: mkPrice(100), High: mkPrice(105), Low: mkPrice(95), Close: mkPrice(100), Volume: 1000}
+	r.Evaluate(c3, 1)
+	if r.skipDay {
+		t.Error("skip flag should reset on a new day")
+	}
+}
+
 func TestTrendRunner_CHOPFilter(t *testing.T) {
 	r := NewTrendRunner()
 	r.AdxThreshold = 5  // allow signals even with low ADX

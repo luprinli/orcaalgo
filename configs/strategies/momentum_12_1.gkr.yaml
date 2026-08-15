@@ -1,0 +1,73 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-momentum-12-1-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "bar_agg"
+      token_ref:
+        token_id: "data.bar_aggregator"
+        version: ">=1.0"
+      params:
+        timeframe: "1d"
+    - id: "momentum_calc"
+      token_ref:
+        token_id: "math.momentum"
+        version: ">=1.0"
+      inputs:
+        series: "bar_agg.close"
+      params:
+        lookback: 252
+        skip_recent: 21
+    - id: "signal_gen"
+      token_ref:
+        token_id: "signal.threshold"
+        version: ">=1.0"
+      inputs:
+        momentum: "momentum_calc.return"
+      params:
+        entry_threshold: 0.0
+        trend_period: 50
+        atr_period: 20
+        atr_multiplier: 3.0
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "signal_gen.signal"
+      params:
+        blocked_states: [2, 3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - momentum
+risk_profile:
+  risk_per_trade_pct: 0.02
+  kelly_multiplier: 0.25
+  # (Calm, Trending, HighVol, Crisis) participation — 0 = block, 1 = full.
+  regime_multipliers: [1.0, 1.0, 0.0, 0.0]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -87,15 +88,74 @@ func (r *Repository) RunMigrations(ctx context.Context) error {
 		return fmt.Errorf("create migrations table: %w", err)
 	}
 
-	var count int
-	err = r.pool.QueryRow(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_name='strategies'").Scan(&count)
-	if err != nil {
-		return fmt.Errorf("check migrations: %w", err)
+	// Single source of truth for schema changes: the Go-managed migration
+	// runner applies every pending `*.up.sql` file (sorted by filename prefix)
+	// and records it in schema_migrations. Replaces the former golang-migrate
+	// `scripts/migrate.ps1` (which used a conflicting `version`/`dirty` schema).
+	dir := os.Getenv("ORCA_MIGRATIONS_DIR")
+	if dir == "" {
+		dir = "internal/db/migrations"
 	}
-	if count > 0 {
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("read migrations dir %s: %w", dir, err)
+	}
+	var files []string
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+		files = append(files, name)
+	}
+	sort.Strings(files)
+
+	for _, name := range files {
+		if err := r.applyMigrationIfPending(ctx, name, dir); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyMigrationIfPending applies a single migration file when its filename is
+// not yet recorded. The SQL and the filename recording run in one transaction,
+// so a failed migration is never marked applied.
+func (r *Repository) applyMigrationIfPending(ctx context.Context, name, dir string) error {
+	var exists bool
+	if err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE filename=$1)`, name,
+	).Scan(&exists); err != nil {
+		return fmt.Errorf("check migration %s: %w", name, err)
+	}
+	if exists {
 		return nil
 	}
-	return fmt.Errorf("migrations not applied: run scripts/migrate.ps1 or docker compose up the postgres with migration volume")
+
+	sqlBytes, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		return fmt.Errorf("read migration %s: %w", name, err)
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin migration %s: %w", name, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, string(sqlBytes)); err != nil {
+		return fmt.Errorf("apply migration %s: %w", name, err)
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`, name,
+	); err != nil {
+		return fmt.Errorf("record migration %s: %w", name, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit migration %s: %w", name, err)
+	}
+	return nil
 }
 
 func (r *Repository) ListPendingMigrations(ctx context.Context, migrationsDir string) ([]string, error) {

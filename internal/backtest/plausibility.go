@@ -37,53 +37,7 @@ func FlagImplausibleCombos(results []ComboResult) []PlausibilityFlag {
 
 	// Per-combo metric ceilings.
 	for _, r := range results {
-		if r.NumTrades == 0 {
-			// Zero-trade combos carry no metrics to judge; data-coverage gaps
-			// are surfaced separately by the engine's coverage guard.
-			continue
-		}
-		if r.SharpeRatio > plausibleSharpeCeiling {
-			flags = append(flags, PlausibilityFlag{
-				Code: "sharpe_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("Sharpe %.2f exceeds plausible ceiling %.1f", r.SharpeRatio, plausibleSharpeCeiling),
-			})
-		}
-		if r.SharpeRatio < plausibleSharpeFloor {
-			flags = append(flags, PlausibilityFlag{
-				Code: "sharpe_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("Sharpe %.2f below plausible floor %.1f", r.SharpeRatio, plausibleSharpeFloor),
-			})
-		}
-		if r.ProfitFactor > plausibleProfitFactorMax {
-			flags = append(flags, PlausibilityFlag{
-				Code: "profit_factor_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("ProfitFactor %.2f exceeds plausible ceiling %.1f", r.ProfitFactor, plausibleProfitFactorMax),
-			})
-		}
-		if r.WinRate > plausibleWinRateMax || r.WinRate < plausibleWinRateMin {
-			flags = append(flags, PlausibilityFlag{
-				Code: "win_rate_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("WinRate %.2f%% outside plausible range [%.1f, %.1f]", r.WinRate, plausibleWinRateMin, plausibleWinRateMax),
-			})
-		}
-		if r.LongTrades > 0 && r.LongWinRate <= 0 {
-			flags = append(flags, PlausibilityFlag{
-				Code: "directional_asymmetry", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("%d long trades but 0%% long win rate — one-sided fills", r.LongTrades),
-			})
-		}
-		if r.ShortPF >= 999 {
-			flags = append(flags, PlausibilityFlag{
-				Code: "sentinel_pf", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: "ShortPF is a sentinel value (>=999) indicating zero short losses",
-			})
-		}
-		if r.TotalReturn > plausibleReturnMaxPct || r.TotalReturn < plausibleReturnMinPct {
-			flags = append(flags, PlausibilityFlag{
-				Code: "return_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
-				Message: fmt.Sprintf("Return %.2f%% outside plausible range [%.1f, %.1f]", r.TotalReturn, plausibleReturnMinPct, plausibleReturnMaxPct),
-			})
-		}
+		flags = append(flags, comboPlausibilityFlags(r)...)
 	}
 
 	// Timeframe deduplication: identical trade counts across every timeframe for
@@ -127,4 +81,65 @@ func FlagImplausibleCombos(results []ComboResult) []PlausibilityFlag {
 	}
 
 	return flags
+}
+
+// comboPlausibilityFlags returns the per-combo implausibility flags for a
+// single result, excluding cross-combo checks (timeframe deduplication).
+func comboPlausibilityFlags(r ComboResult) []PlausibilityFlag {
+	if r.NumTrades == 0 {
+		// Zero-trade combos carry no metrics to judge; data-coverage gaps
+		// are surfaced separately by the engine's coverage guard.
+		return nil
+	}
+	var flags []PlausibilityFlag
+	if r.SharpeRatio > plausibleSharpeCeiling {
+		flags = append(flags, PlausibilityFlag{
+			Code: "sharpe_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("Sharpe %.2f exceeds plausible ceiling %.1f", r.SharpeRatio, plausibleSharpeCeiling),
+		})
+	}
+	if r.SharpeRatio < plausibleSharpeFloor {
+		flags = append(flags, PlausibilityFlag{
+			Code: "sharpe_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("Sharpe %.2f below plausible floor %.1f", r.SharpeRatio, plausibleSharpeFloor),
+		})
+	}
+	if r.ProfitFactor > plausibleProfitFactorMax {
+		flags = append(flags, PlausibilityFlag{
+			Code: "profit_factor_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("ProfitFactor %.2f exceeds plausible ceiling %.1f", r.ProfitFactor, plausibleProfitFactorMax),
+		})
+	}
+	if r.WinRate > plausibleWinRateMax || r.WinRate < plausibleWinRateMin {
+		flags = append(flags, PlausibilityFlag{
+			Code: "win_rate_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("WinRate %.2f%% outside plausible range [%.1f, %.1f]", r.WinRate, plausibleWinRateMin, plausibleWinRateMax),
+		})
+	}
+	if r.LongTrades > 0 && r.LongWinRate <= 0 {
+		flags = append(flags, PlausibilityFlag{
+			Code: "directional_asymmetry", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("%d long trades but 0%% long win rate — one-sided fills", r.LongTrades),
+		})
+	}
+	if r.ShortPF >= 999 {
+		flags = append(flags, PlausibilityFlag{
+			Code: "sentinel_pf", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: "ShortPF is a sentinel value (>=999) indicating zero short losses",
+		})
+	}
+	if r.TotalReturn > plausibleReturnMaxPct || r.TotalReturn < plausibleReturnMinPct {
+		flags = append(flags, PlausibilityFlag{
+			Code: "return_implausible", StrategyID: r.StrategyID, Symbol: r.Symbol, Timeframe: r.Timeframe,
+			Message: fmt.Sprintf("Return %.2f%% outside plausible range [%.1f, %.1f]", r.TotalReturn, plausibleReturnMinPct, plausibleReturnMaxPct),
+		})
+	}
+	return flags
+}
+
+// IsComboImplausible reports whether a single combo violates any per-combo
+// plausibility ceiling. Cross-combo checks (timeframe deduplication) are
+// handled separately by FlagImplausibleCombos.
+func IsComboImplausible(r ComboResult) bool {
+	return len(comboPlausibilityFlags(r)) > 0
 }

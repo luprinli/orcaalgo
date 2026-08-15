@@ -12,19 +12,19 @@ import (
 type DragonTrendRunner struct {
 	*BaseRunner
 
-	EMAPeriods     []int
-	MinAligned     int
-	ADXPeriod      int
-	ADXThreshold   float64
-	ATRPeriod      int
-	ATRMultiplier  float64
-	ProfitATRMult  float64
+	EMAPeriods    []int
+	MinAligned    int
+	ADXPeriod     int
+	ADXThreshold  float64
+	ATRPeriod     int
+	ATRMultiplier float64
+	ProfitATRMult float64
 
-	emaValues      []float64
-	prevEMAValues  []float64
-	peakPrice      types.Price
-	signalPending  bool
-	pendingSide    string
+	emaValues     []float64
+	prevEMAValues []float64
+	peakPrice     types.Price
+	signalPending bool
+	pendingSide   string
 }
 
 func NewDragonTrendRunner() *DragonTrendRunner {
@@ -43,8 +43,8 @@ func NewDragonTrendRunner() *DragonTrendRunner {
 	return r
 }
 
-func (r *DragonTrendRunner) Name() string     { return "dragon_trend" }
-func (r *DragonTrendRunner) Type() string     { return "trend" }
+func (r *DragonTrendRunner) Name() string              { return "dragon_trend" }
+func (r *DragonTrendRunner) Type() string              { return "trend" }
 func (r *DragonTrendRunner) Version() (string, string) { return r.BaseRunner.Version() }
 
 func (r *DragonTrendRunner) Reset() {
@@ -59,12 +59,12 @@ func (r *DragonTrendRunner) Reset() {
 
 func (r *DragonTrendRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"min_aligned":      float64(r.MinAligned),
-		"adx_period":       float64(r.ADXPeriod),
-		"adx_threshold":    r.ADXThreshold,
-		"atr_period":       float64(r.ATRPeriod),
-		"atr_multiplier":   r.ATRMultiplier,
-		"profit_atr_mult":  r.ProfitATRMult,
+		"min_aligned":     float64(r.MinAligned),
+		"adx_period":      float64(r.ADXPeriod),
+		"adx_threshold":   r.ADXThreshold,
+		"atr_period":      float64(r.ATRPeriod),
+		"atr_multiplier":  r.ATRMultiplier,
+		"profit_atr_mult": r.ProfitATRMult,
 	}
 }
 
@@ -188,8 +188,9 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if atr <= 0 {
 			return nil
 		}
-		stopDist := atr * r.ATRMultiplier
-		profitDist := atr * r.ProfitATRMult
+		stopMult, profitMult := r.RegimeExitMults(regime)
+		stopDist := atr * r.ATRMultiplier * stopMult
+		profitDist := atr * r.ProfitATRMult * profitMult
 		r.peakPrice = price
 		size := 1.0
 		r.OpenPosition("BUY", price,
@@ -204,8 +205,9 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 		if atr <= 0 {
 			return nil
 		}
-		stopDist := atr * r.ATRMultiplier
-		profitDist := atr * r.ProfitATRMult
+		stopMult, profitMult := r.RegimeExitMults(regime)
+		stopDist := atr * r.ATRMultiplier * stopMult
+		profitDist := atr * r.ProfitATRMult * profitMult
 		r.peakPrice = price
 		size := 1.0
 		r.OpenPosition("SELL", price,

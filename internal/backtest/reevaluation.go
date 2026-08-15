@@ -34,11 +34,11 @@ func DefaultReevaluationConfig() ReevaluationConfig {
 		DegradationDays:      30,
 		RecoveryDays:         10,
 		MaxDDThreshold: map[string]float64{
-			"grid_trading":         15.0,
-			"rsi2_reversion":       10.0,
-			"trend_following":      25.0,
+			"grid_trading":          15.0,
+			"rsi2_reversion":        10.0,
+			"trend_following":       25.0,
 			"volatility_harvesting": 15.0,
-			"donchian_breakout":    20.0,
+			"donchian_breakout":     20.0,
 		},
 		RegimeExitBars:       5,
 		CorrelationBrakeDays: 10,
@@ -51,12 +51,13 @@ func DefaultReevaluationConfig() ReevaluationConfig {
 }
 
 type StrategyReevaluator struct {
-	config           ReevaluationConfig
-	benchmarkSharpe  map[string]float64
-	sharpeHistory    map[string][]sharpePoint
-	fillSlippage     map[string][]float64
-	maxDD            map[string]float64
-	peakEquity       map[string]float64
+	config          ReevaluationConfig
+	benchmarkSharpe map[string]float64
+	benchmarkPassed map[string]bool
+	sharpeHistory   map[string][]sharpePoint
+	fillSlippage    map[string][]float64
+	maxDD           map[string]float64
+	peakEquity      map[string]float64
 }
 
 type sharpePoint struct {
@@ -71,11 +72,19 @@ func NewStrategyReevaluator(config ReevaluationConfig, benchmarkSharpe map[strin
 	return &StrategyReevaluator{
 		config:          config,
 		benchmarkSharpe: benchmarkSharpe,
+		benchmarkPassed: make(map[string]bool),
 		sharpeHistory:   make(map[string][]sharpePoint),
 		fillSlippage:    make(map[string][]float64),
 		maxDD:           make(map[string]float64),
 		peakEquity:      make(map[string]float64),
 	}
+}
+
+// SetBenchmarkPassed records the market-based benchmark filter verdict for a
+// strategy. A recorded `false` blocks promotion (mandatory gate); a strategy
+// with no recorded verdict is unaffected (backward compatible).
+func (sr *StrategyReevaluator) SetBenchmarkPassed(sid string, passed bool) {
+	sr.benchmarkPassed[sid] = passed
 }
 
 type ReevaluationResult struct {
@@ -159,6 +168,12 @@ func (sr *StrategyReevaluator) evaluatePromotion(sid string, state StrategyState
 	hasBench bool, now time.Time) *ReevaluationResult {
 
 	if state == StrategyActive || state == StrategyViolated {
+		return nil
+	}
+
+	// Mandatory market-based benchmark gate: a strategy that failed its
+	// benchmark filter is not eligible for promotion.
+	if passed, ok := sr.benchmarkPassed[sid]; ok && !passed {
 		return nil
 	}
 

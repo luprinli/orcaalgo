@@ -37,7 +37,7 @@ func (s *RebalanceScheduler) EvaluateEligibility(strategyID string, regime int8,
 		Kelly:      kellyOverride,
 	}
 
-	if !s.matrix.IsAllowed(strategyID, regime) {
+	if s.matrix.ParticipationForRegime(strategyID, regime) <= 0 {
 		result.Reason = "regime_blocked"
 		return result
 	}

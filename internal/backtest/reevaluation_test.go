@@ -121,3 +121,40 @@ func TestReevaluator_Promotion_RegimeReentry(t *testing.T) {
 		t.Errorf("expected activate, got %s", results[0].Action)
 	}
 }
+
+func TestReevaluator_BenchmarkFailBlocksPromotion(t *testing.T) {
+	cfg := DefaultReevaluationConfig()
+	sr := NewStrategyReevaluator(cfg, nil)
+	sr.SetBenchmarkPassed("grid_trading", false)
+	now := time.Now()
+	results := sr.Evaluate(
+		map[string]float64{"grid_trading": 1.5},
+		map[string]float64{"grid_trading": 5.0},
+		map[string]StrategyState{"grid_trading": StrategyStandby},
+		map[string]float64{"grid_trading": 0},
+		now,
+	)
+	if len(results) != 0 {
+		t.Fatalf("benchmark-failed strategy must not be promoted, got %d results", len(results))
+	}
+}
+
+func TestReevaluator_BenchmarkPassAllowsPromotion(t *testing.T) {
+	cfg := DefaultReevaluationConfig()
+	sr := NewStrategyReevaluator(cfg, nil)
+	sr.SetBenchmarkPassed("grid_trading", true)
+	now := time.Now()
+	results := sr.Evaluate(
+		map[string]float64{"grid_trading": 1.5},
+		map[string]float64{"grid_trading": 5.0},
+		map[string]StrategyState{"grid_trading": StrategyStandby},
+		map[string]float64{"grid_trading": 0},
+		now,
+	)
+	if len(results) != 1 {
+		t.Fatalf("benchmark-passed strategy should be promoted, got %d results", len(results))
+	}
+	if results[0].Action != "activate" {
+		t.Errorf("expected activate, got %s", results[0].Action)
+	}
+}

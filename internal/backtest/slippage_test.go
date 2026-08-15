@@ -199,6 +199,43 @@ func TestFillSimulator_SlippageMidLast(t *testing.T) {
 	}
 }
 
+func TestSlippageForSymbol_Routing(t *testing.T) {
+	cases := []struct {
+		symbol    string
+		spreadBps float64
+	}{
+		// Crypto — hyphenated universe tickers must route to CryptoSlippage.
+		{"BTC-USD", 12.0},
+		{"ETH-USD", 12.0},
+		// Legacy canonical forms still route correctly.
+		{"BTCUSD", 12.0},
+		{"ETHUSD", 12.0},
+		// Forex majors.
+		{"EURUSD", 0.3},
+		{"GBPUSD", 0.3},
+		{"USDJPY", 0.3},
+		{"AUDUSD", 0.3},
+		{"USDCAD", 0.3},
+		// Small-cap equities.
+		{"NVDA", 8.0},
+		{"IWM", 8.0},
+		{"TSLA", 8.0},
+		// Commodity ETFs.
+		{"GLD", 4.0},
+		{"TLT", 4.0},
+		// Default equity fallback.
+		{"SPY", 2.0},
+		{"AAPL", 2.0},
+		{"QQQ", 2.0},
+	}
+	for _, c := range cases {
+		m := SlippageForSymbol(c.symbol)
+		if m.SpreadBps != c.spreadBps {
+			t.Errorf("SlippageForSymbol(%q) spread = %v, want %v", c.symbol, m.SpreadBps, c.spreadBps)
+		}
+	}
+}
+
 func TestLowLatencySlippage(t *testing.T) {
 	m := LowLatencySlippage()
 	if m.LatencyMs >= 5.0 {
@@ -208,5 +245,32 @@ func TestLowLatencySlippage(t *testing.T) {
 	fill := fs.SimulateFill(1, "SPY", 500.0, 100.0, "BUY", 500.0, time.Now())
 	if fill.FillQuantity <= 0 {
 		t.Error("Expected fill")
+	}
+}
+
+func TestApplyCalibratedCosts_OverridesPositiveValues(t *testing.T) {
+	base := SlippageForSymbol("SPY")
+	out := ApplyCalibratedCosts(base, 3.5, 1.25)
+	if out.SpreadBps != 3.5 {
+		t.Errorf("spread = %v, want 3.5", out.SpreadBps)
+	}
+	if out.VolumeImpactFactor != 1.25 {
+		t.Errorf("impact = %v, want 1.25", out.VolumeImpactFactor)
+	}
+	if out.AdverseSelectBps != base.AdverseSelectBps {
+		t.Errorf("adverse selection should be preserved, got %v", out.AdverseSelectBps)
+	}
+}
+
+func TestApplyCalibratedCosts_IgnoresUncalibrated(t *testing.T) {
+	base := SlippageForSymbol("SPY")
+	for _, bad := range []float64{0, -1, math.NaN(), math.Inf(1)} {
+		out := ApplyCalibratedCosts(base, bad, bad)
+		if out.SpreadBps != base.SpreadBps {
+			t.Errorf("spread for %v = %v, want base %v", bad, out.SpreadBps, base.SpreadBps)
+		}
+		if out.VolumeImpactFactor != base.VolumeImpactFactor {
+			t.Errorf("impact for %v = %v, want base %v", bad, out.VolumeImpactFactor, base.VolumeImpactFactor)
+		}
 	}
 }

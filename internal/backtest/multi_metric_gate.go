@@ -7,13 +7,17 @@ import (
 )
 
 type MultiMetricStandard struct {
-	MinSharpeRatio   float64 `json:"min_sharpe_ratio"`
-	MaxDrawdownPct   float64 `json:"max_drawdown_pct"`
-	MinPassProbPct   float64 `json:"min_pass_probability_pct"`
-	MinProfitFactor  float64 `json:"min_profit_factor"`
-	MinNumTrades     int     `json:"min_num_trades"`
-	MinSortinoRatio  float64 `json:"min_sortino_ratio"`
+	MinSharpeRatio       float64 `json:"min_sharpe_ratio"`
+	MaxDrawdownPct       float64 `json:"max_drawdown_pct"`
+	MinPassProbPct       float64 `json:"min_pass_probability_pct"`
+	MinProfitFactor      float64 `json:"min_profit_factor"`
+	MinNumTrades         int     `json:"min_num_trades"`
+	MinSortinoRatio      float64 `json:"min_sortino_ratio"`
 	MaxSharpeDegradation float64 `json:"max_sharpe_degradation_pct"`
+	// MinInformationRatio is the market-based benchmark filter floor. Zero
+	// disables the gate; positive values require the strategy's information
+	// ratio vs. its benchmark to meet the floor (mandatory promotion gate).
+	MinInformationRatio float64 `json:"min_information_ratio"`
 }
 
 type MetricVerdict struct {
@@ -24,11 +28,11 @@ type MetricVerdict struct {
 }
 
 type MultiMetricVerdict struct {
-	Passed     bool            `json:"passed"`
-	Verdicts   []MetricVerdict `json:"verdicts"`
-	PassedCount int            `json:"passed_count"`
-	TotalCount  int            `json:"total_count"`
-	Timestamp   time.Time      `json:"timestamp"`
+	Passed      bool            `json:"passed"`
+	Verdicts    []MetricVerdict `json:"verdicts"`
+	PassedCount int             `json:"passed_count"`
+	TotalCount  int             `json:"total_count"`
+	Timestamp   time.Time       `json:"timestamp"`
 }
 
 func DefaultMultiMetricStandard() MultiMetricStandard {
@@ -278,4 +282,33 @@ func (v MultiMetricVerdict) Summary() string {
 		summary += "  " + f + "\n"
 	}
 	return fmt.Sprintf("FAIL (%d/%d metrics):\n%s", v.PassedCount, v.TotalCount, summary)
+}
+
+// EvaluateBacktestMultiMetricWithBenchmark extends EvaluateBacktestMultiMetric
+// with the market-based benchmark filter (mandatory promotion gate). When the
+// standard sets a positive MinInformationRatio and a benchmark information
+// ratio is supplied, the benchmark metric is appended to the verdict and gates
+// the overall Passed outcome.
+func EvaluateBacktestMultiMetricWithBenchmark(result *BacktestResult, standard MultiMetricStandard, benchmarkIR *float64) MultiMetricVerdict {
+	verdict := EvaluateBacktestMultiMetric(result, standard)
+	if standard.MinInformationRatio > 0 && benchmarkIR != nil {
+		verdict.Verdicts = append(verdict.Verdicts, MetricVerdict{
+			Metric:   "benchmark_information_ratio",
+			Required: standard.MinInformationRatio,
+			Actual:   *benchmarkIR,
+			Passed:   *benchmarkIR >= standard.MinInformationRatio,
+		})
+		verdict.TotalCount = len(verdict.Verdicts)
+		verdict.PassedCount = 0
+		allPassed := true
+		for _, mv := range verdict.Verdicts {
+			if mv.Passed {
+				verdict.PassedCount++
+			} else {
+				allPassed = false
+			}
+		}
+		verdict.Passed = allPassed
+	}
+	return verdict
 }

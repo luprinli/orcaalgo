@@ -28,9 +28,9 @@ type ProcessSignalRequest struct {
 
 // ProcessSignalResult is the output of RiskPipeline.ProcessSignal.
 type ProcessSignalResult struct {
-	Approved   bool
-	Size       float64
-	Reason     string // why rejected, or "ok" on approval
+	Approved bool
+	Size     float64
+	Reason   string // why rejected, or "ok" on approval
 }
 
 // RiskPipeline is the canonical signal-audit pipeline shared by the backtest
@@ -39,10 +39,10 @@ type ProcessSignalResult struct {
 // order. Adding a new risk check here automatically applies to both backtest
 // and live paths.
 type RiskPipeline struct {
-	SignalGate  SignalGate
-	Capital     CapitalGate
-	PropFirm    PropFirmGate
-	KellyMult   float64
+	SignalGate SignalGate
+	Capital    CapitalGate
+	PropFirm   PropFirmGate
+	KellyMult  float64
 
 	// RegimeMatrix gates strategies by regime. When set, every signal is
 	// checked against the matrix: if the strategy is not allowed in the
@@ -90,9 +90,14 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 		return ProcessSignalResult{Approved: false, Reason: "propfirm_halted:" + p.PropFirm.HaltReason()}
 	}
 
-	// 3b. Regime activation gate — block strategies not allowed in current regime.
+	// 3b. Regime participation gate — soft gate: 0 = block, 1 = full size, and
+	// in-between scales position size (regime_gating_deep_dive.md §2). This
+	// replaces the previous binary block so regime sensitivity is
+	// risk-proportional rather than all-or-nothing.
+	var regimeWeight float64 = 1.0
 	if p.RegimeMatrix != nil {
-		if !p.RegimeMatrix.IsAllowed(req.StrategyID, p.CurrentRegime) {
+		regimeWeight = p.RegimeMatrix.ParticipationForRegime(req.StrategyID, p.CurrentRegime)
+		if regimeWeight <= 0 {
 			monitor.RecordReject()
 			monitor.RecordSignalReject("regime_blocked", req.StrategyID)
 			return ProcessSignalResult{Approved: false, Reason: "regime_blocked"}
@@ -109,10 +114,18 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	if p.SignalGate != nil {
 		size = p.SignalGate.ApplySizing(size, req.RunningCapital, req.Confidence)
 	}
+	// Soft regime participation scales the sized quantity (hard block already
+	// handled above in step 3b).
+	size *= regimeWeight
 	kelly := p.KellyMult
 	if p.RegimeMatrix != nil {
-		if override := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); override > kelly {
-			kelly = override
+		if k := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); k > 0 {
+			// DOWNWARD-only override: lower Kelly in HighVol/Crisis (≤0.25, HP#6).
+			// The previous `override > kelly` could only raise, so the per-regime
+			// Kelly reduction never applied.
+			if k < kelly {
+				kelly = k
+			}
 		}
 	}
 	size *= kelly

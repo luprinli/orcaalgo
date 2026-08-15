@@ -55,7 +55,9 @@ func NewSessionScalpRunner() *SessionScalpRunner {
 
 func (r *SessionScalpRunner) Name() string { return "session_scalp" }
 func (r *SessionScalpRunner) Type() string { return "scalp" }
-func (r *SessionScalpRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *SessionScalpRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *SessionScalpRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -70,14 +72,14 @@ func (r *SessionScalpRunner) Reset() {
 
 func (r *SessionScalpRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"range_minutes":       r.RangeMinutes,
-		"entry_buffer_pct":    r.EntryBufferPct,
-		"volume_multiplier":   r.VolumeMultiplier,
-		"atr_period":          r.AtrPeriod,
+		"range_minutes":        r.RangeMinutes,
+		"entry_buffer_pct":     r.EntryBufferPct,
+		"volume_multiplier":    r.VolumeMultiplier,
+		"atr_period":           r.AtrPeriod,
 		"take_profit_atr_mult": r.TakeProfitAtrMult,
-		"stop_loss_atr_mult":  r.StopLossAtrMult,
-		"time_exit_minutes":   r.TimeExitMinutes,
-		"timezone_offset":     float64(r.TimezoneOffset),
+		"stop_loss_atr_mult":   r.StopLossAtrMult,
+		"time_exit_minutes":    r.TimeExitMinutes,
+		"timezone_offset":      float64(r.TimezoneOffset),
 	}
 }
 
@@ -221,21 +223,26 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 	breakoutHigh := r.openingHigh * (1.0 + bufferPct)
 	breakoutLow := r.openingLow * (1.0 - bufferPct)
 
-	qty := 1.0
-	if regime == 2 {
-		qty *= 0.50
-	}
+	// Regime sensitivity is now expressed via the participation weight
+	// (regime_w_highvol) in the risk pipeline, not a hardcoded qty *= 0.50.
+	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	if candle.Close.Float64() >= breakoutHigh {
-		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()+atr*r.TakeProfitAtrMult), candle.Time)
+		r.OpenPosition("BUY", candle.Close,
+			types.PriceFromFloat(candle.Close.Float64()-atr*r.StopLossAtrMult*stopMult),
+			types.PriceFromFloat(candle.Close.Float64()+atr*r.TakeProfitAtrMult*profitMult),
+			candle.Time)
 		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: qty}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
 
 	if candle.Close.Float64() <= breakoutLow {
-		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+atr*r.StopLossAtrMult), types.PriceFromFloat(candle.Close.Float64()-atr*r.TakeProfitAtrMult), candle.Time)
+		r.OpenPosition("SELL", candle.Close,
+			types.PriceFromFloat(candle.Close.Float64()+atr*r.StopLossAtrMult*stopMult),
+			types.PriceFromFloat(candle.Close.Float64()-atr*r.TakeProfitAtrMult*profitMult),
+			candle.Time)
 		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: qty}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}
 
 	return nil

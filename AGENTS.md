@@ -123,7 +123,7 @@ These are **NEVER** permitted. Violations block PR merge.
 
 ### Pre-Deployment Gating
 
-- `orca preflight --strict` — 12-point checklist
+- `orca preflight --strict` — pre-flight checklist (config, GKR validation, hashing, data integrity, broker/LLM creds, benchmark filter, migrations)
 - GKR strategy hash verification
 - `orca calibrate` — calibration audit
 - `orca validate-data-integrity` — cross-pipeline data integrity check
@@ -229,7 +229,7 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 
 ### Data Infrastructure (2026-08-12)
 
-**18-symbol prop-firm universe** (equities, forex, crypto, indices). Real data replaces synthetic wherever available. Stooq dataset (`data/stooq/`, 31K files) provides real intraday bars; Yahoo provides 5-year daily history.
+**17-symbol prop-firm universe** (equities, forex, crypto, indices). Real data replaces synthetic wherever available. Stooq dataset (`data/stooq/`, 31K files) provides real intraday bars; Yahoo provides 5-year daily history.
 
 | Data Type | Source | Coverage |
 |-----------|--------|----------|
@@ -248,7 +248,7 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 
 | File | Purpose |
 |------|---------|
-| `scripts/stooq_discovery.py` | Walk stooq tree → `data/stooq/manifest.json` (18-symbol mapping) |
+| `scripts/stooq_discovery.py` | Walk stooq tree → `data/stooq/manifest.json` (17-symbol mapping) |
 | `scripts/stooq_seed.py` | Stream stooq 1h + 5m CSVs into candles (source='stooq') |
 | `scripts/stooq_resample.py` | 1H→4H + 5m→15m/30m resampling (source='stooq-resampled') |
 | `scripts/stooq_synthetic.py` | Unconstrained-GBM gap-fill calibrated from stooq σ/μ (source='stooq-calibrated') |
@@ -277,6 +277,10 @@ Total issues resolved: 102 (from Production Audit Report 2026-08-11). All 11 CRI
 | 000001–000038 | Various | Initial schema through sentiment_logs |
 | **000039** | **vix_bigint** | VIX DOUBLE PRECISION → BIGINT (HP #2 compliance, idempotent) |
 | **000040** | **stooq_source** | `source` column + unique (symbol_id, timeframe, time) constraint on candles |
+| 000041–000046 | Various | Source bar identity, corporate actions, account credentials, LLM keys, backtest run metrics, signal funnel |
+| **000047** | **cost_calibration** | Per-symbol spread/impact coefficients (R2, `orca calibrate-costs`) |
+| **000048** | **symbol_carry** | Symbol carry metadata |
+| **000049** | **benchmark_filter** | `benchmark_evals` + `benchmark_series` (mandatory promotion gate) |
 
 ### Known Issues
 
@@ -284,7 +288,7 @@ All 102 issues identified in the Production Audit Report (2026-08-11) have been 
 
 ## Backtest Remediation Status (2026-08-12)
 
-Post-audit remediation of `docs/Backtest Readiness Audit matrix_results (7) 2026-08-12.md` is complete. All P0–P3 enhancements (E1–E15) plus the live-path daily-loss parity fix are implemented and verified (`go build/test/vet`, `orca validate` on 18 configs, `tsc --noEmit`).
+Post-audit remediation of the backtest readiness audit is complete. All P0–P3 enhancements (E1–E15) plus the live-path daily-loss parity fix are implemented and verified (`go build/test/vet`, `orca validate` on the strategy configs, `tsc --noEmit`).
 
 Key changes agents must preserve:
 
@@ -299,7 +303,7 @@ Remaining follow-ups (documented, non-blocking): none — API walk-forward wirin
 
 ## Benchmark-Driven Enhancements (2026-08-13)
 
-Post-benchmark remediation of `docs/StratCraft Benchmark 2026-08-13.md` (cross-system feature benchmark vs. the StratCraft reference) is complete. All 12 recommendations (R1–R12) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
+Post-benchmark remediation of the cross-system feature benchmark is complete. All 12 recommendations (R1–R12) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
 
 ### Anti-overfit scoring (`orca/scoring/`)
 
@@ -337,7 +341,7 @@ Post-benchmark remediation of `docs/StratCraft Benchmark 2026-08-13.md` (cross-s
 
 ## Broker, AI & Strategy-Results Enhancements (2026-08-13)
 
-Post-benchmark remediation of `docs/Broker & Strategy Results & AI API Benchmark 2026-08-13.md` (cross-system broker/AI/strategy-results comparison vs. the StratCraft reference) is complete. All workstreams (4.1–4.9) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
+Post-benchmark remediation of the cross-system broker/AI/strategy-results comparison is complete. All workstreams (4.1–4.9) are implemented and verified (`go build/test/vet`, `ruff`/`mypy`/`pytest`, `tsc --noEmit`). Agents must preserve the following:
 
 ### Broker operations (`internal/broker/`)
 
@@ -363,3 +367,29 @@ Post-benchmark remediation of `docs/Broker & Strategy Results & AI API Benchmark
 - **HP #2**: all broker/order prices are `types.Price`; `float64` only for quantities/percentages. Raw wire-format structs must not use a `float64` field named `*Price` (the anti-pattern scan flags it) — name them after the wire field (e.g. `P`).
 - **Secrets**: never persist or log raw credentials; store `vault_path` + masked suffix in the DB and decrypt via `risk.VaultProvider` at the boundary.
 - **System-wide alignment**: trade-distribution metrics must also be plumbed into `orca/sizing/promotion_gate.py` + `orca calibrate` (not just the detail page); `orca preflight` gained `broker_credentials`, `account_credentials_migration`, and `llm_keys_migration` checks.
+
+## Benchmark Filter & Migration Standardization (2026-08-14)
+
+### Market-based benchmark filter (mandatory promotion gate)
+
+A strategy is promotion-eligible only if it clears a market-relative benchmark comparison, in addition to the existing statistical gates (BH/Bonferroni, Deflated Sharpe, walk-forward, trade distribution). Design doc: `docs/benchmark_filter_design.md`.
+
+- **Python math (`orca/benchmark/`)** — `spec.py` (frozen `BenchmarkSpec`/`BenchmarkThresholds`), `metrics.py` (`compute_benchmark_metrics`: beta, annualized alpha, information ratio, tracking error, capture, relative drawdown), `filter.py` (`apply_benchmark_filter` → frozen `BenchmarkVerdict`). The verdict deflates the active return's Sharpe by `n_trials` (DSR), so a benchmark-beating result that is selection noise does not pass. `orca benchmark-filter` CLI reads `{strategy, benchmark, spec, n_trials}` JSON on stdin.
+- **Go subprocess (`internal/benchmark/`)** — single `Evaluate`/`SpecHash` entry point used by the API and matrix runner; math stays in Python (HP #1).
+- **Persistence** — `benchmark_evals` (append-only verdicts) + `benchmark_series` (risk-free yield), migration `000049_benchmark_filter`; `db.BenchmarkEval`/`BenchmarkSeriesPoint`, `GET /api/v1/admin/benchmark-evals`.
+- **Cost calibration (R2)** — `orca/costs/` (Corwin-Schultz / Roll spread, square-root impact η, Kyle λ), `orca calibrate-costs` CLI, `cost_calibration` table (migration `000047`), `SlippageModel.ApplyCalibratedCosts`.
+- **Statistical robustness (R1/R5)** — `orca/sizing/deflated_sharpe.py` (DSR/PSR/MinTRL/CSCV-PBO), `sharpe_stats.py` (Sharpe SE + Newey-West HAC), `robustness.py` (`backtest_robustness_stats`), `orca backtest-stats` CLI, `GET /api/v1/backtests/:id/robustness`.
+- **Integration points** — `promotion_gate.py` reads the `BenchmarkPass` CSV column (`_benchmark_ok`, veto); `MultiMetricStandard.MinInformationRatio` + `EvaluateBacktestMultiMetricWithBenchmark`; `StrategyReevaluator.SetBenchmarkPassed` blocks promotion on a recorded `false`; matrix runner `--benchmark` writes `BenchmarkPass`/`BenchmarkIR`/`BenchmarkAlpha`; promote-to-live wizard gates on the verdict; `getBacktestBenchmark` reworked to the source+timeframe-filtered loader + `?symbols=`; `POST /backtests/:id/benchmark-eval` computes + persists the verdict; anti-pattern **Rule 13** enforces the gate wiring; `orca preflight` checks 15/16 cover the filter + migration.
+- **Invariants**: benchmark choice is declared before results and hashed into the run `config` JSONB (`benchmark.SpecHash`, HP #3); the gate is **fail-closed** (missing benchmark data blocks promotion); benchmark returns use the stooq-filtered loader, never the legacy `LoadCandles` path; `risk_free` kind uses `benchmark_series` (`orca ingest-risk-free`); failed strategies are retired/archived, never deleted (trial-count accounting for DSR).
+
+### Migration standardization (Go-managed runner)
+
+The two migration mechanisms were reconciled into one Go-managed runner (lowest cost; no external tool):
+
+- `internal/db.RunMigrations` now **applies** pending `internal/db/migrations/*.up.sql` files (sorted by filename) and records them in `schema_migrations (filename, applied_at)` — SQL + record in one transaction. It runs at server startup (`cmd/orca-server/main.go`), so fresh deployments auto-migrate.
+- `cmd/migrate/` is the standalone CLI; `scripts/migrate.ps1` now wraps it (`go run ./cmd/migrate`) instead of golang-migrate. `scripts/orchestrate.py` forwards the resolved `ORCA_DB_*` config to it.
+- The former golang-migrate `version`/`dirty` `schema_migrations` conflict is gone. **Do not** reintroduce golang-migrate or a second `schema_migrations` schema; new schema changes are additive `NNNNNN_name.up.sql` (+ `.down.sql`) files applied by `RunMigrations`.
+
+### Additional strategies
+
+Three strategies were added (`momentum_12_1`, `fx_carry`, `session_momentum`) with runners (`internal/strategy/{momentum,carry,session_momentum}_runner.go`) and `.gkr.yaml` configs. The `configs/universe.json` strategy list (16 entries) is the single source of truth for the matrix default.

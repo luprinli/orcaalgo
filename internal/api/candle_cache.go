@@ -23,7 +23,7 @@ var (
 
 func matrixSemaphore() *semaphore.Weighted {
 	globalMatrixSemOnce.Do(func() {
-		globalMatrixSem = semaphore.NewWeighted(int64(backtest.MatrixWorkers(20)))
+		globalMatrixSem = semaphore.NewWeighted(int64(backtest.MatrixWorkers(backtest.DefaultDBPoolMax)))
 	})
 	return globalMatrixSem
 }

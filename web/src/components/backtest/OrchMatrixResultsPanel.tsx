@@ -6,16 +6,25 @@ import { Button } from "../ui/button"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select"
 import { BarChart3, Download, Filter, Grid3X3 } from "lucide-react"
-import { formatNumber, formatPctRaw } from "../../lib/format"
+import { formatNumber, formatPctRaw, formatPct, formatUSD } from "../../lib/format"
 import { exportOrchTradesCSV, exportOrchAllocationCSV, exportOrchBreachesCSV } from "../../lib/export"
 
 interface OrchMatrixResult {
   set_index: number
   strategies: Array<{ strategy_id: string; symbol: string; timeframe: string }>
   pool_sharpe: number
+  pool_sortino: number
   pool_maxdd: number
   pool_return_pct: number
+  rebalance_costs: number
   num_trades: number
+  win_rate: number
+  profit_factor: number
+  num_wins: number
+  num_losses: number
+  monte_carlo_pass_prob: number
+  breach_count: number
+  per_strategy_stats?: Record<string, { num_trades: number; win_rate: number; profit_factor: number; total_pnl: number }>
   strategy_pnl?: Record<string, number>
   status: string
   error?: string
@@ -82,9 +91,16 @@ export default function OrchMatrixResultsPanel({ results, telemetry, onViewDetai
                 <TableHead className="h-7 text-xs">Strategies</TableHead>
                 <TableHead className="h-7 text-xs">Status</TableHead>
                 <TableHead className="h-7 text-xs text-right">Pool Sharpe</TableHead>
-                <TableHead className="h-7 text-xs text-right">Pool MaxDD</TableHead>
+                <TableHead className="h-7 text-xs text-right">Sortino</TableHead>
                 <TableHead className="h-7 text-xs text-right">Pool Return</TableHead>
+                <TableHead className="h-7 text-xs text-right">Pool MaxDD</TableHead>
+                <TableHead className="h-7 text-xs text-right">Calmar</TableHead>
+                <TableHead className="h-7 text-xs text-right">Win %</TableHead>
+                <TableHead className="h-7 text-xs text-right">PF</TableHead>
                 <TableHead className="h-7 text-xs text-right">Trades</TableHead>
+                <TableHead className="h-7 text-xs text-right">Rebal</TableHead>
+                <TableHead className="h-7 text-xs text-right">MC Pass</TableHead>
+                <TableHead className="h-7 text-xs text-right">Breaches</TableHead>
                 {hasViewDetail && <TableHead className="h-7 text-xs w-12" />}
               </TableRow>
             </TableHeader>
@@ -95,9 +111,17 @@ export default function OrchMatrixResultsPanel({ results, telemetry, onViewDetai
                   <TableCell className="py-0.5 text-xs font-mono">#{r.set_index + 1}</TableCell>
                   <TableCell className="py-0.5">
                     <div className="flex flex-wrap gap-0.5">
-                      {r.strategies.map((s, j) => (
-                        <Badge key={j} variant="secondary" className="text-[9px] h-4">{s.strategy_id}:{s.symbol}</Badge>
-                      ))}
+                      {r.strategies.map((s, j) => {
+                        const st = r.per_strategy_stats?.[s.strategy_id]
+                        const tip = st
+                          ? `${s.symbol}: ${st.num_trades} trades · PnL ${formatUSD(st.total_pnl, 0)} · WR ${formatPct(st.win_rate, 0)} · PF ${formatNumber(st.profit_factor, 2)}`
+                          : `${s.symbol}:${s.timeframe}`
+                        return (
+                          <Badge key={j} variant="secondary" className="text-[9px] h-4" title={tip}>
+                            {s.strategy_id}:{s.symbol}
+                          </Badge>
+                        )
+                      })}
                     </div>
                   </TableCell>
                   <TableCell className="py-0.5">
@@ -109,15 +133,39 @@ export default function OrchMatrixResultsPanel({ results, telemetry, onViewDetai
                     style={{ color: (r.pool_sharpe ?? 0) >= 1 ? 'var(--trading-success)' : (r.pool_sharpe ?? 0) > 0 ? 'var(--trading-warning)' : 'var(--trading-danger)' }}>
                     {r.status === "completed" ? formatNumber(r.pool_sharpe ?? 0, 2) : "--"}
                   </TableCell>
-                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
-                    {r.status === "completed" ? formatPctRaw(r.pool_maxdd ?? 0, 1) : "--"}
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums"
+                    style={{ color: (r.pool_sortino ?? 0) >= 1 ? 'var(--trading-success)' : (r.pool_sortino ?? 0) > 0 ? 'var(--trading-warning)' : 'var(--trading-danger)' }}>
+                    {r.status === "completed" ? formatNumber(r.pool_sortino ?? 0, 2) : "--"}
                   </TableCell>
                   <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums"
                     style={{ color: (r.pool_return_pct ?? 0) >= 0 ? 'var(--trading-success)' : 'var(--trading-danger)' }}>
                     {r.status === "completed" ? formatPctRaw(r.pool_return_pct ?? 0, 1) : "--"}
                   </TableCell>
                   <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
+                    {r.status === "completed" ? formatPctRaw(r.pool_maxdd ?? 0, 1) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
+                    {r.status === "completed" && (r.pool_maxdd ?? 0) > 0 ? formatNumber((r.pool_return_pct ?? 0) / r.pool_maxdd, 2) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
+                    {r.status === "completed" ? formatPct(r.win_rate ?? 0, 1) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums"
+                    style={{ color: (r.profit_factor ?? 0) >= 1.5 ? 'var(--trading-success)' : (r.profit_factor ?? 0) > 1 ? 'var(--trading-warning)' : 'var(--trading-danger)' }}>
+                    {r.status === "completed" ? formatNumber(r.profit_factor ?? 0, 2) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
                     {r.status === "completed" ? r.num_trades : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
+                    {r.status === "completed" ? formatUSD(r.rebalance_costs ?? 0, 0) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums"
+                    style={{ color: (r.monte_carlo_pass_prob ?? 0) >= 80 ? 'var(--trading-success)' : (r.monte_carlo_pass_prob ?? 0) >= 60 ? 'var(--trading-warning)' : 'var(--trading-danger)' }}>
+                    {r.status === "completed" ? formatPctRaw(r.monte_carlo_pass_prob ?? 0, 0) : "--"}
+                  </TableCell>
+                  <TableCell className="py-0.5 text-right font-mono text-xs tabular-nums">
+                    {r.status === "completed" && r.breach_count > 0 ? <Badge variant="destructive" className="text-[9px] h-4">{r.breach_count}</Badge> : r.status === "completed" ? "0" : "--"}
                   </TableCell>
                   {hasViewDetail && (
                     <TableCell className="py-0.5">

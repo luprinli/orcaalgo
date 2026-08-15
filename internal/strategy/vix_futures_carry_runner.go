@@ -49,23 +49,23 @@ type VIXFuturesCarryRunner struct {
 
 func NewVIXFuturesCarryRunner() *VIXFuturesCarryRunner {
 	return &VIXFuturesCarryRunner{
-		BaseRunner:         NewBaseRunner(128),
-		ContangoThreshold:  22.0,
-		FadeLookback:       10,
-		FadeEntryZ:         1.5,
-		FadeExitZ:          0.3,
-		StopATRMult:        2.0,
-		ProfitATRMult:      3.0,
-		MaxHold:            30,
+		BaseRunner:        NewBaseRunner(128),
+		ContangoThreshold: 22.0,
+		FadeLookback:      10,
+		FadeEntryZ:        1.5,
+		FadeExitZ:         0.3,
+		StopATRMult:       2.0,
+		ProfitATRMult:     3.0,
+		MaxHold:           30,
 	}
 }
 
-func (r *VIXFuturesCarryRunner) Name() string                        { return "vix_futures_carry" }
-func (r *VIXFuturesCarryRunner) Type() string                        { return "volatility" }
-func (r *VIXFuturesCarryRunner) Version() (string, string)           { return r.BaseRunner.Version() }
-func (r *VIXFuturesCarryRunner) SetVersion(a, b string)              { r.BaseRunner.SetVersion(a, b) }
-func (r *VIXFuturesCarryRunner) SetInstanceHash(h string)            { r.BaseRunner.SetInstanceHash(h) }
-func (r *VIXFuturesCarryRunner) InstanceHash() string                { return r.BaseRunner.InstanceHash() }
+func (r *VIXFuturesCarryRunner) Name() string              { return "vix_futures_carry" }
+func (r *VIXFuturesCarryRunner) Type() string              { return "volatility" }
+func (r *VIXFuturesCarryRunner) Version() (string, string) { return r.BaseRunner.Version() }
+func (r *VIXFuturesCarryRunner) SetVersion(a, b string)    { r.BaseRunner.SetVersion(a, b) }
+func (r *VIXFuturesCarryRunner) SetInstanceHash(h string)  { r.BaseRunner.SetInstanceHash(h) }
+func (r *VIXFuturesCarryRunner) InstanceHash() string      { return r.BaseRunner.InstanceHash() }
 
 func (r *VIXFuturesCarryRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -172,11 +172,12 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	// Entry: fade the vol spike (mean-reversion after extreme move).
+	stopMult, profitMult := r.RegimeExitMults(regime)
 	if zScore <= -r.FadeEntryZ {
 		r.barsHeld = 0
 		r.OpenPosition("BUY", price,
-			types.PriceFromFloat(price.Float64()-atr*r.StopATRMult),
-			types.PriceFromFloat(price.Float64()+atr*r.ProfitATRMult),
+			types.PriceFromFloat(price.Float64()-atr*r.StopATRMult*stopMult),
+			types.PriceFromFloat(price.Float64()+atr*r.ProfitATRMult*profitMult),
 			candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
 	}
@@ -184,8 +185,8 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if zScore >= r.FadeEntryZ {
 		r.barsHeld = 0
 		r.OpenPosition("SELL", price,
-			types.PriceFromFloat(price.Float64()+atr*r.StopATRMult),
-			types.PriceFromFloat(price.Float64()-atr*r.ProfitATRMult),
+			types.PriceFromFloat(price.Float64()+atr*r.StopATRMult*stopMult),
+			types.PriceFromFloat(price.Float64()-atr*r.ProfitATRMult*profitMult),
 			candle.Time)
 		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
 	}

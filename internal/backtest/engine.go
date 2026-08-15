@@ -2,6 +2,7 @@ package backtest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -31,8 +32,8 @@ type UniverseSnapshot struct {
 }
 
 const (
-	minTradesForMetrics  = 5   // minimum trades to compute Sharpe/Sortino
-	minTradesForReliable = 20  // minimum trades for statistically meaningful metrics
+	minTradesForMetrics  = 5  // minimum trades to compute Sharpe/Sortino
+	minTradesForReliable = 20 // minimum trades for statistically meaningful metrics
 )
 
 // holdingExpenseFee computes the time-proportional holding cost (ETF expense
@@ -70,14 +71,14 @@ type BacktestConfig struct {
 	FixedSeed             int64
 	SizingPercent         float64
 	KellyFraction         float64
-	EngineVersion         string `json:"engine_version,omitempty"`
-	StrategyHash          string `json:"strategy_hash,omitempty"`
-	GKRPath               string `json:"gkr_path,omitempty"`
-	EnablePrefetch        bool   `json:"enable_prefetch,omitempty"`
-	WarmUpBars            int               `json:"warmup_bars,omitempty"`
-	SecondarySymbols      map[string]string `json:"secondary_symbols,omitempty"` // primary → secondary for pairs trading
-	EarningsCalendar      *market.EarningsCalendar `json:"-"`
-	SkipEarningsDays      bool                     `json:"skip_earnings_days,omitempty"`
+	EngineVersion         string                    `json:"engine_version,omitempty"`
+	StrategyHash          string                    `json:"strategy_hash,omitempty"`
+	GKRPath               string                    `json:"gkr_path,omitempty"`
+	EnablePrefetch        bool                      `json:"enable_prefetch,omitempty"`
+	WarmUpBars            int                       `json:"warmup_bars,omitempty"`
+	SecondarySymbols      map[string]string         `json:"secondary_symbols,omitempty"` // primary → secondary for pairs trading
+	EarningsCalendar      *market.EarningsCalendar  `json:"-"`
+	SkipEarningsDays      bool                      `json:"skip_earnings_days,omitempty"`
 	AdjustmentProvider    market.AdjustmentProvider `json:"-"`
 }
 
@@ -99,172 +100,277 @@ type MatrixBacktestConfig struct {
 }
 
 type ComboResult struct {
-	RunID              string              `json:"run_id"`
-	Symbol             string              `json:"symbol"`
-	StrategyID         string              `json:"strategy_id"`
-	Timeframe          string              `json:"timeframe"`
-	SharpeRatio        float64             `json:"sharpe_ratio"`
-	SortinoRatio       float64             `json:"sortino_ratio"`
-	MaxDrawdown        float64             `json:"max_drawdown"`
-	MaxDrawdownDur     int                 `json:"max_drawdown_duration"`
-	TotalReturn        float64             `json:"total_return"`
-	WinRate            float64             `json:"win_rate"`
-	ProfitFactor       float64             `json:"profit_factor"`
-	AvgTrade           float64             `json:"avg_trade"`
-	AvgWin             float64             `json:"avg_win"`
-	AvgLoss            float64             `json:"avg_loss"`
-	NumTrades          int                 `json:"num_trades"`
-	NumWins            int                 `json:"num_wins"`
-	NumLosses          int                 `json:"num_losses"`
-	AvgMAE             float64             `json:"avg_mae"`
-	AvgMFE             float64             `json:"avg_mfe"`
-	Error              string              `json:"error,omitempty"`
-	Warnings           []string            `json:"warnings,omitempty"`
-	GatePassed         *bool               `json:"gate_passed,omitempty"`
-	AdverseSelectRate  float64             `json:"adverse_selection_rate,omitempty"`
-	BestParams         map[string]float64  `json:"best_params,omitempty"`
-	Optimized          bool                `json:"optimized"`
-	StrategyParams     map[string]float64  `json:"strategy_params,omitempty"`
-	EquityCurve        []EquityPoint       `json:"equity_curve,omitempty"`
-	Trades             []Trade             `json:"trades,omitempty"`
-	LongTrades         int                 `json:"long_trades"`
-	ShortTrades        int                 `json:"short_trades"`
-	LongWinRate        float64             `json:"long_win_rate"`
-	ShortWinRate       float64             `json:"short_win_rate"`
-	LongGrossPnL       float64             `json:"long_gross_pnl"`
-	ShortGrossPnL      float64             `json:"short_gross_pnl"`
-	LongPF             float64             `json:"long_profit_factor"`
-	ShortPF            float64             `json:"short_profit_factor"`
-	ZeroPnLTrades      int                 `json:"zero_pnl_trades"`
-	ExpectedPF         float64             `json:"expected_pf"`
-	RewardRiskRatio    float64             `json:"reward_risk_ratio"`
-	DailyVolatility    float64             `json:"daily_volatility"`
-	TrainPct           float64             `json:"train_pct"`
-	MtmSharpeRatio     float64             `json:"mtm_sharpe_ratio,omitempty"`
-	MtmMaxDrawdown     float64             `json:"mtm_max_drawdown,omitempty"`
-	MLFeatureEnabled   bool                `json:"ml_feature_enabled,omitempty"`
-	TotalFees          float64             `json:"total_fees,omitempty"`
-	AvgSlippageBps     float64             `json:"avg_slippage_bps,omitempty"`
-	CalmarRatio        float64             `json:"calmar_ratio,omitempty"`
-	CandleCount        int                 `json:"candle_count,omitempty"`
-	GrossReturnPct     float64             `json:"gross_return_pct,omitempty"`
-	DataSource         string              `json:"data_source,omitempty"`
-	EngineVersion      string              `json:"engine_version,omitempty"`
-	DataGenerationID   string              `json:"data_generation_id,omitempty"`
-	WfISSharpe         float64             `json:"wf_is_sharpe,omitempty"`
-	WfOOSSharpe        float64             `json:"wf_oos_sharpe,omitempty"`
-	FirstCandleTime    time.Time           `json:"first_candle_time,omitempty"`
-	LastCandleTime     time.Time           `json:"last_candle_time,omitempty"`
-	DeclaredBarsPerDay float64             `json:"declared_bars_per_day,omitempty"`
-	EffectiveBarsPerDay float64            `json:"effective_bars_per_day,omitempty"`
+	RunID             string             `json:"run_id"`
+	Symbol            string             `json:"symbol"`
+	StrategyID        string             `json:"strategy_id"`
+	Timeframe         string             `json:"timeframe"`
+	SharpeRatio       float64            `json:"sharpe_ratio"`
+	SortinoRatio      float64            `json:"sortino_ratio"`
+	MaxDrawdown       float64            `json:"max_drawdown"`
+	MaxDrawdownDur    int                `json:"max_drawdown_duration"`
+	TotalReturn       float64            `json:"total_return"`
+	WinRate           float64            `json:"win_rate"`
+	ProfitFactor      float64            `json:"profit_factor"`
+	AvgTrade          float64            `json:"avg_trade"`
+	AvgWin            float64            `json:"avg_win"`
+	AvgLoss           float64            `json:"avg_loss"`
+	NumTrades         int                `json:"num_trades"`
+	NumWins           int                `json:"num_wins"`
+	NumLosses         int                `json:"num_losses"`
+	AvgMAE            float64            `json:"avg_mae"`
+	AvgMFE            float64            `json:"avg_mfe"`
+	Error             string             `json:"error,omitempty"`
+	Warnings          []string           `json:"warnings,omitempty"`
+	GatePassed        *bool              `json:"gate_passed,omitempty"`
+	Implausible       bool               `json:"implausible,omitempty"`
+	AdverseSelectRate float64            `json:"adverse_selection_rate,omitempty"`
+	BestParams        map[string]float64 `json:"best_params,omitempty"`
+	Optimized         bool               `json:"optimized"`
+	StrategyParams    map[string]float64 `json:"strategy_params,omitempty"`
+	EquityCurve       []EquityPoint      `json:"equity_curve,omitempty"`
+	Trades            []Trade            `json:"trades,omitempty"`
+	LongTrades        int                `json:"long_trades"`
+	ShortTrades       int                `json:"short_trades"`
+	LongWinRate       float64            `json:"long_win_rate"`
+	ShortWinRate      float64            `json:"short_win_rate"`
+	LongGrossPnL      float64            `json:"long_gross_pnl"`
+	ShortGrossPnL     float64            `json:"short_gross_pnl"`
+	LongPF            float64            `json:"long_profit_factor"`
+	ShortPF           float64            `json:"short_profit_factor"`
+	ZeroPnLTrades     int                `json:"zero_pnl_trades"`
+	ExpectedPF        float64            `json:"expected_pf"`
+	RewardRiskRatio   float64            `json:"reward_risk_ratio"`
+	DailyVolatility   float64            `json:"daily_volatility"`
+	TrainPct          float64            `json:"train_pct"`
+	MtmSharpeRatio    float64            `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown    float64            `json:"mtm_max_drawdown,omitempty"`
+	MLFeatureEnabled  bool               `json:"ml_feature_enabled,omitempty"`
+	TotalFees         float64            `json:"total_fees,omitempty"`
+	AvgSlippageBps    float64            `json:"avg_slippage_bps,omitempty"`
+	CalmarRatio       float64            `json:"calmar_ratio,omitempty"`
+	CandleCount       int                `json:"candle_count,omitempty"`
+	GrossReturnPct    float64            `json:"gross_return_pct,omitempty"`
+	DataSource        string             `json:"data_source,omitempty"`
+	EngineVersion     string             `json:"engine_version,omitempty"`
+	DataGenerationID  string             `json:"data_generation_id,omitempty"`
+	WfISSharpe        float64            `json:"wf_is_sharpe,omitempty"`
+	WfOOSSharpe       float64            `json:"wf_oos_sharpe,omitempty"`
+	// WfAnchorOOSSharpe is the fixed-parameter (default params) OOS Sharpe from
+	// the embedded walk-forward — the overfit-detection baseline. A positive
+	// gap (WfOOSSharpe > WfAnchorOOSSharpe) indicates a genuine parameter island.
+	WfAnchorOOSSharpe float64 `json:"wf_anchor_oos_sharpe,omitempty"`
+	// WfBestParams is the JSON-encoded IVS-robust parameter island from the
+	// walk-forward (the params to promote, not the raw best).
+	WfBestParams        string         `json:"wf_best_params,omitempty"`
+	WfMultiplicityWarn  bool           `json:"wf_multiplicity_warning,omitempty"`
+	FirstCandleTime     time.Time      `json:"first_candle_time,omitempty"`
+	LastCandleTime      time.Time      `json:"last_candle_time,omitempty"`
+	DeclaredBarsPerDay  float64        `json:"declared_bars_per_day,omitempty"`
+	EffectiveBarsPerDay float64        `json:"effective_bars_per_day,omitempty"`
+	SignalAttempts      int            `json:"signal_attempts,omitempty"`
+	SignalsPassed       int            `json:"signals_passed,omitempty"`
+	RegimeRejected      int            `json:"regime_rejected,omitempty"`
+	VolHalted           int            `json:"vol_halted,omitempty"`
+	PipelineRejected    int            `json:"pipeline_rejected,omitempty"`
+	MLRejected          int            `json:"ml_rejected,omitempty"`
+	FillRejected        int            `json:"fill_rejected,omitempty"`
+	CandlesSeen         int            `json:"candles_seen,omitempty"`
+	StrategyNil         int            `json:"strategy_nil,omitempty"`
+	ExitSignalZeroQty   int            `json:"exit_signal_zero_qty,omitempty"`
+	TradesOpened        int            `json:"trades_opened,omitempty"`
+	CapitalZero         int            `json:"capital_zero,omitempty"`
+	RateLimited         int            `json:"rate_limited,omitempty"`
+	BaseSizeZero        int            `json:"base_size_zero,omitempty"`
+	QuantityTooSmall    int            `json:"quantity_too_small,omitempty"`
+	ExposureBlocked     int            `json:"exposure_blocked,omitempty"`
+	PipelineRejects     map[string]int `json:"pipeline_rejects,omitempty"`
+}
+
+// SignalFunnelJSON renders the full signal-gating funnel as a JSON object for
+// the dedicated backtest_results.signal_funnel column (report Part IV §4.3):
+// attempts -> passed -> rejections by reason, so the funnel is queryable
+// without unpacking the metrics JSONB.
+func (r ComboResult) SignalFunnelJSON() json.RawMessage {
+	funnel := map[string]any{
+		"candles_seen":         r.CandlesSeen,
+		"signal_attempts":      r.SignalAttempts,
+		"signals_passed":       r.SignalsPassed,
+		"regime_rejected":      r.RegimeRejected,
+		"vol_halted":           r.VolHalted,
+		"pipeline_rejected":    r.PipelineRejected,
+		"ml_rejected":          r.MLRejected,
+		"fill_rejected":        r.FillRejected,
+		"strategy_nil":         r.StrategyNil,
+		"exit_signal_zero_qty": r.ExitSignalZeroQty,
+		"trades_opened":        r.TradesOpened,
+		"capital_zero":         r.CapitalZero,
+		"rate_limited":         r.RateLimited,
+		"base_size_zero":       r.BaseSizeZero,
+		"quantity_too_small":   r.QuantityTooSmall,
+		"exposure_blocked":     r.ExposureBlocked,
+		"pipeline_rejects":     r.PipelineRejects,
+	}
+	b, _ := json.Marshal(funnel)
+	return b
+}
+
+// resolveSizingPercent returns the effective per-trade sizing fraction for a
+// run, preferring a per-strategy override (StrategyParams["sizing_percent"])
+// over the engine-wide BacktestConfig.SizingPercent. Falls back to 2%.
+func resolveSizingPercent(config BacktestConfig) float64 {
+	if v, ok := config.StrategyParams["sizing_percent"]; ok && v > 0 {
+		return v
+	}
+	if config.SizingPercent > 0 {
+		return config.SizingPercent
+	}
+	return 0.02
+}
+
+// resolveKellyFraction returns the effective fractional-Kelly multiplier,
+// preferring a per-strategy override (StrategyParams["kelly_fraction"]) over the
+// engine-wide BacktestConfig.KellyFraction. Hard-capped at 0.25 per HP #6.
+func resolveKellyFraction(config BacktestConfig) float64 {
+	k := 0.25
+	if v, ok := config.StrategyParams["kelly_fraction"]; ok && v > 0 {
+		k = v
+	} else if config.KellyFraction > 0 {
+		k = config.KellyFraction
+	}
+	if k > 0.25 {
+		return 0.25
+	}
+	return k
+}
+
+// applyRegimeParticipation reads optimizable per-regime participation weights
+// (regime_w_calm/trending/highvol/crisis) from StrategyParams and overrides the
+// per-engine regime matrix for this strategy. Absent params → the matrix's
+// default Allowed pattern is preserved (regime_gating_deep_dive.md §2.2).
+func (e *Engine) applyRegimeParticipation(strategyID string, params map[string]float64) {
+	if params == nil || len(params) == 0 {
+		return
+	}
+	names := []string{"regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"}
+	entry := e.regimeMatrix.Get(strategyID)
+	changed := false
+	for i, name := range names {
+		if v, ok := params[name]; ok {
+			entry.Participation[i] = v
+			changed = true
+		}
+	}
+	if changed {
+		e.regimeMatrix.Set(entry)
+	}
 }
 
 type MatrixResult struct {
-	RunID        string              `json:"run_id"`
-	Combos       int                 `json:"total_combos"`
-	Results      []ComboResult       `json:"results"`
+	RunID        string               `json:"run_id"`
+	Combos       int                  `json:"total_combos"`
+	Results      []ComboResult        `json:"results"`
 	Config       MatrixBacktestConfig `json:"config"`
-	Plausibility []PlausibilityFlag  `json:"plausibility_flags,omitempty"`
+	Plausibility []PlausibilityFlag   `json:"plausibility_flags,omitempty"`
 }
 
 type Trade struct {
-	Symbol           string
-	Side             string
-	Quantity         float64
-	EntryPrice       types.Price
-	ExitPrice        types.Price
-	EntryTime        time.Time
-	ExitTime         time.Time
-	PnL              float64
-	PnLPct           float64
-	HMMRegime        int8
-	StrategyID       string
-	StopPrice        types.Price
-	TakePrice        types.Price
-	ExitReason       string
-	EndOfData        bool
-	BrokerFee        float64
-	SlippageMidBps   float64
-	SlippageLastBps  float64
-	SlippageBps      float64
+	Symbol            string
+	Side              string
+	Quantity          float64
+	EntryPrice        types.Price
+	ExitPrice         types.Price
+	EntryTime         time.Time
+	ExitTime          time.Time
+	PnL               float64
+	PnLPct            float64
+	HMMRegime         int8
+	StrategyID        string
+	StopPrice         types.Price
+	TakePrice         types.Price
+	ExitReason        string
+	EndOfData         bool
+	BrokerFee         float64
+	SlippageMidBps    float64
+	SlippageLastBps   float64
+	SlippageBps       float64
 	SlippageFillCount int
-	AdverseSelection bool
-	MAE              float64
-	MFE              float64
-	Changes          []TradeChange `json:"changes,omitempty"`
-	lowestSinceEntry float64
+	AdverseSelection  bool
+	MAE               float64
+	MFE               float64
+	Changes           []TradeChange `json:"changes,omitempty"`
+	lowestSinceEntry  float64
 	highestSinceEntry float64
 }
 
 type LongShortBreakdown struct {
-	LongTrades    int     `json:"long_trades"`
-	ShortTrades   int     `json:"short_trades"`
-	LongWins      int     `json:"long_wins"`
-	ShortWins     int     `json:"short_wins"`
-	LongWinRate   float64 `json:"long_win_rate"`
-	ShortWinRate  float64 `json:"short_win_rate"`
-	LongGrossPnL  float64 `json:"long_gross_pnl"`
-	ShortGrossPnL float64 `json:"short_gross_pnl"`
-	LongAvgPnL    float64 `json:"long_avg_pnl"`
-	ShortAvgPnL   float64 `json:"short_avg_pnl"`
-	LongPF        float64 `json:"long_profit_factor"`
-	ShortPF       float64 `json:"short_profit_factor"`
-	LongAvgMAE    float64 `json:"long_avg_mae"`
-	ShortAvgMAE   float64 `json:"short_avg_mae"`
-	LongAvgMFE    float64 `json:"long_avg_mfe"`
-	ShortAvgMFE   float64 `json:"short_avg_mfe"`
+	LongTrades      int     `json:"long_trades"`
+	ShortTrades     int     `json:"short_trades"`
+	LongWins        int     `json:"long_wins"`
+	ShortWins       int     `json:"short_wins"`
+	LongWinRate     float64 `json:"long_win_rate"`
+	ShortWinRate    float64 `json:"short_win_rate"`
+	LongGrossPnL    float64 `json:"long_gross_pnl"`
+	ShortGrossPnL   float64 `json:"short_gross_pnl"`
+	LongAvgPnL      float64 `json:"long_avg_pnl"`
+	ShortAvgPnL     float64 `json:"short_avg_pnl"`
+	LongPF          float64 `json:"long_profit_factor"`
+	ShortPF         float64 `json:"short_profit_factor"`
+	LongAvgMAE      float64 `json:"long_avg_mae"`
+	ShortAvgMAE     float64 `json:"short_avg_mae"`
+	LongAvgMFE      float64 `json:"long_avg_mfe"`
+	ShortAvgMFE     float64 `json:"short_avg_mfe"`
 	DirectionalBias float64 `json:"directional_bias"`
 }
 
 type BacktestResult struct {
-	Config         BacktestConfig
-	Trades         []Trade
-	SharpeRatio    float64
-	SortinoRatio   float64
-	MaxDrawdown    float64
-	MaxDrawdownDuration int
-	TotalReturn    float64
-	TotalReturnPct float64
-	WinRate        float64
-	ProfitFactor   float64
-	AvgTrade       float64
-	AvgWin         float64
-	AvgLoss        float64
-	NumTrades      int
-	NumWins        int
-	NumLosses      int
+	Config               BacktestConfig
+	Trades               []Trade
+	SharpeRatio          float64
+	SortinoRatio         float64
+	MaxDrawdown          float64
+	MaxDrawdownDuration  int
+	TotalReturn          float64
+	TotalReturnPct       float64
+	WinRate              float64
+	ProfitFactor         float64
+	AvgTrade             float64
+	AvgWin               float64
+	AvgLoss              float64
+	NumTrades            int
+	NumWins              int
+	NumLosses            int
 	AdverseSelectionRate float64
-	AvgMAE        float64
-	AvgMFE        float64
-	RegimeStats    []RegimeStat
-	EquityCurve    []EquityPoint
-	MtmEquity      []EquityPoint `json:"mtm_equity,omitempty"`
-	MtmSharpeRatio float64       `json:"mtm_sharpe_ratio,omitempty"`
-	MtmMaxDrawdown float64       `json:"mtm_max_drawdown,omitempty"`
-	DailyReturns   []DailyReturn
-	TemporalBreakdown TemporalBreakdown
+	AvgMAE               float64
+	AvgMFE               float64
+	RegimeStats          []RegimeStat
+	EquityCurve          []EquityPoint
+	MtmEquity            []EquityPoint `json:"mtm_equity,omitempty"`
+	MtmSharpeRatio       float64       `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown       float64       `json:"mtm_max_drawdown,omitempty"`
+	DailyReturns         []DailyReturn
+	TemporalBreakdown    TemporalBreakdown
 	ComplianceReport     *ComplianceReport
-	CompletedAt    time.Time
-	RegimeLogError string          `json:"regime_log_error,omitempty"`
-	Warnings       []string        `json:"warnings,omitempty"`
-	MetricGateStatus *MultiMetricVerdict `json:"metric_gate_status,omitempty"`
-	StrategyParams   map[string]float64   `json:"strategy_params,omitempty"`
-	CalmarRatio      float64              `json:"calmar_ratio,omitempty"`
-	TrainPct         float64
-	SignalDiag     SignalDiag          `json:"signal_diag,omitempty"`
-	EngineVersion  string          `json:"engine_version,omitempty"`
-	StrategyHash   string          `json:"strategy_hash,omitempty"`
-	SchemaVersion  int             `json:"schema_version,omitempty"`
-	LongShort      LongShortBreakdown `json:"long_short,omitempty"`
-	MLFeatureEnabled bool             `json:"ml_feature_enabled,omitempty"`
-	TotalFees        float64             `json:"total_fees,omitempty"`
-	AvgSlippageBps   float64             `json:"avg_slippage_bps,omitempty"`
-	CandleCount      int                 `json:"candle_count,omitempty"`
-	FirstCandleTime  time.Time           `json:"first_candle_time,omitempty"`
-	LastCandleTime   time.Time           `json:"last_candle_time,omitempty"`
-	EffectiveBarsPerDay float64          `json:"effective_bars_per_day,omitempty"`
-	DeclaredBarsPerDay  float64          `json:"declared_bars_per_day,omitempty"`
-	DataGenerationID  string             `json:"data_generation_id,omitempty"`
+	CompletedAt          time.Time
+	RegimeLogError       string              `json:"regime_log_error,omitempty"`
+	Warnings             []string            `json:"warnings,omitempty"`
+	MetricGateStatus     *MultiMetricVerdict `json:"metric_gate_status,omitempty"`
+	StrategyParams       map[string]float64  `json:"strategy_params,omitempty"`
+	CalmarRatio          float64             `json:"calmar_ratio,omitempty"`
+	TrainPct             float64
+	SignalDiag           SignalDiag         `json:"signal_diag,omitempty"`
+	EngineVersion        string             `json:"engine_version,omitempty"`
+	StrategyHash         string             `json:"strategy_hash,omitempty"`
+	SchemaVersion        int                `json:"schema_version,omitempty"`
+	LongShort            LongShortBreakdown `json:"long_short,omitempty"`
+	MLFeatureEnabled     bool               `json:"ml_feature_enabled,omitempty"`
+	TotalFees            float64            `json:"total_fees,omitempty"`
+	AvgSlippageBps       float64            `json:"avg_slippage_bps,omitempty"`
+	CandleCount          int                `json:"candle_count,omitempty"`
+	FirstCandleTime      time.Time          `json:"first_candle_time,omitempty"`
+	LastCandleTime       time.Time          `json:"last_candle_time,omitempty"`
+	EffectiveBarsPerDay  float64            `json:"effective_bars_per_day,omitempty"`
+	DeclaredBarsPerDay   float64            `json:"declared_bars_per_day,omitempty"`
+	DataGenerationID     string             `json:"data_generation_id,omitempty"`
 }
 
 type TemporalBreakdown struct {
@@ -275,14 +381,14 @@ type TemporalBreakdown struct {
 }
 
 type PeriodStat struct {
-	Period       string  `json:"period"`
-	NetPnL       float64 `json:"net_pnl"`
-	NumTrades    int     `json:"num_trades"`
-	WinRate      float64 `json:"win_rate"`
-	GrossProfit  float64 `json:"gross_profit"`
-	GrossLoss    float64 `json:"gross_loss"`
-	Commission   float64 `json:"commission"`
-	BrokerFees   float64 `json:"broker_fees"`
+	Period      string  `json:"period"`
+	NetPnL      float64 `json:"net_pnl"`
+	NumTrades   int     `json:"num_trades"`
+	WinRate     float64 `json:"win_rate"`
+	GrossProfit float64 `json:"gross_profit"`
+	GrossLoss   float64 `json:"gross_loss"`
+	Commission  float64 `json:"commission"`
+	BrokerFees  float64 `json:"broker_fees"`
 }
 
 type RegimeStat struct {
@@ -312,6 +418,10 @@ type SignalDiag struct {
 	FillRejected      int `json:"fill_rejected"`
 	MLRejected        int `json:"ml_rejected"`
 	RegimeRejected    int `json:"regime_rejected"`
+	// PipelineRejects breaks PipelineRejected down by rejection reason (the
+	// Reason string returned by RiskPipeline.ProcessSignal), closing the
+	// previously-unaccounted funnel gap.
+	PipelineRejects map[string]int `json:"pipeline_rejects"`
 }
 
 type EquityPoint struct {
@@ -346,6 +456,11 @@ type Engine struct {
 	exitOrch       *ml.ExitOrchestrator
 	pipeline       *risk.RiskPipeline
 	featureStore   *ml.FeatureStore
+	// regimeMatrix is the per-engine regime activation matrix (soft participation).
+	// It is the same instance wired into the RiskPipeline, so per-strategy
+	// participation overrides are honored identically by the pre-check and the
+	// pipeline (regime_gating_deep_dive.md §2).
+	regimeMatrix *risk.RegimeActivationMatrix
 }
 
 type Database interface {
@@ -385,14 +500,6 @@ type SentimentLog struct {
 func NewEngine(db Database) *Engine {
 	return NewEngineBuilder(db).Build()
 }
-
-// defaultRegimeMatrix is the shared regime-activation table (the single source
-// of truth in internal/risk/regime_activation.go). It is consulted directly by
-// the backtest engine because the matrix path does not always wire the
-// RiskPipeline, and regime gating must be enforced identically in backtest and
-// live paths (HP#17). Strategies not explicitly mapped fall through to the
-// permissive default entry and are unaffected.
-var defaultRegimeMatrix = risk.NewRegimeActivationMatrix()
 
 // SetMetaLabeler configures the ML meta-labeling subsystem.
 func (e *Engine) SetMetaLabeler(predictor ml.Predictor) error {
@@ -452,7 +559,7 @@ func (e *Engine) WirePipeline() {
 		Capital:      nil,
 		PropFirm:     propFirmGate,
 		KellyMult:    e.kellyMult,
-		RegimeMatrix: risk.NewRegimeActivationMatrix(),
+		RegimeMatrix: e.regimeMatrix,
 	}
 }
 
@@ -489,11 +596,11 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	}()
 
 	var (
-		regimeLogs       []RegimeLog
-		vixLogs          []VIXLog
-		sentimentLogs    []SentimentLog
-		candlesBySymbol  [][]Candle
-		candleErr        error
+		regimeLogs      []RegimeLog
+		vixLogs         []VIXLog
+		sentimentLogs   []SentimentLog
+		candlesBySymbol [][]Candle
+		candleErr       error
 	)
 
 	if config.EnablePrefetch {
@@ -502,19 +609,25 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		g.Go(func() error {
 			var err error
 			regimeLogs, err = e.db.LoadRegimeLogs(ctx, config.StartDate, config.EndDate)
-			if err != nil { regimeLogs = nil }
+			if err != nil {
+				regimeLogs = nil
+			}
 			return nil
 		})
 		g.Go(func() error {
 			var err error
 			vixLogs, err = e.db.LoadVIXLogs(ctx, config.StartDate, config.EndDate)
-			if err != nil { vixLogs = nil }
+			if err != nil {
+				vixLogs = nil
+			}
 			return nil
 		})
 		g.Go(func() error {
 			var err error
 			sentimentLogs, err = e.db.LoadSentimentLogs(ctx, config.StartDate, config.EndDate)
-			if err != nil { sentimentLogs = nil }
+			if err != nil {
+				sentimentLogs = nil
+			}
 			return nil
 		})
 		g.Go(func() error {
@@ -628,12 +741,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 	// Allow the optimizer to tune the fractional Kelly multiplier per run.
 	// Hard cap at 0.25 per HP #6: fractional Kelly is mandatory in both backtest and live paths.
-	if config.KellyFraction > 0 {
-		e.kellyMult = config.KellyFraction
+	e.kellyMult = resolveKellyFraction(config)
+	if e.pipeline != nil {
+		// WirePipeline snapshots KellyMult before Run sets it; keep the
+		// pipeline's multiplier in sync with the per-run (per-strategy) value.
+		e.pipeline.KellyMult = e.kellyMult
 	}
-	if e.kellyMult > 0.25 {
-		e.kellyMult = 0.25
-	}
+
+	// Apply per-strategy regime participation overrides (regime_w_*) from the
+	// optimizer so regime gating is optimizable (regime_gating_deep_dive.md §2).
+	e.applyRegimeParticipation(config.StrategyID, config.StrategyParams)
 
 	openTrades := make(map[string]*Trade)
 	activeStops := make(map[string]*ActiveStop)
@@ -845,29 +962,29 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				ot.SlippageBps += simulatedExit.SlippageBps
 				ot.SlippageFillCount++
 
-			commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
-			brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, ot.EntryPrice.Float64()) +
-				config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, exitPrice) +
-				holdingExpenseFee(config, ot.Symbol, ot.Side, ot.EntryPrice.Float64()*fillQty, ot.EntryTime, candle.Time)
+				commission := ot.EntryPrice.Float64() * fillQty * config.CommissionBps / 10000.0 * 2
+				brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, ot.EntryPrice.Float64()) +
+					config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, fillQty, exitPrice) +
+					holdingExpenseFee(config, ot.Symbol, ot.Side, ot.EntryPrice.Float64()*fillQty, ot.EntryTime, candle.Time)
 
-		if ot.Side == "BUY" {
-				ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
-			} else {
-				ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
-			}
-			safe, clamped := risk.SanitizeTradePnL(ot.PnL, fillQty, ot.EntryPrice.Float64(), config.InitialCapital)
-			ot.PnL = safe
-			if clamped {
-				exitReason = "pnl_clamped"
-			}
-			ot.PnLPct = ot.PnL / config.InitialCapital * 100
-			ot.ExitPrice = types.PriceFromFloat(exitPrice)
-			ot.ExitTime = candle.Time
-			ot.Quantity = fillQty
-			ot.HMMRegime = regime
-			ot.ExitReason = exitReason
-			ot.BrokerFee = brokerFee
-			ot.addChange(candle.Time, "exit", fmt.Sprintf("%.2f", ot.EntryPrice.Float64()), fmt.Sprintf("%.2f", exitPrice), exitReason)
+				if ot.Side == "BUY" {
+					ot.PnL = (exitPrice-ot.EntryPrice.Float64())*fillQty - commission - brokerFee
+				} else {
+					ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*fillQty - commission - brokerFee
+				}
+				safe, clamped := risk.SanitizeTradePnL(ot.PnL, fillQty, ot.EntryPrice.Float64(), config.InitialCapital)
+				ot.PnL = safe
+				if clamped {
+					exitReason = "pnl_clamped"
+				}
+				ot.PnLPct = ot.PnL / config.InitialCapital * 100
+				ot.ExitPrice = types.PriceFromFloat(exitPrice)
+				ot.ExitTime = candle.Time
+				ot.Quantity = fillQty
+				ot.HMMRegime = regime
+				ot.ExitReason = exitReason
+				ot.BrokerFee = brokerFee
+				ot.addChange(candle.Time, "exit", fmt.Sprintf("%.2f", ot.EntryPrice.Float64()), fmt.Sprintf("%.2f", exitPrice), exitReason)
 
 				entry := ot.EntryPrice.Float64()
 				if entry > 0 {
@@ -881,20 +998,20 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 				}
 
 				capital += ot.PnL
-			maxCapital := config.InitialCapital * 100
-			if capital > maxCapital {
-				capital = maxCapital
-				result.Warnings = append(result.Warnings, fmt.Sprintf("capital clamped at %.0fx initial (overflow guard)", maxCapital/config.InitialCapital))
-			}
-			if capital <= 0 {
-				capital = 0
-			}
-			if e.ftmo != nil {
-				e.ftmo.OnFill(ot.PnL, 0)
-			}
-			if e.pipeline != nil {
-				e.pipeline.ReconcileFillWithoutPropFirm(ot.StrategyID, ot.Symbol, ot.Side, ot.PnL, ot.Quantity, ot.ExitPrice.Float64())
-			}
+				maxCapital := config.InitialCapital * 100
+				if capital > maxCapital {
+					capital = maxCapital
+					result.Warnings = append(result.Warnings, fmt.Sprintf("capital clamped at %.0fx initial (overflow guard)", maxCapital/config.InitialCapital))
+				}
+				if capital <= 0 {
+					capital = 0
+				}
+				if e.ftmo != nil {
+					e.ftmo.OnFill(ot.PnL, 0)
+				}
+				if e.pipeline != nil {
+					e.pipeline.ReconcileFillWithoutPropFirm(ot.StrategyID, ot.Symbol, ot.Side, ot.PnL, ot.Quantity, ot.ExitPrice.Float64())
+				}
 				trades = append(trades, *ot)
 				delete(openTrades, sym)
 				delete(activeStops, sym)
@@ -938,77 +1055,96 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			}
 			signal := e.generateSignal(candle, regime, config, capital)
 			if signal != nil {
-			e.signalDiag.TradesOpened++
-			midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-			simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), signal.Quantity, signal.Side, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Time, midPrice, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Volume)
-			entryPrice := simulatedEntry.FillPrice.Float64()
-			entryQty := simulatedEntry.FillQuantity
-			entrySlippageMid := simulatedEntry.SlippageMidBps
-			entrySlippageLast := simulatedEntry.SlippageLastBps
-			entrySlippage := simulatedEntry.SlippageBps
-			if entryPrice <= 0 {
-				entryPrice = candle.Close.Float64()
-			}
-			if entryQty <= 0 {
-				entryQty = signal.Quantity
-			}
-			if entryQty <= 0 {
-				e.signalDiag.FillRejected++
-				entryQty = 0
-			}
-
-			atrVal := ComputeATR(atrWindow, atrPeriod)
-			stopPrice := 0.0
-			takePrice := 0.0
-			var stop *ActiveStop
-
-			if config.StopLoss != nil && config.StopLoss.Type != StopLossNone {
-				stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High.Float64())
-				if config.TakeProfit != nil && config.TakeProfit.Type != TakeProfitNone {
-					takePrice = CalculateTakeProfitPrice(entryPrice, signal.Side, config.TakeProfit, stopPrice, atrVal)
+				e.signalDiag.TradesOpened++
+				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
+				simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), signal.Quantity, signal.Side, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Time, midPrice, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Volume)
+				entryPrice := simulatedEntry.FillPrice.Float64()
+				entryQty := simulatedEntry.FillQuantity
+				entrySlippageMid := simulatedEntry.SlippageMidBps
+				entrySlippageLast := simulatedEntry.SlippageLastBps
+				entrySlippage := simulatedEntry.SlippageBps
+				if entryPrice <= 0 {
+					entryPrice = candle.Close.Float64()
 				}
-				stop = &ActiveStop{
-					TradeID:    len(trades) + 1,
-					EntryPrice: types.PriceFromFloat(entryPrice),
-					Side:       signal.Side,
-					StopPrice:  types.PriceFromFloat(stopPrice),
-					TakePrice:  types.PriceFromFloat(takePrice),
-					PeakPrice:  types.PriceFromFloat(entryPrice),
-					ATRValue:   atrVal,
-					StopType:   config.StopLoss.Type,
+				if entryQty <= 0 {
+					entryQty = signal.Quantity
 				}
-				if config.TakeProfit != nil {
-					stop.TakeType = config.TakeProfit.Type
+				if entryQty <= 0 {
+					e.signalDiag.FillRejected++
+					entryQty = 0
 				}
-				activeStops[candle.Symbol] = stop
-			}
 
-			newTrade := &Trade{
-				Symbol:           candle.Symbol,
-				Side:             signal.Side,
-				Quantity:         entryQty,
-				EntryPrice:       types.PriceFromFloat(entryPrice),
-				EntryTime:        candle.Time,
-				HMMRegime:        regime,
-				StrategyID:       config.StrategyID,
-				StopPrice:        types.PriceFromFloat(stopPrice),
-				TakePrice:        types.PriceFromFloat(takePrice),
-				SlippageMidBps:   entrySlippageMid,
-				SlippageLastBps:  entrySlippageLast,
-				SlippageBps:      entrySlippage,
-				SlippageFillCount: 1,
-				lowestSinceEntry:  entryPrice,
-				highestSinceEntry: entryPrice,
-			}
-			newTrade.addChange(candle.Time, "entry", "", fmt.Sprintf("%.2f", entryPrice), signal.Side)
-			if stopPrice > 0 {
-				newTrade.addChange(candle.Time, "stop", "", fmt.Sprintf("%.2f", stopPrice), "initial")
-			}
-			if takePrice > 0 {
-				newTrade.addChange(candle.Time, "target", "", fmt.Sprintf("%.2f", takePrice), "initial")
-			}
-			openTrades[candle.Symbol] = newTrade
-			pendingAS[candle.Symbol] = newTrade
+				atrVal := ComputeATR(atrWindow, atrPeriod)
+				stopPrice := 0.0
+				takePrice := 0.0
+				var stop *ActiveStop
+
+				if !signal.StopLoss.IsZero() {
+					// Strategy-specified stop/target (e.g. ORB range-derived levels)
+					// takes precedence over the generic ATR-based config defaults.
+					stopPrice = signal.StopLoss.Float64()
+					if !signal.TakeProfit.IsZero() {
+						takePrice = signal.TakeProfit.Float64()
+					}
+					stop = &ActiveStop{
+						TradeID:    len(trades) + 1,
+						EntryPrice: types.PriceFromFloat(entryPrice),
+						Side:       signal.Side,
+						StopPrice:  signal.StopLoss,
+						TakePrice:  signal.TakeProfit,
+						PeakPrice:  types.PriceFromFloat(entryPrice),
+						ATRValue:   atrVal,
+						StopType:   StopLossFixed,
+						TakeType:   TakeProfitFixed,
+					}
+					activeStops[candle.Symbol] = stop
+				} else if config.StopLoss != nil && config.StopLoss.Type != StopLossNone {
+					stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High.Float64())
+					if config.TakeProfit != nil && config.TakeProfit.Type != TakeProfitNone {
+						takePrice = CalculateTakeProfitPrice(entryPrice, signal.Side, config.TakeProfit, stopPrice, atrVal)
+					}
+					stop = &ActiveStop{
+						TradeID:    len(trades) + 1,
+						EntryPrice: types.PriceFromFloat(entryPrice),
+						Side:       signal.Side,
+						StopPrice:  types.PriceFromFloat(stopPrice),
+						TakePrice:  types.PriceFromFloat(takePrice),
+						PeakPrice:  types.PriceFromFloat(entryPrice),
+						ATRValue:   atrVal,
+						StopType:   config.StopLoss.Type,
+					}
+					if config.TakeProfit != nil {
+						stop.TakeType = config.TakeProfit.Type
+					}
+					activeStops[candle.Symbol] = stop
+				}
+
+				newTrade := &Trade{
+					Symbol:            candle.Symbol,
+					Side:              signal.Side,
+					Quantity:          entryQty,
+					EntryPrice:        types.PriceFromFloat(entryPrice),
+					EntryTime:         candle.Time,
+					HMMRegime:         regime,
+					StrategyID:        config.StrategyID,
+					StopPrice:         types.PriceFromFloat(stopPrice),
+					TakePrice:         types.PriceFromFloat(takePrice),
+					SlippageMidBps:    entrySlippageMid,
+					SlippageLastBps:   entrySlippageLast,
+					SlippageBps:       entrySlippage,
+					SlippageFillCount: 1,
+					lowestSinceEntry:  entryPrice,
+					highestSinceEntry: entryPrice,
+				}
+				newTrade.addChange(candle.Time, "entry", "", fmt.Sprintf("%.2f", entryPrice), signal.Side)
+				if stopPrice > 0 {
+					newTrade.addChange(candle.Time, "stop", "", fmt.Sprintf("%.2f", stopPrice), "initial")
+				}
+				if takePrice > 0 {
+					newTrade.addChange(candle.Time, "target", "", fmt.Sprintf("%.2f", takePrice), "initial")
+				}
+				openTrades[candle.Symbol] = newTrade
+				pendingAS[candle.Symbol] = newTrade
 			}
 		}
 
@@ -1090,16 +1226,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 		brokerFee := config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, ot.EntryPrice.Float64()) +
 			config.BrokerFee.CalculateFeeForSymbol(ot.Symbol, ot.Quantity, exitPrice) +
 			holdingExpenseFee(config, ot.Symbol, ot.Side, ot.EntryPrice.Float64()*ot.Quantity, ot.EntryTime, lastCandle.Time)
-	if ot.Side == "BUY" {
-		ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
-	} else {
-		ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*ot.Quantity - commission - brokerFee
-	}
-	safe, clamped := risk.SanitizeTradePnL(ot.PnL, ot.Quantity, ot.EntryPrice.Float64(), config.InitialCapital)
-	ot.PnL = safe
-	if clamped {
-		exitReason = "pnl_clamped"
-	}
+		if ot.Side == "BUY" {
+			ot.PnL = (exitPrice-ot.EntryPrice.Float64())*ot.Quantity - commission - brokerFee
+		} else {
+			ot.PnL = (ot.EntryPrice.Float64()-exitPrice)*ot.Quantity - commission - brokerFee
+		}
+		safe, clamped := risk.SanitizeTradePnL(ot.PnL, ot.Quantity, ot.EntryPrice.Float64(), config.InitialCapital)
+		ot.PnL = safe
+		if clamped {
+			exitReason = "pnl_clamped"
+		}
 		ot.PnLPct = ot.PnL / config.InitialCapital * 100
 		ot.ExitPrice = types.PriceFromFloat(exitPrice)
 		ot.ExitTime = lastCandle.Time
@@ -1272,6 +1408,16 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	if result.StrategyParams == nil {
 		result.StrategyParams = make(map[string]float64)
 	}
+	// Report the runner's FULL parameter set (defaults + overrides) so the
+	// matrix `Params` column reflects every parameter actually consumed by the
+	// strategy, not just the swept/optimized subset. Unoptimized runs previously
+	// emitted an empty Params column.
+	if runner := e.getRunnerForStrategy(config.StrategyID, config); runner != nil {
+		for k, v := range runner.Params() {
+			result.StrategyParams[k] = v
+		}
+	}
+	// Explicit overrides take precedence over runner defaults.
 	for k, v := range config.StrategyParams {
 		result.StrategyParams[k] = v
 	}
@@ -1280,14 +1426,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	// an empty `Params` column, which made the CI Kelly scan (validate-matrix.ps1)
 	// silently pass with zero checks. The `Optimized` flag is derived separately
 	// from whether light optimization produced params, not from this map.
-	kelly := config.KellyFraction
-	if kelly <= 0 {
-		kelly = e.kellyMult
-	}
-	if kelly <= 0 {
-		kelly = 0.25
-	}
+	kelly := resolveKellyFraction(config)
 	result.StrategyParams["kelly_fraction"] = kelly
+	result.StrategyParams["sizing_percent"] = resolveSizingPercent(config)
 
 	result.SignalDiag = e.signalDiag
 	result.MLFeatureEnabled = e.featureStore != nil
@@ -1296,7 +1437,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 }
 
 func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfig, runningCapital float64) *Signal {
-	if !defaultRegimeMatrix.IsAllowed(config.StrategyID, regime) {
+	// Soft regime gate: hard-block only when participation weight is zero; the
+	// pipeline scales size for partial participation (regime_gating_deep_dive.md).
+	if e.regimeMatrix.ParticipationForRegime(config.StrategyID, regime) <= 0 {
 		e.signalDiag.RegimeRejected++
 		return nil
 	}
@@ -1369,15 +1512,16 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		e.positionSizer.SetRegimeScore(score)
 	}
 
-	sp := config.SizingPercent
-	if sp <= 0 {
-		sp = 0.02
-	}
+	sp := resolveSizingPercent(config)
 	baseSizeCapital := runningCapital * sp * seasonalityMult
 	baseSize := baseSizeCapital / candle.Close.Float64()
 
 	if e.pipeline != nil {
 		e.pipeline.CurrentRegime = regime
+		// The inline fallback sets exposure equity before sizing; the pipeline
+		// path must too, otherwise ExposureTracker.CheckOrder rejects every
+		// signal with "equity_negative" (equity defaults to 0).
+		e.exposure.SetEquity(runningCapital)
 		pipeResult := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
 			StrategyID:       config.StrategyID,
 			Symbol:           candle.Symbol,
@@ -1390,13 +1534,19 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		})
 		if !pipeResult.Approved {
 			e.signalDiag.PipelineRejected++
+			if e.signalDiag.PipelineRejects == nil {
+				e.signalDiag.PipelineRejects = make(map[string]int)
+			}
+			e.signalDiag.PipelineRejects[pipeResult.Reason]++
 			return nil
 		}
 		e.signalDiag.SignalsPassed++
 		return &Signal{
-			Symbol:   candle.Symbol,
-			Side:     raw.Side,
-			Quantity: pipeResult.Size,
+			Symbol:     candle.Symbol,
+			Side:       raw.Side,
+			Quantity:   pipeResult.Size,
+			StopLoss:   raw.StopLoss,
+			TakeProfit: raw.TakeProfit,
 		}
 	}
 
@@ -1422,10 +1572,7 @@ func (e *Engine) generateSignalInlineFallback(
 	e.exposure.SetEquity(runningCapital)
 
 	c := runningCapital
-	baseSize := c * 0.02 * seasonalityMult
-	if config.SizingPercent > 0 {
-		baseSize = c * config.SizingPercent * seasonalityMult
-	}
+	baseSize := c * resolveSizingPercent(config) * seasonalityMult
 	if e.ftmo != nil {
 		baseSize *= e.ftmo.GetRegimeMultiplier()
 	} else {
@@ -1469,9 +1616,11 @@ func (e *Engine) generateSignalInlineFallback(
 
 	e.signalDiag.SignalsPassed++
 	return &Signal{
-		Symbol:   candle.Symbol,
-		Side:     raw.Side,
-		Quantity: quantity,
+		Symbol:     candle.Symbol,
+		Side:       raw.Side,
+		Quantity:   quantity,
+		StopLoss:   raw.StopLoss,
+		TakeProfit: raw.TakeProfit,
 	}
 }
 
@@ -1604,6 +1753,11 @@ func (e *Engine) getRunnerForStrategy(strategyID string, config BacktestConfig) 
 	if runner != nil {
 		if len(config.StrategyParams) > 0 {
 			runner.SetParams(config.StrategyParams)
+			// Runners embedding BaseRunner expose regime-conditional exit params;
+			// others (MeanReversionRunner) skip gracefully.
+			if rc, ok := runner.(interface{ SetRegimeExitParams(map[string]float64) }); ok {
+				rc.SetRegimeExitParams(config.StrategyParams)
+			}
 		}
 		return runner
 	}
@@ -2115,18 +2269,18 @@ type MultiBacktestConfig struct {
 }
 
 type MultiBacktestResult struct {
-	Config          MultiBacktestConfig
-	TotalReturn     float64
-	TotalReturnPct  float64
-	SharpeRatio     float64
-	MaxDrawdown     float64
-	WinRate         float64
-	NumTrades       int
-	EquityCurve     []EquityPoint
-	MtmSharpeRatio  float64       `json:"mtm_sharpe_ratio,omitempty"`
-	MtmMaxDrawdown  float64       `json:"mtm_max_drawdown,omitempty"`
-	StrategyMetrics map[string]*StrategyBacktestMetric
-	ComplianceReport      *ComplianceReport
+	Config           MultiBacktestConfig
+	TotalReturn      float64
+	TotalReturnPct   float64
+	SharpeRatio      float64
+	MaxDrawdown      float64
+	WinRate          float64
+	NumTrades        int
+	EquityCurve      []EquityPoint
+	MtmSharpeRatio   float64 `json:"mtm_sharpe_ratio,omitempty"`
+	MtmMaxDrawdown   float64 `json:"mtm_max_drawdown,omitempty"`
+	StrategyMetrics  map[string]*StrategyBacktestMetric
+	ComplianceReport *ComplianceReport
 }
 
 type StrategyBacktestMetric struct {
@@ -2139,13 +2293,13 @@ type StrategyBacktestMetric struct {
 }
 
 type EngineMulti struct {
-	db           Database
-	fillSim      *FillSimulator
-	feeModel     model.FeeModel
-	latencyModel model.LatencyModel
-	recorder     model.Recorder
-	registry     *strategy.Registry
-	poolSim      *CapitalPoolSim
+	db            Database
+	fillSim       *FillSimulator
+	feeModel      model.FeeModel
+	latencyModel  model.LatencyModel
+	recorder      model.Recorder
+	registry      *strategy.Registry
+	poolSim       *CapitalPoolSim
 	slippageModel SlippageModel
 	commissionBps float64
 }
@@ -2555,7 +2709,7 @@ func addToPeriod(m map[string]*PeriodStat, key string, trade Trade) {
 		ps.GrossLoss += -trade.PnL
 	}
 	if ps.NumTrades > 0 && trade.PnL > 0 {
-		ps.WinRate = ps.WinRate*float64(ps.NumTrades-1)+100.0
+		ps.WinRate = ps.WinRate*float64(ps.NumTrades-1) + 100.0
 		ps.WinRate /= float64(ps.NumTrades)
 	} else if ps.NumTrades > 0 {
 		ps.WinRate = ps.WinRate * float64(ps.NumTrades-1) / float64(ps.NumTrades)

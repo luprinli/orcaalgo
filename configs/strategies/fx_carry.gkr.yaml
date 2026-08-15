@@ -1,0 +1,61 @@
+ir_version: "qst-ir/0.4"
+canonical_version: "qst-canonical/0.4"
+strategy:
+  id: "orca-fx-carry-v1"
+  version: "1.0.0"
+  nodes:
+    - id: "bar_agg"
+      token_ref:
+        token_id: "data.bar_aggregator"
+        version: ">=1.0"
+      params:
+        timeframe: "1d"
+    - id: "carry_signal"
+      token_ref:
+        token_id: "signal.carry"
+        version: ">=1.0"
+      inputs:
+        series: "bar_agg.close"
+      params:
+        min_carry_bps: 0
+        trend_period: 100
+    - id: "regime_gate"
+      token_ref:
+        token_id: "risk.regime_filter"
+        version: ">=1.0"
+      inputs:
+        signal: "carry_signal.signal"
+      params:
+        blocked_states: [1, 3]
+    - id: "position_sizer"
+      token_ref:
+        token_id: "size.kelly_fractional"
+        version: ">=1.0"
+      inputs:
+        signal: "regime_gate.signal"
+      params:
+        multiplier: 0.25
+        per_trade_cap_pct: 0.02
+        total_exposure_cap_pct: 0.30
+    - id: "risk_gate"
+      token_ref:
+        token_id: "risk.ftmo_compliance"
+        version: ">=1.0"
+      inputs:
+        size: "position_sizer.contracts"
+        signal: "regime_gate.signal"
+      params:
+        max_daily_dd_pct: 5.0
+        max_absolute_dd: 1000.0
+        max_open_positions: 5
+  outputs:
+    signal: "regime_gate.signal"
+    size: "position_sizer.contracts"
+    final: "risk_gate.approved_size"
+capabilities:
+  - core
+  - carry
+risk_profile:
+  risk_per_trade_pct: 0.02
+  kelly_multiplier: 0.25
+  regime_multipliers: [1.0, 0.0, 0.5, 0.0]

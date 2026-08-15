@@ -193,4 +193,23 @@ def run_preflight_checks() -> list[CheckResult]:
         else:
             results.append(CheckResult(name, "fail", f"{path} missing"))
 
+    # Check 15: Market-based benchmark filter available (mandatory promotion gate)
+    try:
+        from orca.benchmark.filter import apply_benchmark_filter
+        if callable(apply_benchmark_filter):
+            results.append(CheckResult("benchmark_filter", "pass", "Benchmark filter available"))
+        else:
+            results.append(CheckResult("benchmark_filter", "fail", "Benchmark filter not callable"))
+    except ImportError:
+        results.append(CheckResult("benchmark_filter", "fail", "orca.benchmark module missing"))
+
+    # Check 16: Benchmark persistence migrations present
+    for name, path in [
+        ("benchmark_filter_migration", "internal/db/migrations/000049_benchmark_filter.up.sql"),
+    ]:
+        if Path(path).exists():
+            results.append(CheckResult(name, "pass", f"{Path(path).name} present"))
+        else:
+            results.append(CheckResult(name, "fail", f"{path} missing"))
+
     return results

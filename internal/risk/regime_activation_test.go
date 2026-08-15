@@ -140,7 +140,7 @@ func TestRegimeActivationMatrix_PipelineIntegration(t *testing.T) {
 		Side:           "BUY",
 		Price:          500.0,
 		Confidence:     1.0,
-		BaseSize:       4,   // shares: 2000 / 500
+		BaseSize:       4, // shares: 2000 / 500
 		RunningCapital: 100000,
 	})
 	if !res.Approved {
@@ -183,5 +183,125 @@ func TestRegimeActivationMatrix_PipelineIntegration(t *testing.T) {
 	// So: 1000 * 1.0 (confidence) * 0.75 (regime) * 1.0 (VIX normal) * 0.15 (Kelly) = 112.5
 	if res.Size <= 0 {
 		t.Error("scalp in HighVol should have non-zero size")
+	}
+}
+
+func TestParticipationForRegime_FallbackToAllowed(t *testing.T) {
+	m := NewRegimeActivationMatrix()
+
+	// Participation unset → fall back to binary Allowed.
+	if got := m.ParticipationForRegime("grid_trading", 0); got != 1.0 {
+		t.Errorf("grid Calm participation = %v, want 1.0", got)
+	}
+	if got := m.ParticipationForRegime("grid_trading", 1); got != 0.0 {
+		t.Errorf("grid Trending participation = %v, want 0.0", got)
+	}
+}
+
+func TestParticipationForRegime_SoftWeight(t *testing.T) {
+	m := NewRegimeActivationMatrix()
+	m.Set(&RegimeEntry{
+		StrategyID:    "session_scalp",
+		Allowed:       [4]bool{true, true, true, false},
+		Participation: [4]float64{1.0, 0.5, 0.25, 0},
+	})
+
+	if got := m.ParticipationForRegime("session_scalp", 1); got != 0.5 {
+		t.Errorf("scalp Trending participation = %v, want 0.5", got)
+	}
+	if got := m.ParticipationForRegime("session_scalp", 2); got != 0.25 {
+		t.Errorf("scalp HighVol participation = %v, want 0.25", got)
+	}
+}
+
+func TestPipeline_SoftRegimeGateScalesSize(t *testing.T) {
+	m := NewRegimeActivationMatrix()
+	// Half participation in Trending (would previously be hard-blocked or full).
+	m.Set(&RegimeEntry{
+		StrategyID:    "grid_trading",
+		Allowed:       [4]bool{true, true, false, false},
+		Participation: [4]float64{1.0, 0.5, 0, 0},
+	})
+
+	sg := NewSignalGateImpl(
+		NewVolatilityHalt(DefaultVolatilityHalt),
+		NewPositionSizer(nil),
+		NewExposureTracker(5.0, 0.25),
+		NewOrderRateLimiter(DefaultOrderRateLimit),
+	)
+	sg.SetBacktestMode(true)
+	sg.SetEquity(100000)
+
+	p := &RiskPipeline{SignalGate: sg, RegimeMatrix: m, KellyMult: 0.25}
+	p.CurrentRegime = 1 // Trending (half participation)
+
+	res := p.ProcessSignal(nil, ProcessSignalRequest{
+		StrategyID:     "grid_trading",
+		Symbol:         "SPY",
+		Side:           "BUY",
+		Price:          500.0,
+		Confidence:     1.0,
+		BaseSize:       4,
+		RunningCapital: 100000,
+	})
+	if !res.Approved {
+		t.Fatalf("grid with 0.5 participation should be approved, got %s", res.Reason)
+	}
+
+	// Full participation reference: regime 0 (Calm).
+	p.CurrentRegime = 0
+	full := p.ProcessSignal(nil, ProcessSignalRequest{
+		StrategyID:     "grid_trading",
+		Symbol:         "SPY",
+		Side:           "BUY",
+		Price:          500.0,
+		Confidence:     1.0,
+		BaseSize:       4,
+		RunningCapital: 100000,
+	})
+	if !full.Approved || full.Size <= 0 {
+		t.Fatalf("grid full participation should be approved, got %+v", full)
+	}
+	if res.Size >= full.Size {
+		t.Errorf("half-participation size %v should be < full size %v", res.Size, full.Size)
+	}
+}
+
+func TestPipeline_RegimeKellyDownwardOverride(t *testing.T) {
+	m := NewRegimeActivationMatrix()
+	// session_scalp: HighVol KellyMultiplier = 0.15 (default matrix).
+	sg := NewSignalGateImpl(
+		NewVolatilityHalt(DefaultVolatilityHalt),
+		NewPositionSizer(nil),
+		NewExposureTracker(5.0, 0.25),
+		NewOrderRateLimiter(DefaultOrderRateLimit),
+	)
+	sg.SetBacktestMode(true)
+	sg.SetEquity(100000)
+
+	p := &RiskPipeline{SignalGate: sg, RegimeMatrix: m, KellyMult: 0.25}
+
+	// Calm: Kelly 0.25. HighVol: Kelly should be reduced to 0.15 (downward override).
+	req := func(regime int8) ProcessSignalResult {
+		p.CurrentRegime = regime
+		return p.ProcessSignal(nil, ProcessSignalRequest{
+			StrategyID:     "session_scalp",
+			Symbol:         "SPY",
+			Side:           "BUY",
+			Price:          500.0,
+			Confidence:     1.0,
+			BaseSize:       4,
+			RunningCapital: 100000,
+		})
+	}
+	calm := req(0)
+	highvol := req(2)
+	if !calm.Approved || !highvol.Approved {
+		t.Fatalf("both should be approved: calm=%v highvol=%v", calm.Reason, highvol.Reason)
+	}
+	// Regime multiplier: Calm=1.0, HighVol=0.75 (RegimeModerateMult). Kelly: Calm=0.25, HighVol=0.15.
+	// highvol size should be < calm size (both from the lower kelly AND the 0.75 regime mult).
+	if highvol.Size >= calm.Size {
+		t.Errorf("highvol size %v should be < calm size %v (kelly reduction + regime haircut)", highvol.Size, calm.Size)
 	}
 }

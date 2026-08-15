@@ -27,6 +27,10 @@ type Config struct {
 func DefaultConfig() Config {
 	// Default port 5432; Docker compose maps 5433→5432 externally. Set ORCA_DB_PORT to override.
 	port, _ := strconv.Atoi(envOrDefault("ORCA_DB_PORT", "5432"))
+	poolMax, _ := strconv.Atoi(envOrDefault("ORCA_DB_POOL_MAX", "40"))
+	if poolMax < 4 {
+		poolMax = 4
+	}
 	return Config{
 		Host:     envOrDefault("ORCA_DB_HOST", "localhost"),
 		Port:     port,
@@ -34,7 +38,7 @@ func DefaultConfig() Config {
 		Password: envOrDefault("ORCA_DB_PASSWORD", "orca"),
 		Database: envOrDefault("ORCA_DB_NAME", "orca_core"),
 		SSLMode:  envOrDefault("ORCA_DB_SSLMODE", "disable"),
-		PoolMax:  20,
+		PoolMax:  poolMax,
 		PoolMin:  2,
 	}
 }

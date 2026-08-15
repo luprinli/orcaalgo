@@ -1,6 +1,8 @@
 package backtest
 
 import (
+	"fmt"
+	"sort"
 	"testing"
 )
 
@@ -62,6 +64,60 @@ func TestSearchSpace_EmptySearchSpace(t *testing.T) {
 	}
 }
 
+func TestSearchSpace_GenerateAllCombinations_PruningMatchesNaive(t *testing.T) {
+	space := SearchSpace{
+		"stop_loss_atr_mult": {Name: "stop_loss_atr_mult", Type: ParamContinuous, Min: 0.5, Max: 1.5, Step: 0.5,
+			Condition: &ConditionalRule{LeftParam: "stop_loss_atr_mult", Operator: "lt", RightParam: "take_profit_atr_mult"}},
+		"take_profit_atr_mult": {Name: "take_profit_atr_mult", Type: ParamContinuous, Min: 1.0, Max: 2.0, Step: 0.5},
+		"range_minutes":        {Name: "range_minutes", Type: ParamInteger, Min: 1, Max: 3, Step: 1},
+		"volume_multiplier":    {Name: "volume_multiplier", Type: ParamContinuous, Min: 1.0, Max: 2.0, Step: 1.0},
+	}
+
+	pruned := space.GenerateAllCombinations()
+
+	// Naive reference: full Cartesian product then filter.
+	var naive []map[string]float64
+	for _, raw := range space.generateAllRaw() {
+		if space.checkCondition(raw) {
+			naive = append(naive, raw)
+		}
+	}
+
+	if len(pruned) != len(naive) {
+		t.Fatalf("pruned count %d != naive count %d", len(pruned), len(naive))
+	}
+
+	naiveSet := make(map[string]bool, len(naive))
+	for _, c := range naive {
+		naiveSet[comboKey(c)] = true
+	}
+	for _, c := range pruned {
+		if !naiveSet[comboKey(c)] {
+			t.Fatalf("pruned combo %v missing from naive set", c)
+		}
+	}
+
+	// The stop < take invariant must hold in every emitted combo.
+	for _, c := range pruned {
+		if c["stop_loss_atr_mult"] >= c["take_profit_atr_mult"] {
+			t.Fatalf("invariant violated: %v", c)
+		}
+	}
+}
+
+func comboKey(c map[string]float64) string {
+	names := make([]string, 0, len(c))
+	for n := range c {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	s := ""
+	for _, n := range names {
+		s += fmt.Sprintf("%s=%.6f;", n, c[n])
+	}
+	return s
+}
+
 func TestComputeObjective_Sharpe(t *testing.T) {
 	r := &BacktestResult{SharpeRatio: 1.5, NumTrades: 30}
 	s := ComputeObjective(r, ObjectiveSharpe, nil)
@@ -90,9 +146,9 @@ func TestComputeObjective_DDRatio(t *testing.T) {
 func TestComputeObjective_Composite(t *testing.T) {
 	r := &BacktestResult{SharpeRatio: 2.0, MaxDrawdown: 5.0, ProfitFactor: 1.8, WinRate: 60, NumTrades: 30}
 	weights := map[ObjectiveType]float64{
-		ObjectiveSharpe:      0.4,
+		ObjectiveSharpe:       0.4,
 		ObjectiveProfitFactor: 0.3,
-		ObjectiveMinDD:       0.3,
+		ObjectiveMinDD:        0.3,
 	}
 	s := ComputeObjective(r, ObjectiveComposite, weights)
 	if s <= 0 {
@@ -137,8 +193,8 @@ func TestDefaultSearchSpace_Unknown(t *testing.T) {
 
 func TestOptimizationConfig_Defaults(t *testing.T) {
 	cfg := OptimizationConfig{
-		StrategyID:    "trend_following",
-		ObjectiveType: ObjectiveSharpe,
+		StrategyID:      "trend_following",
+		ObjectiveType:   ObjectiveSharpe,
 		MaxCombinations: 100,
 	}
 	if cfg.StrategyID != "trend_following" {
