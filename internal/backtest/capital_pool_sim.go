@@ -253,4 +253,3 @@ func (c *CapitalPoolSim) PerStrategyDrawdown(strategyID string) float64 {
 }
 
 var _ risk.CapitalGate = (*CapitalPoolSim)(nil)
-

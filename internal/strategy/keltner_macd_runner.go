@@ -70,29 +70,25 @@ func (r *KeltnerMACDRunner) ParamDefs() []ParamDef {
 }
 
 func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
 	}
 
-	r.PushPriceOnly(price)
+	r.PushPrice(price, candle.High, candle.Low, candle.Volume)
 
 	period := int(r.KeltnerPeriod)
 	if r.HistCount < period+5 {
 		return nil
 	}
 
-	upperKC, middleKC, lowerKC := KeltnerChannel(r.PriceHistory, r.PriceHistory, r.PriceHistory, r.HistCount, period)
+	upperKC, middleKC, lowerKC := KeltnerChannel(r.LinearHighs(r.HistCount), r.LinearLows(r.HistCount), r.LinearPrices(r.HistCount), r.HistCount, period)
 	if upperKC <= 0 || middleKC <= 0 || lowerKC <= 0 {
 		return nil
 	}
 
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.KeltnerPeriod))
-	macdLine, signalLine := MACD(r.PriceHistory, r.HistCount)
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.KeltnerPeriod))
+	macdLine, signalLine := MACD(r.LinearPrices(r.HistCount), r.HistCount)
 	macdBullish := macdLine > signalLine
 
 	sc := StopLossChecker{}
@@ -109,7 +105,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || macdFlip {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if price.Compare(r.peakPrice) < 0 {
@@ -120,7 +116,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 			if sc.IsStopLossHit(price, trailingStop, "SELL") || macdFlip {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -136,7 +132,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if price.Float64() < lowerKC {
@@ -146,7 +142,7 @@ func (r *KeltnerMACDRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

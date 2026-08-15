@@ -12,7 +12,6 @@ type MeanReversionRunner struct {
 	ExitZ       float64
 	MaxHold     int
 	TrendPeriod int
-	VolPeriod   int
 	VolMaxMult  float64
 	Mode        string // "sma" (default) or "vwap"
 
@@ -22,10 +21,8 @@ type MeanReversionRunner struct {
 	histCount     int
 	emaMean       types.Price
 	trendEMA      types.Price
-	histVariance  float64
-
-	openPosition *position
-	barsHeld     int
+	openPosition  *position
+	barsHeld      int
 
 	irVersion        string
 	canonicalVersion string
@@ -41,16 +38,15 @@ type position struct {
 
 func NewMeanReversionRunner(lookback int, entryZ, exitZ float64, maxHold int) *MeanReversionRunner {
 	return &MeanReversionRunner{
-		Lookback:          lookback,
-		EntryZ:            entryZ,
-		ExitZ:             exitZ,
-		MaxHold:           maxHold,
-		TrendPeriod:       200,
-		VolPeriod:         20,
-		VolMaxMult:        2.5,
-		closeHistory:      make([]float64, lookback+200),
-		irVersion:         "qst-ir/0.4",
-		canonicalVersion:  "qst-canonical/0.4",
+		Lookback:         lookback,
+		EntryZ:           entryZ,
+		ExitZ:            exitZ,
+		MaxHold:          maxHold,
+		TrendPeriod:      200,
+		VolMaxMult:       2.5,
+		closeHistory:     make([]float64, lookback+200),
+		irVersion:        "qst-ir/0.4",
+		canonicalVersion: "qst-canonical/0.4",
 	}
 }
 
@@ -59,7 +55,10 @@ func (sr *MeanReversionRunner) Type() string { return "mr" }
 func (sr *MeanReversionRunner) Version() (irVersion string, canonicalVersion string) {
 	return sr.irVersion, sr.canonicalVersion
 }
-func (sr *MeanReversionRunner) SetVersion(irVersion, canonicalVersion string) { sr.irVersion = irVersion; sr.canonicalVersion = canonicalVersion }
+func (sr *MeanReversionRunner) SetVersion(irVersion, canonicalVersion string) {
+	sr.irVersion = irVersion
+	sr.canonicalVersion = canonicalVersion
+}
 func (sr *MeanReversionRunner) SetInstanceHash(h string) { sr.instanceHash = h }
 
 func (sr *MeanReversionRunner) computeVWAP(start, end int) float64 {
@@ -84,14 +83,13 @@ func (sr *MeanReversionRunner) computeVWAP(start, end int) float64 {
 	}
 	return totalPV / totalV
 }
-func (sr *MeanReversionRunner) InstanceHash() string                          { return sr.instanceHash }
+func (sr *MeanReversionRunner) InstanceHash() string { return sr.instanceHash }
 
 func (sr *MeanReversionRunner) Reset() {
 	sr.histIndex = 0
 	sr.histCount = 0
 	sr.emaMean = 0
 	sr.trendEMA = 0
-	sr.histVariance = 0
 	sr.openPosition = nil
 	sr.barsHeld = 0
 	for i := range sr.closeHistory {
@@ -120,7 +118,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	mean, std, atrVol := sr.computeStats()
+	mean, std := sr.computeStats()
 	if std <= 0 {
 		return nil
 	}
@@ -128,10 +126,17 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 	isTrendingUp := candle.Close.Compare(sr.trendEMA) > 0
 	isTrendingDown := candle.Close.Compare(sr.trendEMA) < 0
 
+	// High-volatility filter: skip mean-reversion entries when recent
+	// (Lookback) return volatility is elevated relative to the long-term
+	// (TrendPeriod) baseline. Uses return volatility — not price-level
+	// variance — so it is unit-consistent (audit §2.3.1).
 	isHighVol := false
-	normStd := atrVol / math.Max(candle.Close.Float64(), 0.0001)
-	if normStd > sr.VolMaxMult*math.Sqrt(sr.histVariance)/math.Max(candle.Close.Float64(), 0.0001)*0.1 {
-		isHighVol = true
+	if sr.histCount >= sr.Lookback+2 {
+		recent := sr.returnVol(sr.Lookback)
+		baseline := sr.returnVol(sr.TrendPeriod)
+		if recent > 0 && baseline > 0 && recent > sr.VolMaxMult*baseline {
+			isHighVol = true
+		}
 	}
 
 	z := (candle.Close.Float64() - mean) / std
@@ -152,7 +157,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 			}
 			sr.openPosition = nil
 			sr.barsHeld = 0
-			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 		}
 		return nil
 	}
@@ -172,7 +177,7 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 			EntryBar:   1,
 		}
 		sr.barsHeld = 1
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if z > sr.EntryZ {
@@ -186,13 +191,13 @@ func (sr *MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 			EntryBar:   1,
 		}
 		sr.barsHeld = 1
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil
 }
 
-func (sr *MeanReversionRunner) computeStats() (float64, float64, float64) {
+func (sr *MeanReversionRunner) computeStats() (float64, float64) {
 	n := sr.histCount
 	if n > sr.Lookback+200 {
 		n = sr.Lookback + 200
@@ -240,28 +245,45 @@ func (sr *MeanReversionRunner) computeStats() (float64, float64, float64) {
 		diff := p - simpleMean
 		variance += diff * diff
 	}
-	variance /= float64(nLB - 1)
-	sr.histVariance = variance
 
-	volN := sr.VolPeriod
-	if volN > n {
-		volN = n
-	}
-	atrSum := 0.0
-	atrCount := 0
-	for i := start + 1; i < sr.histCount && atrCount < volN; i++ {
-		idxCurr := i % (sr.Lookback + 200)
-		idxPrev := (i - 1) % (sr.Lookback + 200)
-		diff := math.Abs(sr.closeHistory[idxCurr] - sr.closeHistory[idxPrev])
-		atrSum += diff
-		atrCount++
-	}
-	atrVol := 0.0
-	if atrCount > 0 {
-		atrVol = atrSum / float64(atrCount)
-	}
+	return sr.emaMean.Float64(), sampleStd(variance, nLB)
+}
 
-	return sr.emaMean.Float64(), math.Sqrt(variance), atrVol
+// returnVol returns the standard deviation of close-to-close returns over the
+// last `period` bars (circular-buffer aware). Used by the high-volatility
+// filter; a proper return-vol measure, not a price-level variance.
+func (sr *MeanReversionRunner) returnVol(period int) float64 {
+	if period < 2 || sr.histCount < period+1 {
+		return 0
+	}
+	start := sr.histCount - period
+	if start < 0 {
+		start = 0
+	}
+	var returns []float64
+	for i := start; i < sr.histCount-1; i++ {
+		idxCurr := (i + 1) % (sr.Lookback + 200)
+		idxPrev := i % (sr.Lookback + 200)
+		p0 := sr.closeHistory[idxPrev]
+		p1 := sr.closeHistory[idxCurr]
+		if p0 > 0 && p1 > 0 {
+			returns = append(returns, p1/p0-1.0)
+		}
+	}
+	if len(returns) < 2 {
+		return 0
+	}
+	mean := 0.0
+	for _, r := range returns {
+		mean += r
+	}
+	mean /= float64(len(returns))
+	sumSq := 0.0
+	for _, r := range returns {
+		diff := r - mean
+		sumSq += diff * diff
+	}
+	return sampleStd(sumSq, len(returns))
 }
 
 func (sr *MeanReversionRunner) Params() map[string]float64 {
@@ -302,6 +324,7 @@ func (sr *MeanReversionRunner) ParamDefs() []ParamDef {
 	}
 }
 
-func (sr *MeanReversionRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
-func (sr *MeanReversionRunner) OnCancel(orderID string, reason string) {}
+func (sr *MeanReversionRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {
+}
+func (sr *MeanReversionRunner) OnCancel(orderID string, reason string)        {}
 func (sr *MeanReversionRunner) OnOrderRejected(orderID string, reason string) {}

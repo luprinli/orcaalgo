@@ -124,5 +124,3 @@ func (b *BacktestBuilder) Build() (*BacktestConfig, error) {
 
 	return cfg, nil
 }
-
-

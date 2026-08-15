@@ -22,12 +22,12 @@ const (
 // RetentionConfig controls classification and pruning. All env-overridable so the
 // policy is tunable without a redeploy (plan §8 / retention doc §Config).
 type RetentionConfig struct {
-	TopK             int     // # of top-Sharpe combos always kept as T0
-	PlateauBand      float64 // T1 if Sharpe >= (islandMinSharpe - PlateauBand)
-	T2SampleCap      int     // max T2 rows retained (reservoir-style stride sample)
-	MinTradesViable  int     // < this trades => non-viable (T3)
-	T1RetentionDays  int     // TTL for T1 rows
-	T2RetentionDays  int     // TTL for T2 rows
+	TopK            int     // # of top-Sharpe combos always kept as T0
+	PlateauBand     float64 // T1 if Sharpe >= (islandMinSharpe - PlateauBand)
+	T2SampleCap     int     // max T2 rows retained (reservoir-style stride sample)
+	MinTradesViable int     // < this trades => non-viable (T3)
+	T1RetentionDays int     // TTL for T1 rows
+	T2RetentionDays int     // TTL for T2 rows
 }
 
 func DefaultRetentionConfig() RetentionConfig {
@@ -77,10 +77,11 @@ func dominates(a, b ComboResult) bool {
 // executor can call it once at end-of-batch when the full distribution is known.
 //
 // Rules (metric-space, no parameter vectors required):
-//   T3  non-viable: error or < MinTradesViable trades (the loss basin / screened out)
-//   T0  island: Pareto-non-dominated set ∪ top-K by Sharpe
-//   T1  plateau: viable & Sharpe >= (min island Sharpe − PlateauBand)
-//   T2  the remaining viable combos, stride-sampled down to T2SampleCap
+//
+//	T3  non-viable: error or < MinTradesViable trades (the loss basin / screened out)
+//	T0  island: Pareto-non-dominated set ∪ top-K by Sharpe
+//	T1  plateau: viable & Sharpe >= (min island Sharpe − PlateauBand)
+//	T2  the remaining viable combos, stride-sampled down to T2SampleCap
 func ClassifyResults(results []ComboResult, cfg RetentionConfig) map[string]int {
 	class := make(map[string]int, len(results))
 
@@ -170,17 +171,17 @@ func ClassifyResults(results []ComboResult, cfg RetentionConfig) map[string]int 
 // taxonomy, Pareto front, effective trials) so pruned rows can be discarded
 // without reintroducing survivorship bias.
 type RunSummary struct {
-	TotalCombos     int              `json:"total_combos"`
-	TradedCombos    int              `json:"traded_combos"`
-	ZeroTrade       int              `json:"zero_trade"`
-	Errored         int              `json:"errored"`
-	EffectiveTrials int              `json:"effective_trials"`
-	ScoreHistogram  map[string]int   `json:"score_histogram"`
-	Viability       map[string]int   `json:"viability"`
-	FailureReasons  map[string]int   `json:"failure_reasons"`
-	ParetoFront     []string         `json:"pareto_front"`
-	BestSharpe      float64          `json:"best_sharpe"`
-	BestCombo       string           `json:"best_combo"`
+	TotalCombos     int            `json:"total_combos"`
+	TradedCombos    int            `json:"traded_combos"`
+	ZeroTrade       int            `json:"zero_trade"`
+	Errored         int            `json:"errored"`
+	EffectiveTrials int            `json:"effective_trials"`
+	ScoreHistogram  map[string]int `json:"score_histogram"`
+	Viability       map[string]int `json:"viability"`
+	FailureReasons  map[string]int `json:"failure_reasons"`
+	ParetoFront     []string       `json:"pareto_front"`
+	BestSharpe      float64        `json:"best_sharpe"`
+	BestCombo       string         `json:"best_combo"`
 }
 
 // sharpeBucket maps a Sharpe value to a coarse histogram bucket label.

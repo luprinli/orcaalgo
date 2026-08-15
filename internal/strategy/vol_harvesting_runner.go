@@ -1,8 +1,6 @@
 package strategy
 
 import (
-	"math"
-
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -147,7 +145,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 				tc.IsTakeProfitHit(price, r.TakeProfit, "BUY") ||
 				zScore >= exitZ {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			stopPrice := r.EntryPrice.Float64() + atr*r.StopATRMult
@@ -155,7 +153,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 				tc.IsTakeProfitHit(price, r.TakeProfit, "SELL") ||
 				zScore <= -exitZ {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -172,7 +170,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if zScore >= r.MeanRevEntryZ {
@@ -183,7 +181,7 @@ func (r *VolHarvestingRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(stopPrice),
 			types.PriceFromFloat(profitPrice),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil
@@ -224,8 +222,8 @@ func (r *VolHarvestingRunner) computeStats() (mean, stdDev, atr float64) {
 			variance += diff * diff
 		}
 	}
-	stdDev = math.Sqrt(variance / float64(count-1))
+	stdDev = sampleStd(variance, count)
 
-	atr = ATR(r.PriceHistory, n, 14)
+	atr = TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, n, 14)
 	return
 }

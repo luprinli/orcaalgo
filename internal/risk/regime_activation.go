@@ -194,6 +194,31 @@ func (m *RegimeActivationMatrix) Set(entry *RegimeEntry) {
 	m.entries[entry.StrategyID] = entry
 }
 
+// ApplyRegimeParticipation overrides a strategy's per-regime participation
+// weights from the optimizable regime_w_calm/trending/highvol/crisis params
+// (0..1). Absent params leave the strategy's default (binary Allowed) pattern
+// intact. This is the shared entry point used by both the backtest engine and
+// the live engine so an optimized regime profile is honored identically in
+// backtest and live (backtest/live parity).
+func ApplyRegimeParticipation(m *RegimeActivationMatrix, strategyID string, params map[string]float64) {
+	if m == nil || strategyID == "" || len(params) == 0 {
+		return
+	}
+	names := []string{"regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"}
+	entry := *m.Get(strategyID)
+	entry.StrategyID = strategyID
+	changed := false
+	for i, name := range names {
+		if v, ok := params[name]; ok {
+			entry.Participation[i] = v
+			changed = true
+		}
+	}
+	if changed {
+		m.Set(&entry)
+	}
+}
+
 // IsAllowed returns whether the strategy is permitted to trade in the given regime.
 func (m *RegimeActivationMatrix) IsAllowed(strategyID string, regime int8) bool {
 	if regime < 0 || regime > 3 {

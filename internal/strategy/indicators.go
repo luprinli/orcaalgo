@@ -6,6 +6,23 @@ import (
 	"github.com/cinar/indicator"
 )
 
+// finite reports whether x is a finite, non-NaN value. Used to keep non-finite
+// candles (NaN/Inf) from silently corrupting indicator state (Rule 18).
+func finite(x float64) bool {
+	return !math.IsNaN(x) && !math.IsInf(x, 0)
+}
+
+// sampleStd returns the sample standard deviation from a sum of squared
+// deviations and a sample count. It is the canonical final step of any std
+// computation (Rule 15), guarding non-finite/negative/insufficient input so a
+// tiny floating-point error can't yield NaN.
+func sampleStd(sumSquares float64, count int) float64 {
+	if count < 2 || !finite(sumSquares) || sumSquares < 0 {
+		return 0
+	}
+	return math.Sqrt(sumSquares / float64(count-1))
+}
+
 func ATR(prices []float64, count int, period int) float64 {
 	if count < period+1 || period <= 0 {
 		return 0
@@ -30,24 +47,40 @@ func ATR(prices []float64, count int, period int) float64 {
 	return sum / float64(n)
 }
 
+// TrueRangeATR returns the average true range (Wilder's TR) over the last
+// `period` bars. highs/lows/closes are circular ring buffers of equal size and
+// `count` is the number of valid entries (which may wrap). Uses modulo indexing
+// so it is correct once the buffer has wrapped (unlike a linear slice).
 func TrueRangeATR(highs, lows, closes []float64, count int, period int) float64 {
-	if count < period || period <= 0 || len(highs) == 0 {
+	if count < period || period <= 0 || len(highs) == 0 || len(lows) == 0 || len(closes) == 0 {
 		return 0
 	}
-	end := count
-	start := end - period
-	if start < 0 {
-		start = 0
+	size := len(closes)
+	sum := 0.0
+	n := 0
+	for i := count - period; i < count; i++ {
+		idx := i % size
+		prevIdx := (i - 1) % size
+		if prevIdx < 0 {
+			prevIdx += size
+		}
+		hl := highs[idx] - lows[idx]
+		hc := math.Abs(highs[idx] - closes[prevIdx])
+		lc := math.Abs(lows[idx] - closes[prevIdx])
+		tr := hl
+		if hc > tr {
+			tr = hc
+		}
+		if lc > tr {
+			tr = lc
+		}
+		sum += tr
+		n++
 	}
-	_, atrSeries := indicator.Atr(period, highs, lows, closes)
-	if len(atrSeries) == 0 {
+	if n == 0 {
 		return 0
 	}
-	idx := len(atrSeries) - 1
-	if idx >= len(atrSeries) {
-		idx = len(atrSeries) - 1
-	}
-	return atrSeries[idx]
+	return sum / float64(n)
 }
 
 func EMA(values []float64, count int, period int) float64 {
@@ -99,7 +132,7 @@ func Mean(values []float64, count int, lookback int) float64 {
 		sum += values[idx]
 		actual++
 	}
-	if actual == 0 {
+	if actual == 0 || !finite(sum) {
 		return 0
 	}
 	return sum / float64(actual)

@@ -101,9 +101,6 @@ func (r *DragonTrendRunner) ParamDefs() []ParamDef {
 }
 
 func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
 	price := candle.Close
 	if price.IsZero() {
 		return nil
@@ -158,25 +155,25 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			if pf > r.peakPrice.Float64() {
 				r.peakPrice = price
 			}
-			atr := ATR(r.PriceHistory, r.HistCount, r.ATRPeriod)
+			atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, r.ATRPeriod)
 			trailStop := r.peakPrice.Float64() - atr*r.ATRMultiplier
 			if pf <= trailStop ||
 				tc.IsTakeProfitHit(price, r.TakeProfit, "BUY") ||
 				alignedBear >= r.MinAligned {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if pf < r.peakPrice.Float64() {
 				r.peakPrice = price
 			}
-			atr := ATR(r.PriceHistory, r.HistCount, r.ATRPeriod)
+			atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, r.ATRPeriod)
 			trailStop := r.peakPrice.Float64() + atr*r.ATRMultiplier
 			if pf >= trailStop ||
 				tc.IsTakeProfitHit(price, r.TakeProfit, "SELL") ||
 				alignedBull >= r.MinAligned {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -184,7 +181,7 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	// Entry: require minimum aligned EMAs AND ADX > threshold.
 	if alignedBull >= r.MinAligned {
-		atr := ATR(r.PriceHistory, r.HistCount, r.ATRPeriod)
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, r.ATRPeriod)
 		if atr <= 0 {
 			return nil
 		}
@@ -197,11 +194,11 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(pf-stopDist),
 			types.PriceFromFloat(pf+profitDist),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: size}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: size}
 	}
 
 	if alignedBear >= r.MinAligned {
-		atr := ATR(r.PriceHistory, r.HistCount, r.ATRPeriod)
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, r.ATRPeriod)
 		if atr <= 0 {
 			return nil
 		}
@@ -214,7 +211,7 @@ func (r *DragonTrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(pf+stopDist),
 			types.PriceFromFloat(pf-profitDist),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: size}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: size}
 	}
 
 	return nil

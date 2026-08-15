@@ -8,21 +8,21 @@ import (
 )
 
 type mockRunner struct {
-	name         string
-	runnerType   string
-	evalResult   *Signal
-	evalCalled   int
-	resetCalled  int
+	name        string
+	runnerType  string
+	evalResult  *Signal
+	evalCalled  int
+	resetCalled int
 }
 
-func (m *mockRunner) Name() string         { return m.name }
-func (m *mockRunner) Type() string          { return m.runnerType }
+func (m *mockRunner) Name() string { return m.name }
+func (m *mockRunner) Type() string { return m.runnerType }
 func (m *mockRunner) Evaluate(c Candle, regime int8) *Signal {
 	m.evalCalled++
 	return m.evalResult
 }
-func (m *mockRunner) Reset() { m.resetCalled++ }
-func (m *mockRunner) Params() map[string]float64 { return nil }
+func (m *mockRunner) Reset()                       { m.resetCalled++ }
+func (m *mockRunner) Params() map[string]float64   { return nil }
 func (m *mockRunner) SetParams(map[string]float64) {}
 
 func TestCapitalPoolSim_AddStrategy(t *testing.T) {
@@ -174,5 +174,3 @@ func TestCapitalPoolSim_PerStrategyDrawdown(t *testing.T) {
 		t.Logf("Other strategies can still trade")
 	}
 }
-
-

@@ -26,6 +26,14 @@ import (
 type Candle = strategy.Candle
 type Signal = strategy.Signal
 
+// Signal-action constants mirrored from strategy so the engine can match the
+// `Signal` alias without a `strategy.` prefix (Rule 13 typed signal).
+const (
+	SignalNone  = strategy.SignalNone
+	SignalEntry = strategy.SignalEntry
+	SignalExit  = strategy.SignalExit
+)
+
 type UniverseSnapshot struct {
 	Date    time.Time
 	Symbols []string
@@ -80,6 +88,10 @@ type BacktestConfig struct {
 	EarningsCalendar      *market.EarningsCalendar  `json:"-"`
 	SkipEarningsDays      bool                      `json:"skip_earnings_days,omitempty"`
 	AdjustmentProvider    market.AdjustmentProvider `json:"-"`
+	// DisableRegimeGate turns off the regime participation gate entirely (all
+	// regimes allowed at full participation). Used for diagnostic runs to
+	// measure the raw strategy signal quality independent of regime gating.
+	DisableRegimeGate bool `json:"disable_regime_gate,omitempty"`
 }
 
 type MatrixBacktestConfig struct {
@@ -176,6 +188,7 @@ type ComboResult struct {
 	FillRejected        int            `json:"fill_rejected,omitempty"`
 	CandlesSeen         int            `json:"candles_seen,omitempty"`
 	StrategyNil         int            `json:"strategy_nil,omitempty"`
+	NilError            int            `json:"nil_error,omitempty"`
 	ExitSignalZeroQty   int            `json:"exit_signal_zero_qty,omitempty"`
 	TradesOpened        int            `json:"trades_opened,omitempty"`
 	CapitalZero         int            `json:"capital_zero,omitempty"`
@@ -184,6 +197,7 @@ type ComboResult struct {
 	QuantityTooSmall    int            `json:"quantity_too_small,omitempty"`
 	ExposureBlocked     int            `json:"exposure_blocked,omitempty"`
 	PipelineRejects     map[string]int `json:"pipeline_rejects,omitempty"`
+	ExitReasons         map[string]int `json:"exit_reasons,omitempty"`
 }
 
 // SignalFunnelJSON renders the full signal-gating funnel as a JSON object for
@@ -201,6 +215,7 @@ func (r ComboResult) SignalFunnelJSON() json.RawMessage {
 		"ml_rejected":          r.MLRejected,
 		"fill_rejected":        r.FillRejected,
 		"strategy_nil":         r.StrategyNil,
+		"nil_error":            r.NilError,
 		"exit_signal_zero_qty": r.ExitSignalZeroQty,
 		"trades_opened":        r.TradesOpened,
 		"capital_zero":         r.CapitalZero,
@@ -209,6 +224,7 @@ func (r ComboResult) SignalFunnelJSON() json.RawMessage {
 		"quantity_too_small":   r.QuantityTooSmall,
 		"exposure_blocked":     r.ExposureBlocked,
 		"pipeline_rejects":     r.PipelineRejects,
+		"exit_reasons":         r.ExitReasons,
 	}
 	b, _ := json.Marshal(funnel)
 	return b
@@ -246,23 +262,10 @@ func resolveKellyFraction(config BacktestConfig) float64 {
 // applyRegimeParticipation reads optimizable per-regime participation weights
 // (regime_w_calm/trending/highvol/crisis) from StrategyParams and overrides the
 // per-engine regime matrix for this strategy. Absent params → the matrix's
-// default Allowed pattern is preserved (regime_gating_deep_dive.md §2.2).
+// default Allowed pattern is preserved. Delegates to the shared risk helper so
+// backtest and live apply the identical optimized regime profile.
 func (e *Engine) applyRegimeParticipation(strategyID string, params map[string]float64) {
-	if params == nil || len(params) == 0 {
-		return
-	}
-	names := []string{"regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"}
-	entry := e.regimeMatrix.Get(strategyID)
-	changed := false
-	for i, name := range names {
-		if v, ok := params[name]; ok {
-			entry.Participation[i] = v
-			changed = true
-		}
-	}
-	if changed {
-		e.regimeMatrix.Set(entry)
-	}
+	risk.ApplyRegimeParticipation(e.regimeMatrix, strategyID, params)
 }
 
 type MatrixResult struct {
@@ -409,6 +412,7 @@ type SignalDiag struct {
 	RateLimited       int `json:"rate_limited"`
 	BaseSizeZero      int `json:"base_size_zero"`
 	StrategyNil       int `json:"strategy_nil"`
+	NilError          int `json:"nil_error"`
 	ExitSignalZeroQty int `json:"exit_signal_zero_qty"`
 	QuantityTooSmall  int `json:"quantity_too_small"`
 	ExposureBlocked   int `json:"exposure_blocked"`
@@ -422,6 +426,9 @@ type SignalDiag struct {
 	// Reason string returned by RiskPipeline.ProcessSignal), closing the
 	// previously-unaccounted funnel gap.
 	PipelineRejects map[string]int `json:"pipeline_rejects"`
+	// ExitReasons counts how trades closed (stop_loss / take_profit / time_exit /
+	// signal_reverse / end_of_data / pnl_clamped), making exit-quality visible.
+	ExitReasons map[string]int `json:"exit_reasons,omitempty"`
 }
 
 type EquityPoint struct {
@@ -755,6 +762,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	openTrades := make(map[string]*Trade)
 	activeStops := make(map[string]*ActiveStop)
 	pendingAS := make(map[string]*Trade)
+	// NEXT_BAR execution (Rule 9): a signal generated on bar t is filled at bar
+	// t+1's open, so the entry cannot look-ahead to the close it was decided on.
+	pendingEntries := make(map[string]*Signal)
 	var lastDay string
 	var atrWindow []Candle
 	var hasHighVIX bool
@@ -856,6 +866,15 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			continue
 		}
 
+		// Fill any pending NEXT_BAR entry at this bar's open, before the exit
+		// check, so a freshly-opened position can still be stopped/targeted on
+		// the same bar (Rule 9).
+		if sig, ok := pendingEntries[candle.Symbol]; ok {
+			delete(pendingEntries, candle.Symbol)
+			e.signalDiag.TradesOpened++
+			e.executeEntry(candle, sig, candle.Open.Float64(), regime, config, atrWindow, atrPeriod, &trades, openTrades, activeStops, pendingAS)
+		}
+
 		for sym, ot := range openTrades {
 			if candle.Symbol != sym {
 				// Multi-symbol runs (e.g. pairs_trading) interleave primary and
@@ -922,13 +941,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			shouldExit := false
 
 			if stop, ok := activeStops[sym]; ok {
-				if stopHit, sp := CheckStopHit(candle, stop); stopHit {
-					exitPrice = sp
-					exitReason = "stop_loss"
-					shouldExit = true
-				} else if tpHit, tp := CheckTakeProfitHit(candle, stop); tpHit {
-					exitPrice = tp
-					exitReason = "take_profit"
+				if reason, price := resolveStopTarget(candle, stop); reason != "" {
+					exitPrice = price
+					exitReason = reason
 					shouldExit = true
 				}
 			}
@@ -1055,96 +1070,9 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 			}
 			signal := e.generateSignal(candle, regime, config, capital)
 			if signal != nil {
-				e.signalDiag.TradesOpened++
-				midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
-				simulatedEntry := e.fillSim.SimulateFillWithTCA(uint32(len(trades)+1), candle.Symbol, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), signal.Quantity, signal.Side, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Time, midPrice, candle.Close.Float64()*adjFactor(candle.AdjustmentFactor), candle.Volume)
-				entryPrice := simulatedEntry.FillPrice.Float64()
-				entryQty := simulatedEntry.FillQuantity
-				entrySlippageMid := simulatedEntry.SlippageMidBps
-				entrySlippageLast := simulatedEntry.SlippageLastBps
-				entrySlippage := simulatedEntry.SlippageBps
-				if entryPrice <= 0 {
-					entryPrice = candle.Close.Float64()
-				}
-				if entryQty <= 0 {
-					entryQty = signal.Quantity
-				}
-				if entryQty <= 0 {
-					e.signalDiag.FillRejected++
-					entryQty = 0
-				}
-
-				atrVal := ComputeATR(atrWindow, atrPeriod)
-				stopPrice := 0.0
-				takePrice := 0.0
-				var stop *ActiveStop
-
-				if !signal.StopLoss.IsZero() {
-					// Strategy-specified stop/target (e.g. ORB range-derived levels)
-					// takes precedence over the generic ATR-based config defaults.
-					stopPrice = signal.StopLoss.Float64()
-					if !signal.TakeProfit.IsZero() {
-						takePrice = signal.TakeProfit.Float64()
-					}
-					stop = &ActiveStop{
-						TradeID:    len(trades) + 1,
-						EntryPrice: types.PriceFromFloat(entryPrice),
-						Side:       signal.Side,
-						StopPrice:  signal.StopLoss,
-						TakePrice:  signal.TakeProfit,
-						PeakPrice:  types.PriceFromFloat(entryPrice),
-						ATRValue:   atrVal,
-						StopType:   StopLossFixed,
-						TakeType:   TakeProfitFixed,
-					}
-					activeStops[candle.Symbol] = stop
-				} else if config.StopLoss != nil && config.StopLoss.Type != StopLossNone {
-					stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High.Float64())
-					if config.TakeProfit != nil && config.TakeProfit.Type != TakeProfitNone {
-						takePrice = CalculateTakeProfitPrice(entryPrice, signal.Side, config.TakeProfit, stopPrice, atrVal)
-					}
-					stop = &ActiveStop{
-						TradeID:    len(trades) + 1,
-						EntryPrice: types.PriceFromFloat(entryPrice),
-						Side:       signal.Side,
-						StopPrice:  types.PriceFromFloat(stopPrice),
-						TakePrice:  types.PriceFromFloat(takePrice),
-						PeakPrice:  types.PriceFromFloat(entryPrice),
-						ATRValue:   atrVal,
-						StopType:   config.StopLoss.Type,
-					}
-					if config.TakeProfit != nil {
-						stop.TakeType = config.TakeProfit.Type
-					}
-					activeStops[candle.Symbol] = stop
-				}
-
-				newTrade := &Trade{
-					Symbol:            candle.Symbol,
-					Side:              signal.Side,
-					Quantity:          entryQty,
-					EntryPrice:        types.PriceFromFloat(entryPrice),
-					EntryTime:         candle.Time,
-					HMMRegime:         regime,
-					StrategyID:        config.StrategyID,
-					StopPrice:         types.PriceFromFloat(stopPrice),
-					TakePrice:         types.PriceFromFloat(takePrice),
-					SlippageMidBps:    entrySlippageMid,
-					SlippageLastBps:   entrySlippageLast,
-					SlippageBps:       entrySlippage,
-					SlippageFillCount: 1,
-					lowestSinceEntry:  entryPrice,
-					highestSinceEntry: entryPrice,
-				}
-				newTrade.addChange(candle.Time, "entry", "", fmt.Sprintf("%.2f", entryPrice), signal.Side)
-				if stopPrice > 0 {
-					newTrade.addChange(candle.Time, "stop", "", fmt.Sprintf("%.2f", stopPrice), "initial")
-				}
-				if takePrice > 0 {
-					newTrade.addChange(candle.Time, "target", "", fmt.Sprintf("%.2f", takePrice), "initial")
-				}
-				openTrades[candle.Symbol] = newTrade
-				pendingAS[candle.Symbol] = newTrade
+				// Defer to NEXT_BAR: the entry fills at the next bar's open, so the signal
+				// cannot look-ahead to the close it was decided on (Rule 9).
+				pendingEntries[candle.Symbol] = signal
 			}
 		}
 
@@ -1194,6 +1122,21 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 
 		if capital > peakCapital {
 			peakCapital = capital
+		}
+	}
+
+	// Flush any deferred NEXT_BAR entry at end-of-data so a signal on the final
+	// bar still opens its trade and the signal funnel stays balanced (Rule 9).
+	if len(allCandles) > 0 && len(pendingEntries) > 0 {
+		last := allCandles[len(allCandles)-1]
+		for sym, sig := range pendingEntries {
+			e.signalDiag.TradesOpened++
+			flushCandle := Candle{
+				Symbol: sym, Time: last.Time,
+				Open: last.Open, High: last.High, Low: last.Low, Close: last.Close,
+				Volume: last.Volume, AdjustmentFactor: last.AdjustmentFactor,
+			}
+			e.executeEntry(flushCandle, sig, last.Close.Float64(), 0, config, atrWindow, atrPeriod, &trades, openTrades, activeStops, pendingAS)
 		}
 	}
 
@@ -1430,6 +1373,19 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 	result.StrategyParams["kelly_fraction"] = kelly
 	result.StrategyParams["sizing_percent"] = resolveSizingPercent(config)
 
+	// Aggregate exit-reason breakdown from the recorded trades so exit quality
+	// (stop-loss vs take-profit vs signal-reverse) is visible in the metrics.
+	if len(result.Trades) > 0 {
+		e.signalDiag.ExitReasons = make(map[string]int, 4)
+		for _, tr := range result.Trades {
+			reason := tr.ExitReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			e.signalDiag.ExitReasons[reason]++
+		}
+	}
+
 	result.SignalDiag = e.signalDiag
 	result.MLFeatureEnabled = e.featureStore != nil
 
@@ -1439,31 +1395,38 @@ func (e *Engine) Run(ctx context.Context, config BacktestConfig) (result *Backte
 func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfig, runningCapital float64) *Signal {
 	// Soft regime gate: hard-block only when participation weight is zero; the
 	// pipeline scales size for partial participation (regime_gating_deep_dive.md).
-	if e.regimeMatrix.ParticipationForRegime(config.StrategyID, regime) <= 0 {
+	if !config.DisableRegimeGate && e.regimeMatrix.ParticipationForRegime(config.StrategyID, regime) <= 0 {
 		e.signalDiag.RegimeRejected++
 		return nil
 	}
 	sr := e.getRunnerForSymbolAndStrategy(candle.Symbol, config.StrategyID, config)
 	var raw *strategy.Signal
+	var panicked bool
 	func() {
 		defer func() {
 			if r := recover(); r != nil {
 				raw = nil
-				e.signalDiag.StrategyNil++
+				panicked = true
 			}
 		}()
 		raw = sr.Evaluate(candle, regime)
 	}()
+	if panicked {
+		// Distinguish a runner panic (a real bug) from a legitimate "no setup"
+		// nil return, so the funnel doesn't conflate the two.
+		e.signalDiag.NilError++
+		return nil
+	}
 	if raw == nil {
 		e.signalDiag.StrategyNil++
 		return nil
 	}
 
-	if raw.Quantity == 0 {
-		// A zero-quantity signal is the strategy's "flat/exit" convention, not an
-		// entry. Treating it as an entry would open a zero-size position that
-		// still pays the round-trip fee and records a guaranteed loss. Exits are
-		// handled separately via generateSignalForExit.
+	if raw.Action == SignalExit {
+		// An exit signal is the strategy's "flat" convention, not an entry.
+		// Treating it as an entry would open a zero-size position that still pays
+		// the round-trip fee and records a guaranteed loss. Exits are handled
+		// separately via generateSignalForExit.
 		e.signalDiag.ExitSignalZeroQty++
 		return nil
 	}
@@ -1523,14 +1486,15 @@ func (e *Engine) generateSignal(candle Candle, regime int8, config BacktestConfi
 		// signal with "equity_negative" (equity defaults to 0).
 		e.exposure.SetEquity(runningCapital)
 		pipeResult := e.pipeline.ProcessSignal(context.Background(), risk.ProcessSignalRequest{
-			StrategyID:       config.StrategyID,
-			Symbol:           candle.Symbol,
-			Side:             raw.Side,
-			Price:            candle.Close.Float64(),
-			Confidence:       confidence,
-			BaseSize:         baseSize,
-			ExistingPosition: 0,
-			RunningCapital:   runningCapital,
+			StrategyID:        config.StrategyID,
+			Symbol:            candle.Symbol,
+			Side:              raw.Side,
+			Price:             candle.Close.Float64(),
+			Confidence:        confidence,
+			BaseSize:          baseSize,
+			ExistingPosition:  0,
+			RunningCapital:    runningCapital,
+			DisableRegimeGate: config.DisableRegimeGate,
 		})
 		if !pipeResult.Approved {
 			e.signalDiag.PipelineRejected++
@@ -1635,10 +1599,120 @@ func (e *Engine) generateSignalForExit(candle Candle, regime int8, config Backte
 		return nil
 	}
 	return &Signal{
-		Symbol:   candle.Symbol,
-		Side:     raw.Side,
-		Quantity: 0,
+		Symbol: candle.Symbol,
+		Side:   raw.Side,
+		Action: SignalExit,
 	}
+}
+
+// executeEntry fills a signal at the given reference price and opens the trade.
+// The reference price is `candle.Close` for same-bar execution or `candle.Open`
+// for NEXT_BAR execution (Rule 9: the entry must not fill at the close it was
+// decided on — that is look-ahead).
+func (e *Engine) executeEntry(
+	candle Candle,
+	signal *Signal,
+	refPrice float64,
+	regime int8,
+	config BacktestConfig,
+	atrWindow []Candle,
+	atrPeriod int,
+	trades *[]Trade,
+	openTrades map[string]*Trade,
+	activeStops map[string]*ActiveStop,
+	pendingAS map[string]*Trade,
+) {
+	midPrice := (candle.High.Float64() + candle.Low.Float64()) / 2.0
+	adj := adjFactor(candle.AdjustmentFactor)
+	simulatedEntry := e.fillSim.SimulateFillWithTCA(
+		uint32(len(*trades)+1), candle.Symbol, refPrice*adj, signal.Quantity, signal.Side,
+		refPrice*adj, candle.Time, midPrice, refPrice*adj, candle.Volume,
+	)
+	entryPrice := simulatedEntry.FillPrice.Float64()
+	entryQty := simulatedEntry.FillQuantity
+	entrySlippageMid := simulatedEntry.SlippageMidBps
+	entrySlippageLast := simulatedEntry.SlippageLastBps
+	entrySlippage := simulatedEntry.SlippageBps
+	if entryPrice <= 0 {
+		entryPrice = refPrice
+	}
+	if entryQty <= 0 {
+		entryQty = signal.Quantity
+	}
+	if entryQty <= 0 {
+		e.signalDiag.FillRejected++
+		entryQty = 0
+	}
+
+	atrVal := ComputeATR(atrWindow, atrPeriod)
+	stopPrice := 0.0
+	takePrice := 0.0
+	var stop *ActiveStop
+
+	if !signal.StopLoss.IsZero() {
+		stopPrice = signal.StopLoss.Float64()
+		if !signal.TakeProfit.IsZero() {
+			takePrice = signal.TakeProfit.Float64()
+		}
+		stop = &ActiveStop{
+			TradeID:    len(*trades) + 1,
+			EntryPrice: types.PriceFromFloat(entryPrice),
+			Side:       signal.Side,
+			StopPrice:  signal.StopLoss,
+			TakePrice:  signal.TakeProfit,
+			PeakPrice:  types.PriceFromFloat(entryPrice),
+			ATRValue:   atrVal,
+			StopType:   StopLossFixed,
+			TakeType:   TakeProfitFixed,
+		}
+		activeStops[candle.Symbol] = stop
+	} else if config.StopLoss != nil && config.StopLoss.Type != StopLossNone {
+		stopPrice = CalculateStopPrice(entryPrice, signal.Side, config.StopLoss, atrVal, candle.High.Float64())
+		if config.TakeProfit != nil && config.TakeProfit.Type != TakeProfitNone {
+			takePrice = CalculateTakeProfitPrice(entryPrice, signal.Side, config.TakeProfit, stopPrice, atrVal)
+		}
+		stop = &ActiveStop{
+			TradeID:    len(*trades) + 1,
+			EntryPrice: types.PriceFromFloat(entryPrice),
+			Side:       signal.Side,
+			StopPrice:  types.PriceFromFloat(stopPrice),
+			TakePrice:  types.PriceFromFloat(takePrice),
+			PeakPrice:  types.PriceFromFloat(entryPrice),
+			ATRValue:   atrVal,
+			StopType:   config.StopLoss.Type,
+		}
+		if config.TakeProfit != nil {
+			stop.TakeType = config.TakeProfit.Type
+		}
+		activeStops[candle.Symbol] = stop
+	}
+
+	newTrade := &Trade{
+		Symbol:            candle.Symbol,
+		Side:              signal.Side,
+		Quantity:          entryQty,
+		EntryPrice:        types.PriceFromFloat(entryPrice),
+		EntryTime:         candle.Time,
+		HMMRegime:         regime,
+		StrategyID:        config.StrategyID,
+		StopPrice:         types.PriceFromFloat(stopPrice),
+		TakePrice:         types.PriceFromFloat(takePrice),
+		SlippageMidBps:    entrySlippageMid,
+		SlippageLastBps:   entrySlippageLast,
+		SlippageBps:       entrySlippage,
+		SlippageFillCount: 1,
+		lowestSinceEntry:  entryPrice,
+		highestSinceEntry: entryPrice,
+	}
+	newTrade.addChange(candle.Time, "entry", "", fmt.Sprintf("%.2f", entryPrice), signal.Side)
+	if stopPrice > 0 {
+		newTrade.addChange(candle.Time, "stop", "", fmt.Sprintf("%.2f", stopPrice), "initial")
+	}
+	if takePrice > 0 {
+		newTrade.addChange(candle.Time, "target", "", fmt.Sprintf("%.2f", takePrice), "initial")
+	}
+	openTrades[candle.Symbol] = newTrade
+	pendingAS[candle.Symbol] = newTrade
 }
 
 func barsPerDayFromTimeframe(timeframe string) float64 {

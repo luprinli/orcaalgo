@@ -1250,6 +1250,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 		SizingPercent   float64  `json:"sizing_percent"`
 		KellyFraction   float64  `json:"kelly_fraction"`
 		LightOptimize   *bool    `json:"light_optimize,omitempty"`
+		WalkForward     *bool    `json:"walk_forward,omitempty"`
 		BenchmarkKind   string   `json:"benchmark_kind"`
 		BenchmarkSymbol string   `json:"benchmark_symbol"`
 	}
@@ -1300,6 +1301,7 @@ func (s *Server) submitBacktest(c *gin.Context) {
 			SizingPercent:     req.SizingPercent,
 			KellyFraction:     req.KellyFraction,
 			SkipLightOptimize: req.LightOptimize != nil && !*req.LightOptimize,
+			WalkForward:       req.WalkForward == nil || *req.WalkForward,
 		}
 		combos := backtest.CartesianProduct(mc.StrategyIDs, mc.Symbols, mc.Timeframes)
 		batchID := fmt.Sprintf("matrix-%s", time.Now().Format("20060102150405"))

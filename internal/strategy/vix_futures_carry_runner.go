@@ -1,8 +1,6 @@
 package strategy
 
 import (
-	"math"
-
 	"github.com/lee-econ/orca-core/internal/types"
 )
 
@@ -151,7 +149,7 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 		if r.barsHeld >= r.MaxHold {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: exitSide(r.CurrentSide), Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide(r.CurrentSide), Action: SignalExit}
 		}
 
 		stopPrice := r.EntryPrice.Float64()
@@ -159,13 +157,13 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			stopPrice -= atr * r.StopATRMult
 			if price.Float64() <= stopPrice || zScore >= r.FadeExitZ {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			stopPrice += atr * r.StopATRMult
 			if price.Float64() >= stopPrice || zScore <= -r.FadeExitZ {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -179,7 +177,7 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(price.Float64()-atr*r.StopATRMult*stopMult),
 			types.PriceFromFloat(price.Float64()+atr*r.ProfitATRMult*profitMult),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if zScore >= r.FadeEntryZ {
@@ -188,7 +186,7 @@ func (r *VIXFuturesCarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(price.Float64()+atr*r.StopATRMult*stopMult),
 			types.PriceFromFloat(price.Float64()-atr*r.ProfitATRMult*profitMult),
 			candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil
@@ -222,8 +220,8 @@ func (r *VIXFuturesCarryRunner) computeFadeStats() (mean, stdDev, atr float64) {
 			variance += d * d
 		}
 	}
-	stdDev = math.Sqrt(variance / float64(count-1))
-	atr = ATR(r.PriceHistory, n, 14)
+	stdDev = sampleStd(variance, count)
+	atr = TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, n, 14)
 	return
 }
 

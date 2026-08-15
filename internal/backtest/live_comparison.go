@@ -33,11 +33,11 @@ type MatchedLiveTrade struct {
 // ImpliedComparison summarises the gap between simulated and realised fills.
 type ImpliedComparison struct {
 	MatchedCount       int     `json:"matched_count"`
-	ImpliedSlippageBps float64 `json:"implied_slippage_bps"`   // weighted signed slippage
-	ImpliedAvgAbsBps   float64 `json:"implied_avg_abs_bps"`    // weighted absolute slippage
-	PenetrationPct     float64 `json:"penetration_pct"`        // weighted (limit-low)/limit
-	ExpenseGapBps      float64 `json:"expense_gap_bps"`        // weighted live-engine expense
-	EntryPriceGapBps   float64 `json:"entry_price_gap_bps"`    // weighted (live-engine)/engine
+	ImpliedSlippageBps float64 `json:"implied_slippage_bps"` // weighted signed slippage
+	ImpliedAvgAbsBps   float64 `json:"implied_avg_abs_bps"`  // weighted absolute slippage
+	PenetrationPct     float64 `json:"penetration_pct"`      // weighted (limit-low)/limit
+	ExpenseGapBps      float64 `json:"expense_gap_bps"`      // weighted live-engine expense
+	EntryPriceGapBps   float64 `json:"entry_price_gap_bps"`  // weighted (live-engine)/engine
 }
 
 // ComputeImpliedComparison derives execution-cost gaps from matched engine/live
@@ -47,10 +47,10 @@ type ImpliedComparison struct {
 func ComputeImpliedComparison(matched []MatchedLiveTrade) ImpliedComparison {
 	out := ImpliedComparison{}
 	var (
-		slipNum, slipAbsNum, slipDen        float64
-		penNum, penDen                      float64
-		expNum, expDen                      float64
-		gapNum                              float64
+		slipNum, slipAbsNum, slipDen float64
+		penNum, penDen               float64
+		expNum, expDen               float64
+		gapNum                       float64
 	)
 	for _, m := range matched {
 		engine := m.EnginePrice.Float64()

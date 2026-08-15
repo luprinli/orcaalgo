@@ -18,6 +18,7 @@ type TrendRunner struct {
 	prevFastEMA   float64
 	prevSlowEMA   float64
 	peakPrice     types.Price
+	stopDistance  float64
 	signalPending bool
 	pendingSide   string
 }
@@ -50,6 +51,7 @@ func (r *TrendRunner) Reset() {
 	r.prevSlowEMA = 0
 	r.signalPending = false
 	r.peakPrice = 0
+	r.stopDistance = 0
 }
 
 func (r *TrendRunner) Params() map[string]float64 {
@@ -105,11 +107,15 @@ func (r *TrendRunner) ParamDefs() []ParamDef {
 	}
 }
 
-func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
+// trailingStopPrice returns the trailing stop price for a side: `stopDistance`
+// below the running peak for longs, above it for shorts. `stopDistance` is the
+// ATR-based distance captured at entry (not the entry-time stop PRICE, which
+// would disable the trailing stop).
+func (r *TrendRunner) trailingStopPrice(peak types.Price, side string) types.Price {
+	return TrailingStop(peak, r.stopDistance, side)
+}
 
+func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 	price := candle.Close
 	if price.IsZero() {
 		return nil
@@ -140,23 +146,24 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			if price.Compare(r.peakPrice) > 0 {
 				r.peakPrice = price
 			}
-			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - r.StopLoss.Float64())
+			// Trail the stop at a fixed ATR distance below the running peak.
+			trailingStop := r.trailingStopPrice(r.peakPrice, "BUY")
 			crossDown := r.fastEMA < r.slowEMA && r.prevFastEMA >= r.prevSlowEMA
 			if tc.IsTakeProfitHit(price, r.TakeProfit, "BUY") || price.Compare(trailingStop) <= 0 || crossDown {
 				r.ClosePosition()
 				r.signalPending = false
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if price.Compare(r.peakPrice) < 0 {
 				r.peakPrice = price
 			}
-			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + r.StopLoss.Float64())
+			trailingStop := r.trailingStopPrice(r.peakPrice, "SELL")
 			crossUp := r.fastEMA > r.slowEMA && r.prevFastEMA <= r.prevSlowEMA
 			if tc.IsTakeProfitHit(price, r.TakeProfit, "SELL") || price.Compare(trailingStop) >= 0 || crossUp {
 				r.ClosePosition()
 				r.signalPending = false
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -180,7 +187,7 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 				r.signalPending = false
 				return nil
 			}
-			atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+			atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 			if atr <= 0 {
 				r.signalPending = false
 				return nil
@@ -189,15 +196,16 @@ func (r *TrendRunner) Evaluate(candle Candle, regime int8) *Signal {
 			stopDist := atr * r.AtrMultiplier * stopMult
 			profitDist := atr * r.ProfitATRMult * profitMult
 			r.peakPrice = price
+			r.stopDistance = stopDist
 
 			if r.pendingSide == "BUY" {
-				r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
+				r.OpenPosition("BUY", price, StopPrice(price, stopDist, "BUY"), TargetPrice(price, profitDist, "BUY"), candle.Time)
 				r.signalPending = false
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 			}
-			r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
+			r.OpenPosition("SELL", price, StopPrice(price, stopDist, "SELL"), TargetPrice(price, profitDist, "SELL"), candle.Time)
 			r.signalPending = false
-			return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+			return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 		}
 
 		r.signalPending = true

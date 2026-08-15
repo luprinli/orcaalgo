@@ -42,7 +42,7 @@ func generateTestCandles(n int, startPrice float64) []strategy.Candle {
 
 func TestE2E_MidPriceFill(t *testing.T) {
 	candles := generateTestCandles(200, 100.0)
-	runner := strategy.NewMACrossoverRunner()
+	runner := strategy.NewRSI2MeanReversionRunner()
 
 	signals := 0
 	for _, c := range candles {
@@ -52,15 +52,15 @@ func TestE2E_MidPriceFill(t *testing.T) {
 			if sig.Side != "BUY" && sig.Side != "SELL" {
 				t.Errorf("invalid signal side: %s", sig.Side)
 			}
-			if sig.Quantity <= 0 && sig.Side != "SELL" && sig.Side != "BUY" {
-				t.Errorf("exit signal should have quantity 0")
+			if sig.Action != strategy.SignalEntry && sig.Action != strategy.SignalExit {
+				t.Errorf("invalid signal action: %v", sig.Action)
 			}
 		}
 	}
 	if signals == 0 {
 		t.Error("expected at least 1 signal from 200 candles")
 	}
-	t.Logf("MACrossover generated %d signals from %d candles", signals, len(candles))
+	t.Logf("RSI2 generated %d signals from %d candles", signals, len(candles))
 }
 
 func TestE2E_ProbabilisticFill(t *testing.T) {
@@ -162,7 +162,12 @@ func TestE2E_AllStrategiesProduceSignals(t *testing.T) {
 			t.Logf("  %-25s: NO signals (may need different data)", r.name)
 		}
 	}
-	if producing < 5 {
+	// Threshold is 3 (not 5): after the circular-buffer linearization and
+	// close-for-high/low indicator fixes, trend/ORB/scalp/donchian/keltner/
+	// ichimoku/ma_crossover no longer emit the spurious signals the scrambled
+	// window used to produce on this synthetic daily data. The reliable signal
+	// producers are grid, mean_reversion and rsi2_reversion.
+	if producing < 3 {
 		t.Errorf("only %d/10 strategies produced signals", producing)
 	}
 }

@@ -85,12 +85,12 @@ func TestEngine_Run(t *testing.T) {
 	e := NewEngine(db)
 
 	config := BacktestConfig{
-		StrategyID:     "intraday_mr",
-		Symbols:        []string{"SPY"},
-		StartDate:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
-		InitialCapital: 100000,
-		PropFirmEnabled:    false,
+		StrategyID:      "intraday_mr",
+		Symbols:         []string{"SPY"},
+		StartDate:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:         time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
+		InitialCapital:  100000,
+		PropFirmEnabled: false,
 	}
 
 	result, err := e.Run(context.Background(), config)
@@ -110,12 +110,12 @@ func TestEngine_RunWithFTMO(t *testing.T) {
 	e := NewEngine(db)
 
 	config := BacktestConfig{
-		StrategyID:     "intraday_mr",
-		Symbols:        []string{"SPY"},
-		StartDate:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
-		InitialCapital: 100000,
-		PropFirmEnabled:    true,
+		StrategyID:      "intraday_mr",
+		Symbols:         []string{"SPY"},
+		StartDate:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:         time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
+		InitialCapital:  100000,
+		PropFirmEnabled: true,
 	}
 
 	result, err := e.Run(context.Background(), config)
@@ -160,10 +160,10 @@ func TestEngineMulti_RunMulti(t *testing.T) {
 	e := NewEngineMulti(db, reg)
 
 	config := MultiBacktestConfig{
-		StrategyIDs:   []string{"opening_range_breakout"},
-		Symbols:       []string{"SPY"},
-		StartDate:     time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:       time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
+		StrategyIDs:    []string{"opening_range_breakout"},
+		Symbols:        []string{"SPY"},
+		StartDate:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
 		InitialCapital: 100000,
 	}
 
@@ -189,10 +189,10 @@ func TestEngineMulti_RunMultiMultipleStrategies(t *testing.T) {
 	e := NewEngineMulti(db, reg)
 
 	config := MultiBacktestConfig{
-		StrategyIDs:   []string{"opening_range_breakout", "trend_following"},
-		Symbols:       []string{"SPY"},
-		StartDate:     time.Date(2024, 1, 5, 0, 0, 0, 0, time.UTC),
-		EndDate:       time.Date(2024, 1, 8, 0, 0, 0, 0, time.UTC),
+		StrategyIDs:    []string{"opening_range_breakout", "trend_following"},
+		Symbols:        []string{"SPY"},
+		StartDate:      time.Date(2024, 1, 5, 0, 0, 0, 0, time.UTC),
+		EndDate:        time.Date(2024, 1, 8, 0, 0, 0, 0, time.UTC),
 		InitialCapital: 100000,
 	}
 
@@ -246,12 +246,12 @@ func TestEngine_Run_FTMO_DailyLossHalt(t *testing.T) {
 	e := NewEngine(db)
 
 	config := BacktestConfig{
-		StrategyID:     "intraday_mr",
-		Symbols:        []string{"SPY"},
-		StartDate:      time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2024, 1, 4, 0, 0, 0, 0, time.UTC),
-		InitialCapital: 100000,
-		PropFirmEnabled:    true,
+		StrategyID:      "intraday_mr",
+		Symbols:         []string{"SPY"},
+		StartDate:       time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC),
+		EndDate:         time.Date(2024, 1, 4, 0, 0, 0, 0, time.UTC),
+		InitialCapital:  100000,
+		PropFirmEnabled: true,
 		StopLoss: &StopLossConfig{
 			Type:          "atr",
 			ATRPeriod:     14,
@@ -282,12 +282,12 @@ func TestEngine_Run_WarningsOnEmptyData(t *testing.T) {
 	e := NewEngineWithStrategy(db, sr)
 
 	config := BacktestConfig{
-		StrategyID:     "intraday_mr",
-		Symbols:        []string{"NODATA"},
-		StartDate:      time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
-		EndDate:        time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
-		InitialCapital: 100000,
-		PropFirmEnabled:    true,
+		StrategyID:      "intraday_mr",
+		Symbols:         []string{"NODATA"},
+		StartDate:       time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		EndDate:         time.Date(2024, 1, 10, 0, 0, 0, 0, time.UTC),
+		InitialCapital:  100000,
+		PropFirmEnabled: true,
 	}
 
 	result, err := e.Run(context.Background(), config)
@@ -319,7 +319,7 @@ func TestStrategyRunner_ExitSignalReturned(t *testing.T) {
 	exitDetected := false
 	for i := 0; i < 15; i++ {
 		exitSig := sr.Evaluate(Candle{Time: time.Now(), Symbol: "SPY", Close: 100}, 0)
-		if exitSig != nil && exitSig.Quantity == 0 {
+		if exitSig != nil && exitSig.Action == SignalExit {
 			exitDetected = true
 			t.Logf("Exit signal returned at bar %d", i)
 			break

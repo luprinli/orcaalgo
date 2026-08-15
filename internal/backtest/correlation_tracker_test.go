@@ -27,7 +27,11 @@ func TestCorrelationTracker_Uncorrelated(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		a := 100.0 + float64(i)
 		b := 100.0
-		if i%2 == 0 { b += 2 } else { b -= 2 }
+		if i%2 == 0 {
+			b += 2
+		} else {
+			b -= 2
+		}
 		ct.RecordEquity("a", a)
 		ct.RecordEquity("b", b)
 	}

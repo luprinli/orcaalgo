@@ -4,11 +4,11 @@ package backtest
 // determine whether a (strategy, symbol) pair is viable before running the
 // expensive intraday + optimization deep pass.
 type StageOneResult struct {
-	Strategy  string `json:"strategy"`
-	Symbol    string `json:"symbol"`
-	NumTrades int    `json:"num_trades"`
+	Strategy  string  `json:"strategy"`
+	Symbol    string  `json:"symbol"`
+	NumTrades int     `json:"num_trades"`
 	Sharpe    float64 `json:"sharpe"`
-	Viable    bool   `json:"viable"`
+	Viable    bool    `json:"viable"`
 }
 
 // ScreenStageOne runs a cheap daily pass on every unique (strategy, symbol)
@@ -16,8 +16,9 @@ type StageOneResult struct {
 // are returned separately so the deep-stage can skip their intraday combos.
 //
 // This is the two-stage funnel described in the execution framework (§3.3):
-//   Stage 1 — Broad screen on 1d, default params, to eliminate non-viable pairs
-//   Stage 2 — Deep run on intraday tfs + optimization for survivors only
+//
+//	Stage 1 — Broad screen on 1d, default params, to eliminate non-viable pairs
+//	Stage 2 — Deep run on intraday tfs + optimization for survivors only
 func ScreenStageOne(db Database, config MatrixBacktestConfig) (viable []StageOneResult, skipped []StageOneResult, _ error) {
 	type pair struct{ strategy, symbol string }
 	seen := make(map[string]struct{})

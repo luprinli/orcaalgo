@@ -12,9 +12,9 @@ import (
 )
 
 type parityDB struct {
-	candles  []Candle
-	regime   []RegimeLog
-	vix      []VIXLog
+	candles   []Candle
+	regime    []RegimeLog
+	vix       []VIXLog
 	sentiment []SentimentLog
 }
 
@@ -50,7 +50,9 @@ func (p *parityDB) CountCandles(ctx context.Context) (int64, error) {
 	return int64(len(p.candles)), nil
 }
 func (p *parityDB) CountSyntheticCandles(ctx context.Context) (int64, error) { return 0, nil }
-func (p *parityDB) CountRegimeLogs(ctx context.Context) (int64, error)      { return int64(len(p.regime)), nil }
+func (p *parityDB) CountRegimeLogs(ctx context.Context) (int64, error) {
+	return int64(len(p.regime)), nil
+}
 func (p *parityDB) LoadUniverseSnapshots(ctx context.Context, start, end time.Time) ([]UniverseSnapshot, error) {
 	return nil, nil
 }
@@ -278,7 +280,7 @@ func TestBacktestReplayParity(t *testing.T) {
 
 	batchDD := resultBatch.MaxDrawdown
 	streamingDD := calculateMaxDrawdownFromTrades(allTradesStreaming, cfg.InitialCapital)
-	ddDiff := math.Abs(batchDD-streamingDD)
+	ddDiff := math.Abs(batchDD - streamingDD)
 	if ddDiff > 0.02 {
 		t.Errorf("MaxDD difference %.4f exceeds 2%% threshold: batch=%.4f, streaming=%.4f",
 			ddDiff, batchDD, streamingDD)

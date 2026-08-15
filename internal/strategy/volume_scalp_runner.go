@@ -99,10 +99,6 @@ func (r *VolumeScalpRunner) ParamDefs() []ParamDef {
 }
 
 func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	// Daily trade count reset.
 	day := candle.Time.Format("2006-01-02")
 	if day != r.currentDay {
@@ -151,7 +147,7 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 			if r.CurrentSide == "SELL" {
 				exitSide = "BUY"
 			}
-			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 		}
 		return nil
 	}
@@ -181,7 +177,7 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	if atr <= 0 {
 		return nil
 	}
@@ -197,7 +193,7 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 		profitPrice := candle.Close.Float64() + atr*r.TakeProfitAtrMult*profitMult
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(stopPrice), types.PriceFromFloat(profitPrice), candle.Time)
 		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: qty}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: qty}
 	}
 
 	if candle.Close.Float64() <= breakoutLow {
@@ -205,7 +201,7 @@ func (r *VolumeScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 		profitPrice := candle.Close.Float64() - atr*r.TakeProfitAtrMult*profitMult
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(stopPrice), types.PriceFromFloat(profitPrice), candle.Time)
 		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: qty}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: qty}
 	}
 
 	return nil

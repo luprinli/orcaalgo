@@ -20,54 +20,56 @@ var registeredMetrics = make(map[string]MetricDef)
 func init() {
 	RegisterMetric(MetricDef{
 		Name: "sharpe_ratio", Group: "Risk", Description: "Annualized Sharpe ratio",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeSharpe(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeSharpe(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
 	})
 	RegisterMetric(MetricDef{
 		Name: "sortino_ratio", Group: "Risk", Description: "Annualized Sortino ratio",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeSortino(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeSortino(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
 	})
 	RegisterMetric(MetricDef{
 		Name: "max_drawdown_pct", Group: "Risk", Description: "Maximum peak-to-trough drawdown",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdown(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdown(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
 	})
 	RegisterMetric(MetricDef{
 		Name: "win_rate_pct", Group: "Performance", Description: "Percentage of winning trades",
-		Compute: func(_ []EquityPoint, trades []Trade) float64 { return computeWinRate(trades) },
+		Compute:   func(_ []EquityPoint, trades []Trade) float64 { return computeWinRate(trades) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
 	})
 	RegisterMetric(MetricDef{
 		Name: "profit_factor", Group: "Performance", Description: "Gross profit / gross loss ratio",
-		Compute: func(_ []EquityPoint, trades []Trade) float64 { return computeProfitFactor(trades) },
+		Compute:   func(_ []EquityPoint, trades []Trade) float64 { return computeProfitFactor(trades) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) },
 	})
 	RegisterMetric(MetricDef{
 		Name: "total_return_pct", Group: "Performance", Description: "Total return percentage",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeTotalReturn(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeTotalReturn(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
 	})
 	RegisterMetric(MetricDef{
 		Name: "num_trades", Group: "Performance", Description: "Total number of trades",
-		Compute: func(_ []EquityPoint, trades []Trade) float64 { return float64(len(trades)) },
+		Compute:   func(_ []EquityPoint, trades []Trade) float64 { return float64(len(trades)) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },
 	})
 	RegisterMetric(MetricDef{
 		Name: "max_drawdown_duration_days", Group: "Risk", Description: "Max drawdown duration in trading days",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdownDuration(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeMaxDrawdownDuration(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) + " days" },
 	})
 	RegisterMetric(MetricDef{
 		Name: "cagr_pct", Group: "Performance", Description: "Compound Annual Growth Rate",
-		Compute: func(eq []EquityPoint, _ []Trade) float64 { return computeCAGR(eq) },
+		Compute:   func(eq []EquityPoint, _ []Trade) float64 { return computeCAGR(eq) },
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) + "%" },
 	})
 	RegisterMetric(MetricDef{
 		Name: "trading_volume", Group: "Performance", Description: "Total trading volume",
 		Compute: func(_ []EquityPoint, trades []Trade) float64 {
 			var vol float64
-			for _, t := range trades { vol += t.Quantity }
+			for _, t := range trades {
+				vol += t.Quantity
+			}
 			return vol
 		},
 		Formatter: func(v float64) string { return strconv.FormatFloat(v, 'f', 0, 64) },

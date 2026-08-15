@@ -175,6 +175,8 @@ export interface ComboResult {
   quantity_too_small?: number
   exposure_blocked?: number
   pipeline_rejects?: Record<string, number>
+  nil_error?: number
+  exit_reasons?: Record<string, number>
 }
 
 export interface MatrixResultsResponse {

@@ -24,12 +24,12 @@ type ValidationJobConfig struct {
 }
 
 type PreflightResult struct {
-	DBConnected    bool  `json:"db_connected"`
-	EngineReady    bool  `json:"engine_ready"`
-	DataCandles    int64 `json:"data_candles"`
-	SyntheticCount int64 `json:"synthetic_count"`
-	DataRegimes    int64 `json:"data_regimes"`
-	Passed         bool  `json:"passed"`
+	DBConnected    bool     `json:"db_connected"`
+	EngineReady    bool     `json:"engine_ready"`
+	DataCandles    int64    `json:"data_candles"`
+	SyntheticCount int64    `json:"synthetic_count"`
+	DataRegimes    int64    `json:"data_regimes"`
+	Passed         bool     `json:"passed"`
 	Errors         []string `json:"errors,omitempty"`
 }
 
@@ -92,8 +92,8 @@ type JobProgress struct {
 }
 
 type JobRunner struct {
-	mu       sync.RWMutex
-	jobs     map[string]*RunningJob
+	mu   sync.RWMutex
+	jobs map[string]*RunningJob
 }
 
 type RunningJob struct {
@@ -104,22 +104,22 @@ type RunningJob struct {
 }
 
 type StrategyPipelineResult struct {
-	StrategyID string                 `json:"strategy_id"`
-	WalkForward *WalkForwardResult    `json:"walk_forward,omitempty"`
-	MonteCarlo  *MonteCarloResult     `json:"monte_carlo,omitempty"`
-	MultiMetric *MultiMetricVerdict   `json:"multi_metric,omitempty"`
-	BestParams  map[string]float64    `json:"best_params,omitempty"`
-	Error       string                `json:"error,omitempty"`
+	StrategyID  string              `json:"strategy_id"`
+	WalkForward *WalkForwardResult  `json:"walk_forward,omitempty"`
+	MonteCarlo  *MonteCarloResult   `json:"monte_carlo,omitempty"`
+	MultiMetric *MultiMetricVerdict `json:"multi_metric,omitempty"`
+	BestParams  map[string]float64  `json:"best_params,omitempty"`
+	Error       string              `json:"error,omitempty"`
 }
 
 type PipelineResult struct {
-	JobID       string                      `json:"job_id"`
-	Status      string                      `json:"status"`
-	StartedAt   time.Time                   `json:"started_at"`
-	CompletedAt *time.Time                  `json:"completed_at,omitempty"`
-	Strategies  []StrategyPipelineResult    `json:"strategies"`
-	Summary     *PipelineSummary            `json:"summary,omitempty"`
-	Error       string                      `json:"error,omitempty"`
+	JobID       string                   `json:"job_id"`
+	Status      string                   `json:"status"`
+	StartedAt   time.Time                `json:"started_at"`
+	CompletedAt *time.Time               `json:"completed_at,omitempty"`
+	Strategies  []StrategyPipelineResult `json:"strategies"`
+	Summary     *PipelineSummary         `json:"summary,omitempty"`
+	Error       string                   `json:"error,omitempty"`
 }
 
 type PipelineSummary struct {

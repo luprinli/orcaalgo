@@ -23,11 +23,11 @@ func (e *Engine) RunParallel(ctx context.Context, configs []BacktestConfig) map[
 			engine := NewEngine(e.db)
 			r, err := engine.Run(ctx, cfg)
 			if err == nil {
-			mu.Lock()
-			for _, sym := range cfg.Symbols {
-				results[sym] = r
-			}
-			mu.Unlock()
+				mu.Lock()
+				for _, sym := range cfg.Symbols {
+					results[sym] = r
+				}
+				mu.Unlock()
 			}
 		}(config)
 	}

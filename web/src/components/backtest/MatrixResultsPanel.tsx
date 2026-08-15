@@ -262,6 +262,12 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                     {showAdvanced && <TableHead className="h-7 px-2" title="Expected Profit Factor">ExpPF</TableHead>}
                     {showAdvanced && <TableHead className="h-7 px-2" title="Reward:Risk Ratio">R:R</TableHead>}
                     {showAdvanced && <TableHead className="h-7 px-2" title="Daily Volatility %">DayVol</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Raw signal attempts (strategy evaluated)">Sig Att</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Attempts where the runner returned nil (no signal)">Nil</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Runner panics/recoveries (real bugs, not 'no setup')">Nil Err</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Signals rejected by the regime gate">Regime</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Signals that passed all gates">Passed</TableHead>}
+                    {showAdvanced && <TableHead className="h-7 px-2" title="Trades actually opened">Opened</TableHead>}
                     {showAdvanced && <TableHead className="h-7 px-2" title="First Candle Time">First Candle</TableHead>}
                     {showAdvanced && <TableHead className="h-7 px-2" title="Last Candle Time">Last Candle</TableHead>}
                     {showAdvanced && <TableHead className="h-7 px-2" title="ML Feature Enabled">ML</TableHead>}
@@ -271,7 +277,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={showAdvanced ? (onViewDetail ? 41 : 40) : (onViewDetail ? 13 : 12)} /></TableRow>}
+                  {win.topPad > 0 && <TableRow style={{ height: win.topPad }}><TableCell colSpan={showAdvanced ? (onViewDetail ? 47 : 46) : (onViewDetail ? 19 : 18)} /></TableRow>}
                   {sortedMatrixResults.slice(win.start, win.end).map((r, i) => (
                     <TableRow key={win.start + i} className={`h-[26px] ${r.sharpe_ratio >= 1.0 ? 'bg-emerald-500/5' : ''}`}>
                       <TableCell className="px-2">
@@ -311,6 +317,12 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.expected_pf != null ? r.expected_pf.toFixed(2) : '\u2014'}</TableCell>}
                       {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.reward_risk_ratio != null ? r.reward_risk_ratio.toFixed(2) : '\u2014'}</TableCell>}
                       {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.daily_volatility != null ? `${(r.daily_volatility * 100).toFixed(2)}%` : '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.signal_attempts ?? '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.strategy_nil ?? '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums" style={{ color: (r.nil_error ?? 0) > 0 ? 'var(--trading-danger)' : undefined }}>{r.nil_error ?? '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums" style={{ color: (r.regime_rejected ?? 0) > 0 ? 'var(--trading-warning, #d29922)' : undefined }}>{r.regime_rejected ?? '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums" style={{ color: (r.signals_passed ?? 0) > 0 ? 'var(--trading-success)' : undefined }}>{r.signals_passed ?? '\u2014'}</TableCell>}
+                      {showAdvanced && <TableCell className="px-2 text-[11px] tabular-nums">{r.trades_opened ?? '\u2014'}</TableCell>}
                       {showAdvanced && <TableCell className="px-2 text-[11px]">{r.first_candle_time ? r.first_candle_time.slice(0, 10) : '\u2014'}</TableCell>}
                       {showAdvanced && <TableCell className="px-2 text-[11px]">{r.last_candle_time ? r.last_candle_time.slice(0, 10) : '\u2014'}</TableCell>}
                       {showAdvanced && <TableCell className="px-2">{r.ml_feature_enabled ? <Badge variant="outline" className="text-[10px] h-4 px-1">Y</Badge> : '\u2014'}</TableCell>}
@@ -331,7 +343,7 @@ export default function MatrixResultsPanel(props: MatrixResultsPanelProps) {
                       )}
                     </TableRow>
                   ))}
-                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={showAdvanced ? (onViewDetail ? 41 : 40) : (onViewDetail ? 13 : 12)} /></TableRow>}
+                  {win.bottomPad > 0 && <TableRow style={{ height: win.bottomPad }}><TableCell colSpan={showAdvanced ? (onViewDetail ? 47 : 46) : (onViewDetail ? 19 : 18)} /></TableRow>}
                 </TableBody>
               </Table>
             </div>

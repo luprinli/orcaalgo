@@ -10,45 +10,45 @@ import (
 )
 
 type OrchMatrixConfig struct {
-	Sets          [][]OrchestratorStrategy `json:"sets"`
-	StartDate     time.Time                `json:"start_date"`
-	EndDate       time.Time                `json:"end_date"`
-	InitialCapital float64                 `json:"initial_capital"`
-	RebalanceBars  int                     `json:"rebalance_bars"`
-	KellyFraction  float64                 `json:"kelly_fraction"`
-	MaxPositionPct float64                 `json:"max_position_pct"`
-	FrictionModel  string                  `json:"friction_model"`
+	Sets           [][]OrchestratorStrategy `json:"sets"`
+	StartDate      time.Time                `json:"start_date"`
+	EndDate        time.Time                `json:"end_date"`
+	InitialCapital float64                  `json:"initial_capital"`
+	RebalanceBars  int                      `json:"rebalance_bars"`
+	KellyFraction  float64                  `json:"kelly_fraction"`
+	MaxPositionPct float64                  `json:"max_position_pct"`
+	FrictionModel  string                   `json:"friction_model"`
 }
 
 type OrchMatrixResult struct {
-	SetIndex   int                       `json:"set_index"`
-	Strategies []OrchestratorStrategy    `json:"strategies"`
-	PoolSharpe float64                   `json:"pool_sharpe"`
-	PoolSortino float64                  `json:"pool_sortino"`
-	PoolMaxDD  float64                   `json:"pool_maxdd"`
-	PoolReturn float64                   `json:"pool_return_pct"`
-	RebalanceCosts float64               `json:"rebalance_costs"`
-	NumTrades  int                       `json:"num_trades"`
-	StrategyPnL map[string]float64       `json:"strategy_pnl"`
-	Status     string                    `json:"status"`
-	Error      string                    `json:"error,omitempty"`
-	RunID      string                    `json:"run_id,omitempty"`
-	Completed  int                       `json:"completed"`
-	Total      int                       `json:"total"`
+	SetIndex       int                    `json:"set_index"`
+	Strategies     []OrchestratorStrategy `json:"strategies"`
+	PoolSharpe     float64                `json:"pool_sharpe"`
+	PoolSortino    float64                `json:"pool_sortino"`
+	PoolMaxDD      float64                `json:"pool_maxdd"`
+	PoolReturn     float64                `json:"pool_return_pct"`
+	RebalanceCosts float64                `json:"rebalance_costs"`
+	NumTrades      int                    `json:"num_trades"`
+	StrategyPnL    map[string]float64     `json:"strategy_pnl"`
+	Status         string                 `json:"status"`
+	Error          string                 `json:"error,omitempty"`
+	RunID          string                 `json:"run_id,omitempty"`
+	Completed      int                    `json:"completed"`
+	Total          int                    `json:"total"`
 }
 
 type OrchMatrixStreamResult struct {
-	Results    []OrchMatrixResult `json:"results"`
-	Telemetry  OrchMatrixTelemetry `json:"telemetry"`
-	Seq        int                `json:"seq"`
+	Results   []OrchMatrixResult  `json:"results"`
+	Telemetry OrchMatrixTelemetry `json:"telemetry"`
+	Seq       int                 `json:"seq"`
 }
 
 type OrchMatrixTelemetry struct {
-	Total       int     `json:"total"`
-	Completed   int     `json:"completed"`
-	BestSharpe  float64 `json:"best_sharpe"`
-	BestSet     int     `json:"best_set"`
-	Status      string  `json:"status"`
+	Total      int     `json:"total"`
+	Completed  int     `json:"completed"`
+	BestSharpe float64 `json:"best_sharpe"`
+	BestSet    int     `json:"best_set"`
+	Status     string  `json:"status"`
 }
 
 type orchMatrixJob struct {
@@ -149,11 +149,11 @@ func RunOrchestratorMatrix(dbAdapter Database, repo *db.Repository, cfg OrchMatr
 				enriched := EnrichResultJSON(result)
 				enrichedJSON, _ := json.Marshal(enriched)
 				run := &db.OrchestrationRun{
-					StartDate:     cfg.StartDate,
-					EndDate:       cfg.EndDate,
+					StartDate:      cfg.StartDate,
+					EndDate:        cfg.EndDate,
 					InitialCapital: cfg.InitialCapital,
-					Status:        "completed",
-					BatchID:       &batchID,
+					Status:         "completed",
+					BatchID:        &batchID,
 				}
 				for _, s := range j.set {
 					run.StrategyIDs = append(run.StrategyIDs, s.StrategyID)

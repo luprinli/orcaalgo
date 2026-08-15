@@ -5,39 +5,41 @@ import "github.com/lee-econ/orca-core/internal/types"
 type MACrossoverRunner struct {
 	*BaseRunner
 
-	FastPeriod      float64
-	SlowPeriod      float64
-	RsiPeriod       float64
-	RsiOverbought   float64
-	RsiOversold     float64
-	UseRsiFilter    bool
-	UseMacdFilter   bool
-	UseBollExit     bool
-	AtrPeriod       float64
-	AtrMultiplier   float64
-	prevFast        float64
-	prevSlow        float64
+	FastPeriod    float64
+	SlowPeriod    float64
+	RsiPeriod     float64
+	RsiOverbought float64
+	RsiOversold   float64
+	UseRsiFilter  bool
+	UseMacdFilter bool
+	UseBollExit   bool
+	AtrPeriod     float64
+	AtrMultiplier float64
+	prevFast      float64
+	prevSlow      float64
 }
 
 func NewMACrossoverRunner() *MACrossoverRunner {
 	return &MACrossoverRunner{
-		BaseRunner:     NewBaseRunner(256),
-		FastPeriod:     9,
-		SlowPeriod:     21,
-		RsiPeriod:      14,
-		RsiOverbought:  70,
-		RsiOversold:    30,
-		UseRsiFilter:   true,
-		UseMacdFilter:  true,
-		UseBollExit:    true,
-		AtrPeriod:      14,
-		AtrMultiplier:  2.0,
+		BaseRunner:    NewBaseRunner(256),
+		FastPeriod:    9,
+		SlowPeriod:    21,
+		RsiPeriod:     14,
+		RsiOverbought: 70,
+		RsiOversold:   30,
+		UseRsiFilter:  true,
+		UseMacdFilter: true,
+		UseBollExit:   true,
+		AtrPeriod:     14,
+		AtrMultiplier: 2.0,
 	}
 }
 
 func (r *MACrossoverRunner) Name() string { return "ma_crossover" }
 func (r *MACrossoverRunner) Type() string { return "trend" }
-func (r *MACrossoverRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *MACrossoverRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *MACrossoverRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -47,13 +49,13 @@ func (r *MACrossoverRunner) Reset() {
 
 func (r *MACrossoverRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"fast_period":    r.FastPeriod,
-		"slow_period":    r.SlowPeriod,
-		"rsi_period":     r.RsiPeriod,
-		"rsi_overbought": r.RsiOverbought,
-		"rsi_oversold":   r.RsiOversold,
-		"atr_period":     r.AtrPeriod,
-		"atr_multiplier": r.AtrMultiplier,
+		"fast_period":     r.FastPeriod,
+		"slow_period":     r.SlowPeriod,
+		"rsi_period":      r.RsiPeriod,
+		"rsi_overbought":  r.RsiOverbought,
+		"rsi_oversold":    r.RsiOversold,
+		"atr_period":      r.AtrPeriod,
+		"atr_multiplier":  r.AtrMultiplier,
 		"use_rsi_filter":  boolToFloat(r.UseRsiFilter),
 		"use_macd_filter": boolToFloat(r.UseMacdFilter),
 		"use_boll_exit":   boolToFloat(r.UseBollExit),
@@ -118,16 +120,12 @@ func (r *MACrossoverRunner) ParamDefs() []ParamDef {
 //  5. If UseBollExit: exit when price closes outside Bollinger Bands (reversal signal).
 //  6. Stop-loss: ATR-based trailing stop from entry price.
 func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
 	}
 
-	r.PushPriceOnly(price)
+	r.PushPrice(price, candle.High, candle.Low, candle.Volume)
 
 	fastPeriod := int(r.FastPeriod)
 	slowPeriod := int(r.SlowPeriod)
@@ -138,8 +136,8 @@ func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
 		slowPeriod = 21
 	}
 
-	r.prevFast = EMA(r.PriceHistory, r.HistCount, fastPeriod)
-	r.prevSlow = EMA(r.PriceHistory, r.HistCount, slowPeriod)
+	r.prevFast = EMA(r.LinearPrices(r.HistCount), r.HistCount, fastPeriod)
+	r.prevSlow = EMA(r.LinearPrices(r.HistCount), r.HistCount, slowPeriod)
 
 	fast := r.prevFast
 	slow := r.prevSlow
@@ -147,32 +145,32 @@ func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
 	sc := StopLossChecker{}
 
 	if r.PositionOpen {
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
 
 		if r.CurrentSide == "BUY" {
 			trailingStop := types.PriceFromFloat(price.Float64() - stopDist)
 			exhaustion := false
 			if r.UseBollExit {
-				_, _, lowerBB := BollingerBands(r.PriceHistory, r.HistCount)
+				_, _, lowerBB := BollingerBands(r.LinearPrices(r.HistCount), r.HistCount)
 				exhaustion = price.Float64() < lowerBB && lowerBB > 0
 			}
 			crossDown := fast > 0 && slow > 0 && fast < slow
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || crossDown || exhaustion {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			trailingStop := types.PriceFromFloat(price.Float64() + stopDist)
 			exhaustion := false
 			if r.UseBollExit {
-				upperBB, _, _ := BollingerBands(r.PriceHistory, r.HistCount)
+				upperBB, _, _ := BollingerBands(r.LinearPrices(r.HistCount), r.HistCount)
 				exhaustion = price.Float64() > upperBB && upperBB > 0
 			}
 			crossUp := fast > 0 && slow > 0 && fast > slow
 			if sc.IsStopLossHit(price, trailingStop, "SELL") || crossUp || exhaustion {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -182,48 +180,48 @@ func (r *MACrossoverRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	prevFast := EMA(r.PriceHistory, r.HistCount-1, fastPeriod)
-	prevSlow := EMA(r.PriceHistory, r.HistCount-1, slowPeriod)
+	prevFast := EMA(r.LinearPrices(r.HistCount-1), r.HistCount-1, fastPeriod)
+	prevSlow := EMA(r.LinearPrices(r.HistCount-1), r.HistCount-1, slowPeriod)
 
 	crossUp := prevFast > 0 && prevSlow > 0 && prevFast <= prevSlow && fast > slow
 	crossDown := prevFast > 0 && prevSlow > 0 && prevFast >= prevSlow && fast < slow
 
 	if crossUp {
-		rsiVal := RSI(r.PriceHistory, r.HistCount, int(r.RsiPeriod))
+		rsiVal := RSI(r.LinearPrices(r.HistCount), r.HistCount, int(r.RsiPeriod))
 		if r.UseRsiFilter && rsiVal > r.RsiOverbought {
 			return nil
 		}
 
 		if r.UseMacdFilter {
-			macdLine, signalLine := MACD(r.PriceHistory, r.HistCount)
+			macdLine, signalLine := MACD(r.LinearPrices(r.HistCount), r.HistCount)
 			if macdLine <= signalLine {
 				return nil
 			}
 		}
 
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if crossDown {
-		rsiVal := RSI(r.PriceHistory, r.HistCount, int(r.RsiPeriod))
+		rsiVal := RSI(r.LinearPrices(r.HistCount), r.HistCount, int(r.RsiPeriod))
 		if r.UseRsiFilter && rsiVal < r.RsiOversold {
 			return nil
 		}
 
 		if r.UseMacdFilter {
-			macdLine, signalLine := MACD(r.PriceHistory, r.HistCount)
+			macdLine, signalLine := MACD(r.LinearPrices(r.HistCount), r.HistCount)
 			if macdLine >= signalLine {
 				return nil
 			}
 		}
 
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

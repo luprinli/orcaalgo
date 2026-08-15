@@ -110,10 +110,6 @@ func (r *MomentumRunner) momentum() float64 {
 }
 
 func (r *MomentumRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
@@ -126,8 +122,8 @@ func (r *MomentumRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	mom := r.momentum()
-	sma := SMA(r.PriceHistory, r.HistCount, int(r.TrendPeriod))
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	sma := SMA(r.LinearPrices(r.HistCount), r.HistCount, int(r.TrendPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	sc := StopLossChecker{}
@@ -140,7 +136,7 @@ func (r *MomentumRunner) Evaluate(candle Candle, regime int8) *Signal {
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - atr*r.AtrMultiplier*stopMult)
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || mom < 0 {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		}
 		return nil
@@ -155,7 +151,7 @@ func (r *MomentumRunner) Evaluate(candle Candle, regime int8) *Signal {
 			tp = types.PriceFromFloat(price.Float64() + stopDist*r.ProfitATRMult*profitMult)
 		}
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), tp, candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

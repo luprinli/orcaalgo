@@ -92,41 +92,37 @@ func (r *RSI2MeanReversionRunner) ParamDefs() []ParamDef {
 }
 
 func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
 	}
 
-	r.PushPriceOnly(price)
+	r.PushPrice(price, candle.High, candle.Low, candle.Volume)
 	sc := StopLossChecker{}
 
 	if r.PositionOpen {
 		r.barsInTrade++
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier
-		rsi2 := RSI2(r.PriceHistory, r.HistCount)
+		rsi2 := RSI2(r.LinearPrices(r.HistCount), r.HistCount)
 
 		if r.CurrentSide == "BUY" {
 			if sc.IsStopLossHit(price, types.PriceFromFloat(r.EntryPrice.Float64()-stopDist), "BUY") || r.barsInTrade >= int(r.MaxHoldBars) {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 			if rsi2 > r.ExitNeutral && rsi2 > 0 {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if sc.IsStopLossHit(price, types.PriceFromFloat(r.EntryPrice.Float64()+stopDist), "SELL") || r.barsInTrade >= int(r.MaxHoldBars) {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 			if rsi2 < r.ExitNeutral && rsi2 > 0 {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -136,28 +132,28 @@ func (r *RSI2MeanReversionRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	rsi2 := RSI2(r.PriceHistory, r.HistCount)
+	rsi2 := RSI2(r.LinearPrices(r.HistCount), r.HistCount)
 	if rsi2 <= 0 {
 		return nil
 	}
 	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	if rsi2 < r.Oversold {
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
 		r.barsInTrade = 0
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if rsi2 > r.Overbought {
-		atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+		atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
 		r.barsInTrade = 0
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

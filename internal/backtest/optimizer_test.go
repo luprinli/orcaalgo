@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+
+	"github.com/lee-econ/orca-core/internal/strategy"
 )
 
 func TestParamConstraint_ContinuousGrid(t *testing.T) {
@@ -188,6 +190,52 @@ func TestDefaultSearchSpace_Unknown(t *testing.T) {
 	space := DefaultSearchSpace("nonexistent")
 	if space != nil {
 		t.Error("Expected nil search space for unknown strategy")
+	}
+}
+
+func TestDefaultSearchSpace_IncludesRegimeParticipation(t *testing.T) {
+	// Regime participation (regime_w_calm/trending/highvol/crisis) must be an
+	// optimizable, per-strategy parameter in every search space — this is the
+	// lever that unblocks single-regime strategies (backtest_diagnosis_report.md §5).
+	for _, sid := range []string{"vwap_mr", "intraday_mr", "trend_following", "session_scalp"} {
+		space := DefaultSearchSpace(sid)
+		if space == nil {
+			t.Fatalf("expected non-nil search space for %s", sid)
+		}
+		for _, name := range []string{
+			"regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis",
+		} {
+			c, ok := space[name]
+			if !ok {
+				t.Errorf("%s: missing optimizable regime param %s", sid, name)
+				continue
+			}
+			if c.Min != 0.0 || c.Max != 1.0 {
+				t.Errorf("%s %s: bounds %v..%v, want 0..1", sid, name, c.Min, c.Max)
+			}
+		}
+	}
+}
+
+func TestRegimeParamDefs_DefaultMatchesAllowed(t *testing.T) {
+	// vwap_mr is Calm-only in the activation matrix → default participation
+	// is {1,0,0,0}; the optimizer starts from the binary Allowed pattern and
+	// may soften it (0..1, step 0.25).
+	byName := map[string]strategy.ParamDef{}
+	for _, d := range RegimeParamDefs("vwap_mr") {
+		byName[d.Name] = d
+	}
+	if byName["regime_w_calm"].Default != 1.0 {
+		t.Errorf("calm default = %v, want 1.0", byName["regime_w_calm"].Default)
+	}
+	if byName["regime_w_trending"].Default != 0.0 {
+		t.Errorf("trending default = %v, want 0.0 (blocked by Allowed)", byName["regime_w_trending"].Default)
+	}
+	// The exit-multiplier regime params are also present.
+	for _, name := range []string{"stop_mult_highvol", "stop_mult_crisis", "profit_mult_trending"} {
+		if _, ok := byName[name]; !ok {
+			t.Errorf("missing regime exit multiplier %s", name)
+		}
 	}
 }
 

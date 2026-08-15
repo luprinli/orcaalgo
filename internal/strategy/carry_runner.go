@@ -94,10 +94,6 @@ func (r *CarryRunner) ParamDefs() []ParamDef {
 }
 
 func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	carry, ok := fxCarryBps[candle.Symbol]
 	if !ok {
 		return nil
@@ -120,8 +116,8 @@ func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	sma := SMA(r.PriceHistory, r.HistCount, int(r.TrendPeriod))
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	sma := SMA(r.LinearPrices(r.HistCount), r.HistCount, int(r.TrendPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	stopMult, profitMult := r.RegimeExitMults(regime)
 
 	sc := StopLossChecker{}
@@ -135,7 +131,7 @@ func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - stopDist)
 			if sc.IsStopLossHit(price, trailingStop, "BUY") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else if r.CurrentSide == "SELL" {
 			if price.Compare(r.peakPrice) < 0 {
@@ -144,7 +140,7 @@ func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + stopDist)
 			if sc.IsStopLossHit(price, trailingStop, "SELL") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -159,7 +155,7 @@ func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			tp = types.PriceFromFloat(price.Float64() + stopDist*r.ProfitATRMult*profitMult)
 		}
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), tp, candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if carry < 0 && sma > 0 && price.Float64() < sma {
@@ -168,7 +164,7 @@ func (r *CarryRunner) Evaluate(candle Candle, regime int8) *Signal {
 			tp = types.PriceFromFloat(price.Float64() - stopDist*r.ProfitATRMult*profitMult)
 		}
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), tp, candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

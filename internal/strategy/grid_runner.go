@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"math"
+	"sort"
 
 	"github.com/lee-econ/orca-core/internal/types"
 )
@@ -45,18 +46,18 @@ type gridPosition struct {
 
 func NewGridRunner() *GridRunner {
 	return &GridRunner{
-		GridLevels:        5,
-		GridSpacingPct:    1.0,
-		PositionScale:     1.0,
-		MaxOpen:           10,
-		TakeProfitPct:     0.5,
-		StopLossPct:       1.5,
+		GridLevels:         5,
+		GridSpacingPct:     1.0,
+		PositionScale:      1.0,
+		MaxOpen:            10,
+		TakeProfitPct:      1.0,
+		StopLossPct:        0.5,
 		openPositions:      make(map[int]*gridPosition),
 		Disabled:           false,
 		AdjustByVolatility: false,
 		VolMaxSpacingMult:  2.0,
 		irVersion:          "qst-ir/0.4",
-		canonicalVersion:  "qst-canonical/0.4",
+		canonicalVersion:   "qst-canonical/0.4",
 	}
 }
 
@@ -71,9 +72,12 @@ func (r *GridRunner) Type() string {
 func (r *GridRunner) Version() (irVersion string, canonicalVersion string) {
 	return r.irVersion, r.canonicalVersion
 }
-func (r *GridRunner) SetVersion(irVersion, canonicalVersion string) { r.irVersion = irVersion; r.canonicalVersion = canonicalVersion }
-func (r *GridRunner) SetInstanceHash(h string)                      { r.instanceHash = h }
-func (r *GridRunner) InstanceHash() string                          { return r.instanceHash }
+func (r *GridRunner) SetVersion(irVersion, canonicalVersion string) {
+	r.irVersion = irVersion
+	r.canonicalVersion = canonicalVersion
+}
+func (r *GridRunner) SetInstanceHash(h string) { r.instanceHash = h }
+func (r *GridRunner) InstanceHash() string     { return r.instanceHash }
 
 func (r *GridRunner) Reset() {
 	r.openCount = 0
@@ -153,8 +157,8 @@ func (r *GridRunner) ParamDefs() []ParamDef {
 	return []ParamDef{
 		{Name: "grid_levels", Type: ParamInteger, Default: 5, Min: 2, Max: 8, Step: 1, Group: "Grid", Description: "Number of grid levels above and below reference price"},
 		{Name: "grid_spacing_pct", Type: ParamContinuous, Default: 1.0, Min: 0.2, Max: 4.0, Step: 0.2, Group: "Grid", Description: "Percentage spacing between adjacent grid levels"},
-		{Name: "take_profit_pct", Type: ParamContinuous, Default: 0.5, Min: 0.1, Max: 2.0, Step: 0.1, Group: "Exit", Description: "Take-profit percentage from entry level"},
-		{Name: "stop_loss_pct", Type: ParamContinuous, Default: 1.5, Min: 0.5, Max: 5.0, Step: 0.1, Group: "Exit", Description: "Stop-loss percentage from entry level"},
+		{Name: "take_profit_pct", Type: ParamContinuous, Default: 1.0, Min: 0.1, Max: 2.0, Step: 0.1, Group: "Exit", Description: "Take-profit percentage from entry level"},
+		{Name: "stop_loss_pct", Type: ParamContinuous, Default: 0.5, Min: 0.1, Max: 5.0, Step: 0.1, Group: "Exit", Description: "Stop-loss percentage from entry level"},
 		{Name: "max_open", Type: ParamInteger, Default: 10, Min: 1, Max: 10, Step: 1, Group: "Risk", Description: "Maximum number of simultaneously open grid positions"},
 		{Name: "position_scale", Type: ParamContinuous, Default: 1.0, Min: 0.25, Max: 2.0, Step: 0.25, Group: "Sizing", Description: "Position size scale factor"},
 		{Name: "adjust_by_volatility", Type: ParamInteger, Default: 0, Min: 0, Max: 1, Step: 1, Group: "Grid", Description: "Dynamically scale grid spacing based on ATR/VIX (0=off, 1=on)"},
@@ -165,9 +169,6 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if r.Disabled {
 		return nil
 	}
-	if regime == 3 {
-		return nil
-	}
 	price := candle.Close
 	if price.IsZero() {
 		return nil
@@ -176,9 +177,9 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	effectiveMaxOpen := r.MaxOpen
 	effectiveSpacing := r.GridSpacingPct
 	switch regime {
-	case 0:
+	case RegimeCalm:
 		effectiveSpacing *= 0.8
-	case 2:
+	case RegimeHighVol:
 		effectiveMaxOpen = math.Max(1, r.MaxOpen*0.5)
 		effectiveSpacing *= 1.5
 	}
@@ -225,7 +226,16 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 	closedAny := false
 	exitSide := ""
-	for level, pos := range r.openPositions {
+	// Iterate grid levels in sorted order so multi-close bars are deterministic
+	// (Go map iteration order is random — the previous `range` over the map made
+	// exitSide non-deterministic when two positions closed on one bar).
+	closeLevels := make([]int, 0, len(r.openPositions))
+	for level := range r.openPositions {
+		closeLevels = append(closeLevels, level)
+	}
+	sort.Ints(closeLevels)
+	for _, level := range closeLevels {
+		pos := r.openPositions[level]
 		shouldClose := false
 		if pos.Side == "BUY" && price.Compare(pos.TakePrice) >= 0 {
 			shouldClose = true
@@ -248,7 +258,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	if closedAny {
-		return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+		return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 	}
 
 	if r.openCount >= int(effectiveMaxOpen) {
@@ -293,7 +303,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 				StopPrice:  stopPrice,
 			}
 			r.openCount++
-			signal = &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+			signal = &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 		}
 	}
 
@@ -311,7 +321,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 				StopPrice:  stopPrice,
 			}
 			r.openCount++
-			signal = &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+			signal = &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 		}
 	}
 
@@ -319,6 +329,7 @@ func (r *GridRunner) Evaluate(candle Candle, regime int8) *Signal {
 	return signal
 }
 
-func (r *GridRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {}
-func (r *GridRunner) OnCancel(orderID string, reason string) {}
+func (r *GridRunner) OnFill(orderID string, symbol string, side string, entryPrice types.Price, fillPrice types.Price, quantity float64, filledQty float64) {
+}
+func (r *GridRunner) OnCancel(orderID string, reason string)        {}
 func (r *GridRunner) OnOrderRejected(orderID string, reason string) {}

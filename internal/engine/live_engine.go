@@ -30,27 +30,27 @@ type LiveEngine struct {
 	Running bool
 	Halted  bool
 
-	PrevTickNS int64
+	PrevTickNS  int64
 	TickCount   uint64
 	SignalCount uint64
 
-	metaLabeler    ml.Predictor
-	batchInferrer  *ml.BatchInferrer
-	metaCfg        ml.MetaLabelerConfig
-	featureStore   *ml.FeatureStore
-	exitOrch       *ml.ExitOrchestrator
-	regimeEnhancer *ml.RegimeEnhancer
+	metaLabeler        ml.Predictor
+	batchInferrer      *ml.BatchInferrer
+	metaCfg            ml.MetaLabelerConfig
+	featureStore       *ml.FeatureStore
+	exitOrch           *ml.ExitOrchestrator
+	regimeEnhancer     *ml.RegimeEnhancer
 	regimeDailyLossPct float64
-	openPositions  map[string]*backtest.ActiveStop
+	openPositions      map[string]*backtest.ActiveStop
 
-	lastVIX         float64
-	lastSentiment   float64
-	lastCVD         float64
+	lastVIX          float64
+	lastSentiment    float64
+	lastCVD          float64
 	lastVolStructure float64
 	lastDay          string
 
-	StrategyHash  string
-	KellyFraction float64
+	StrategyHash   string
+	KellyFraction  float64
 	runningCapital float64
 
 	pipeline  *risk.RiskPipeline
@@ -62,9 +62,9 @@ type LiveEngine struct {
 	slippageModel       backtest.SlippageModel
 	slippageSampleCount int
 
-	warmUpCount  int
-	warmUpTicks  map[uint32]int
-	stopLossCfg  *backtest.StopLossConfig
+	warmUpCount int
+	warmUpTicks map[uint32]int
+	stopLossCfg *backtest.StopLossConfig
 }
 
 func (e *LiveEngine) SetMetaLabeler(p ml.Predictor) {
@@ -77,9 +77,9 @@ func (e *LiveEngine) SetMetaLabelerConfig(cfg ml.MetaLabelerConfig) {
 		e.batchInferrer = ml.NewBatchInferrer(e.metaLabeler, cfg)
 	}
 }
-func (e *LiveEngine) SetFeatureStore(fs *ml.FeatureStore) { e.featureStore = fs }
+func (e *LiveEngine) SetFeatureStore(fs *ml.FeatureStore)           { e.featureStore = fs }
 func (e *LiveEngine) SetExitOrchestrator(orch *ml.ExitOrchestrator) { e.exitOrch = orch }
-func (e *LiveEngine) SetRegimeEnhancer(re *ml.RegimeEnhancer) { e.regimeEnhancer = re }
+func (e *LiveEngine) SetRegimeEnhancer(re *ml.RegimeEnhancer)       { e.regimeEnhancer = re }
 
 // SetRiskPipeline injects the shared signal-audit pipeline. When set, every
 // approved signal in ProcessTick runs through ProcessSignal, and reconcile
@@ -113,6 +113,18 @@ func (e *LiveEngine) RegisterAccountStrategies(accountID string, params map[stri
 		}
 		if accountParams, ok := params[name]; ok {
 			instance.SetParams(accountParams)
+			// Backtest/live parity: apply the optimized per-regime exit multipliers
+			// (stop_mult_highvol/crisis, profit_mult_trending) exactly as the
+			// backtest engine does in getRunnerForStrategy.
+			if rc, ok := instance.(interface{ SetRegimeExitParams(map[string]float64) }); ok {
+				rc.SetRegimeExitParams(accountParams)
+			}
+			// Backtest/live parity: apply the optimized per-regime participation
+			// weights (regime_w_*) to the shared pipeline matrix so a promoted
+			// strategy trades the same regimes live as it did in backtest.
+			if e.pipeline != nil && e.pipeline.RegimeMatrix != nil {
+				risk.ApplyRegimeParticipation(e.pipeline.RegimeMatrix, name, accountParams)
+			}
 		}
 		reg.Register(instance)
 	}

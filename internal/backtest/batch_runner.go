@@ -241,7 +241,9 @@ func RunBatchOptimize(ctx context.Context, db Database, config BatchOptimizeConf
 						FillRejected:        result.SignalDiag.FillRejected,
 						CandlesSeen:         result.SignalDiag.CandlesSeen,
 						StrategyNil:         result.SignalDiag.StrategyNil,
+						NilError:            result.SignalDiag.NilError,
 						ExitSignalZeroQty:   result.SignalDiag.ExitSignalZeroQty,
+						ExitReasons:         result.SignalDiag.ExitReasons,
 						TradesOpened:        result.SignalDiag.TradesOpened,
 						CapitalZero:         result.SignalDiag.CapitalZero,
 						RateLimited:         result.SignalDiag.RateLimited,
@@ -290,13 +292,14 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 			seenStrats[c.Strategy] = true
 
 			repSymbols := SelectRepresentativeSymbols(config.Symbols, LightOptSymbolCount())
+			dominantTF := pickDominantTimeframe(config.Timeframes)
 			lightCfg := LightOptimizeConfig{
 				StrategyID:         c.Strategy,
 				Symbols:            repSymbols,
 				ValidationSymbols:  DiffStrings(config.Symbols, repSymbols),
-				Timeframe:          pickDominantTimeframe(config.Timeframes),
+				Timeframe:          dominantTF,
 				StartDate:          config.StartDate,
-				EndDate:            config.StartDate.AddDate(0, LightOptWindowMonths(), 0),
+				EndDate:            config.StartDate.AddDate(0, lightOptWindowMonths(dominantTF), 0),
 				InitialCapital:     config.InitialCapital,
 				PropFirmEnabled:    config.PropFirmEnabled,
 				GateProfile:        config.GateProfile,
@@ -523,7 +526,9 @@ func RunMatrixConcurrent(ctx context.Context, db Database, config MatrixBacktest
 				FillRejected:        result.SignalDiag.FillRejected,
 				CandlesSeen:         result.SignalDiag.CandlesSeen,
 				StrategyNil:         result.SignalDiag.StrategyNil,
+				NilError:            result.SignalDiag.NilError,
 				ExitSignalZeroQty:   result.SignalDiag.ExitSignalZeroQty,
+				ExitReasons:         result.SignalDiag.ExitReasons,
 				TradesOpened:        result.SignalDiag.TradesOpened,
 				CapitalZero:         result.SignalDiag.CapitalZero,
 				RateLimited:         result.SignalDiag.RateLimited,
@@ -638,6 +643,25 @@ func pickDominantTimeframe(timeframes []string) string {
 		}
 	}
 	return timeframes[0]
+}
+
+// lightOptWindowMonths returns a light-optimizer train window (in calendar
+// months) long enough to guarantee at least ~500 bars for the dominant
+// timeframe — the optimizer's minimum (RunLightOptimize returns nil below it).
+// pickDominantTimeframe prefers "1d", whose ~21 bars/month would otherwise fall
+// under the 500-bar floor within the default 3-month window, silently producing
+// a blank "Optimized" column for every combo.
+func lightOptWindowMonths(timeframe string) int {
+	bpd := barsPerDayFromTimeframe(timeframe)
+	if bpd < 1 {
+		bpd = 1
+	}
+	const minBars = 500.0
+	months := int(math.Ceil(minBars / (bpd * 21.0)))
+	if months < 1 {
+		months = 1
+	}
+	return months
 }
 
 func RunWalkForwardOnTopCombos(results []ComboResult, topN int, db Database, baseConfig BacktestConfig) ([]WalkForwardResult, error) {

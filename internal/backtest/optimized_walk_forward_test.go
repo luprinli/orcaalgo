@@ -67,9 +67,9 @@ func TestOptimizedWalkForwardConfig_ObjectiveWeights(t *testing.T) {
 
 	cfg.ObjectiveType = ObjectiveComposite
 	cfg.ObjectiveWeights = map[ObjectiveType]float64{
-		ObjectiveSharpe:      0.5,
+		ObjectiveSharpe:       0.5,
 		ObjectiveProfitFactor: 0.3,
-		ObjectiveMinDD:       0.2,
+		ObjectiveMinDD:        0.2,
 	}
 
 	if cfg.ObjectiveType != ObjectiveComposite {

@@ -107,10 +107,6 @@ func (r *OrbRunner) ParamDefs() []ParamDef {
 }
 
 func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	// Reset the opening range at the start of each new trading day. Without
 	// this, the range formed over the first few bars of the entire backtest
 	// never resets, producing a stale multi-month range and the sub-1% win
@@ -129,7 +125,7 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 			r.ClosePosition()
 			r.resetOpeningRange()
 			r.lastDay = candle.Time
-			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 		}
 		r.resetOpeningRange()
 	}
@@ -159,7 +155,7 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	r.PushPriceOnly(candle.Close)
+	r.PushPrice(candle.Close, candle.High, candle.Low, candle.Volume)
 	sc := StopLossChecker{}
 	tc := TakeProfitChecker{}
 
@@ -176,7 +172,7 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 		}
 		if exitSide != "" {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 		}
 		return nil
 	}
@@ -187,7 +183,7 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 	}
 
 	bufferPct := r.EntryBufferPct / 100.0
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	stopMult, profitMult := r.RegimeExitMults(regime)
 	stopDist := atr * r.AtrMultiplier * stopMult
 	if stopDist < rangeHeight/2 {
@@ -199,13 +195,23 @@ func (r *OrbRunner) Evaluate(candle Candle, regime int8) *Signal {
 	// stopDist yields the intended 2:1 R:R.
 	profitDist := stopDist * r.TargetMultiplier * profitMult
 
+	// One entry per day: a canonical opening-range breakout takes a single
+	// position at the range break and holds to stop/target/EOD. Re-entering
+	// after every stop-out was the overtrading bug (5+ trades/day) that
+	// turned a 2:1 R:R breakout into negative Sharpe.
+	if !r.CanTrade(candle.Time, 1) {
+		return nil
+	}
+
 	if candle.Close.Float64() >= r.openingHigh*(1.0+bufferPct) {
 		r.OpenPosition("BUY", candle.Close, types.PriceFromFloat(candle.Close.Float64()-stopDist), types.PriceFromFloat(candle.Close.Float64()+profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() - stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() + profitDist)}
+		r.RecordTrade(candle.Time)
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() - stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() + profitDist)}
 	}
 	if candle.Close.Float64() <= r.openingLow*(1.0-bufferPct) {
 		r.OpenPosition("SELL", candle.Close, types.PriceFromFloat(candle.Close.Float64()+stopDist), types.PriceFromFloat(candle.Close.Float64()-profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() + stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() - profitDist)}
+		r.RecordTrade(candle.Time)
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0, StopLoss: types.PriceFromFloat(candle.Close.Float64() + stopDist), TakeProfit: types.PriceFromFloat(candle.Close.Float64() - profitDist)}
 	}
 
 	return nil

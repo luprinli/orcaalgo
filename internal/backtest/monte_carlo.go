@@ -37,11 +37,11 @@ type MCSummary struct {
 }
 
 type MCResult struct {
-	Config         MCConfig             `json:"config"`
-	Iterations     []MCIterationResult  `json:"iterations"`
-	Summary        MCSummary            `json:"summary"`
+	Config          MCConfig            `json:"config"`
+	Iterations      []MCIterationResult `json:"iterations"`
+	Summary         MCSummary           `json:"summary"`
 	PassProbability float64             `json:"pass_probability"`
-	CreatedAt      time.Time            `json:"created_at"`
+	CreatedAt       time.Time           `json:"created_at"`
 }
 
 func newMCResult(cfg MCConfig, iters []MCIterationResult) *MCResult {
@@ -51,11 +51,11 @@ func newMCResult(cfg MCConfig, iters []MCIterationResult) *MCResult {
 		passProb = (1.0 - summary.BustProbability) * 100.0
 	}
 	return &MCResult{
-		Config:         cfg,
-		Iterations:     iters,
-		Summary:        summary,
+		Config:          cfg,
+		Iterations:      iters,
+		Summary:         summary,
 		PassProbability: passProb,
-		CreatedAt:      time.Now(),
+		CreatedAt:       time.Now(),
 	}
 }
 

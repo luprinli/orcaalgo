@@ -23,6 +23,9 @@ type BaseRunner struct {
 	CurrentSide  string
 	EntryTime    time.Time
 
+	tradeDay    string
+	tradesToday int
+
 	// Regime-conditional exit multipliers (regime_gating_deep_dive.md §3.2):
 	// widen stops in HighVol/Crisis (avoid noise whipsaw) and loosen targets in
 	// Trending (let winners run). Default 1.0 = no change; the optimizer sweeps
@@ -70,6 +73,11 @@ func (b *BaseRunner) InstanceHash() string {
 }
 
 func (b *BaseRunner) PushPrice(price, high, low types.Price, volume float64) {
+	if !finite(price.Float64()) {
+		// Skip non-finite candles (NaN/Inf) so they can't corrupt the indicator
+		// history (Rule 18). Valid data is unaffected.
+		return
+	}
 	idx := b.HistIdx % b.BufferSize
 	b.PriceHistory[idx] = price.Float64()
 	b.HighHistory[idx] = high.Float64()
@@ -85,6 +93,22 @@ func (b *BaseRunner) PushPriceOnly(price types.Price) {
 	b.PushPrice(price, 0, 0, 0)
 }
 
+// LinearPrices/Highs/Lows/Volumes return the last n bars in chronological order
+// (linearizing the circular buffer) for the cinar indicator wrappers, which
+// expect chronological slices (Rule 6). n is clamped to the valid count.
+func (b *BaseRunner) LinearPrices(n int) []float64 {
+	return linearWindow(b.PriceHistory, b.HistCount, b.HistIdx, b.BufferSize, n)
+}
+func (b *BaseRunner) LinearHighs(n int) []float64 {
+	return linearWindow(b.HighHistory, b.HistCount, b.HistIdx, b.BufferSize, n)
+}
+func (b *BaseRunner) LinearLows(n int) []float64 {
+	return linearWindow(b.LowHistory, b.HistCount, b.HistIdx, b.BufferSize, n)
+}
+func (b *BaseRunner) LinearVolumes(n int) []float64 {
+	return linearWindow(b.VolumeHistory, b.HistCount, b.HistIdx, b.BufferSize, n)
+}
+
 func (b *BaseRunner) Reset() {
 	b.HistIdx = 0
 	b.HistCount = 0
@@ -93,6 +117,8 @@ func (b *BaseRunner) Reset() {
 	b.StopLoss = 0
 	b.TakeProfit = 0
 	b.CurrentSide = ""
+	b.tradeDay = ""
+	b.tradesToday = 0
 	clearSlice(b.PriceHistory)
 	clearSlice(b.HighHistory)
 	clearSlice(b.LowHistory)
@@ -154,6 +180,32 @@ func (b *BaseRunner) IsTimeExit(maxMinutes float64, currentTime time.Time) bool 
 	return currentTime.Sub(b.EntryTime).Minutes() >= maxMinutes
 }
 
+// CanTrade reports whether another entry is allowed for the given timestamp,
+// honoring maxPerDay (<= 0 means unlimited). Resets the counter on a new day.
+// This is the shared day-scoped trade-frequency guard (Rule 5) so no runner
+// hand-rolls its own daily counter inconsistently.
+func (b *BaseRunner) CanTrade(t time.Time, maxPerDay int) bool {
+	day := t.Format("2006-01-02")
+	if day != b.tradeDay {
+		b.tradeDay = day
+		b.tradesToday = 0
+	}
+	if maxPerDay <= 0 {
+		return true
+	}
+	return b.tradesToday < maxPerDay
+}
+
+// RecordTrade registers a completed entry for the current day.
+func (b *BaseRunner) RecordTrade(t time.Time) {
+	day := t.Format("2006-01-02")
+	if day != b.tradeDay {
+		b.tradeDay = day
+		b.tradesToday = 0
+	}
+	b.tradesToday++
+}
+
 // SetRegimeExitParams consumes the shared regime-conditional exit multipliers
 // from an optimizer/param map (stop_mult_highvol, stop_mult_crisis,
 // profit_mult_trending).
@@ -178,11 +230,11 @@ func (b *BaseRunner) SetRegimeExitParams(params map[string]float64) {
 func (b *BaseRunner) RegimeExitMults(regime int8) (stopMult, profitMult float64) {
 	stopMult, profitMult = 1.0, 1.0
 	switch regime {
-	case 2:
+	case RegimeHighVol:
 		stopMult = b.StopMultHighVol
-	case 3:
+	case RegimeCrisis:
 		stopMult = b.StopMultCrisis
-	case 1:
+	case RegimeTrending:
 		profitMult = b.ProfitMultTrending
 	}
 	return stopMult, profitMult

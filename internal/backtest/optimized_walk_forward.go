@@ -17,9 +17,9 @@ type OptimizedWalkForwardConfig struct {
 
 type OptimizedWalkForwardResult struct {
 	WalkForwardResult
-	BestParamsPerWindow   []map[string]float64
+	BestParamsPerWindow      []map[string]float64
 	IVSRobustParamsPerWindow []map[string]float64
-	IVSActive             bool
+	IVSActive                bool
 }
 
 type IVSConfig struct {
@@ -53,9 +53,9 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		WalkForwardResult: WalkForwardResult{
 			TotalWindows: len(windows),
 		},
-		BestParamsPerWindow:   make([]map[string]float64, len(windows)),
+		BestParamsPerWindow:      make([]map[string]float64, len(windows)),
 		IVSRobustParamsPerWindow: make([]map[string]float64, len(windows)),
-		IVSActive:             ivsCfg.Enabled,
+		IVSActive:                ivsCfg.Enabled,
 	}
 
 	for wi, w := range windows {
@@ -163,19 +163,19 @@ func (e *Engine) RunOptimizedWalkForward(ctx context.Context, config OptimizedWa
 		}
 
 		wr := WindowResult{
-			Window:          wi + 1,
-			TrainStart:      w.TrainStart,
-			TestStart:       w.TestStart,
-			TestEnd:         w.TestEnd,
-			InSampleSharpe:  allScores[0].Score,
-			OutSampleSharpe: bestOOSTestResult.SharpeRatio,
-			OOSWinRate:      bestOOSTestResult.WinRate,
-			OOSReturnPct:    bestOOSTestResult.TotalReturnPct,
-			OOSMaxDD:        bestOOSTestResult.MaxDrawdown,
-			OOSTrades:       bestOOSTestResult.NumTrades,
-			PassedCompliance:      bestOOSTestResult.ComplianceReport != nil && bestOOSTestResult.ComplianceReport.Passed,
-			MultiplicityWarning:   allScores[0].Score <= scoreThreshold,
-			AnchorOOSSharpe:       anchorOOSSharpe,
+			Window:                 wi + 1,
+			TrainStart:             w.TrainStart,
+			TestStart:              w.TestStart,
+			TestEnd:                w.TestEnd,
+			InSampleSharpe:         allScores[0].Score,
+			OutSampleSharpe:        bestOOSTestResult.SharpeRatio,
+			OOSWinRate:             bestOOSTestResult.WinRate,
+			OOSReturnPct:           bestOOSTestResult.TotalReturnPct,
+			OOSMaxDD:               bestOOSTestResult.MaxDrawdown,
+			OOSTrades:              bestOOSTestResult.NumTrades,
+			PassedCompliance:       bestOOSTestResult.ComplianceReport != nil && bestOOSTestResult.ComplianceReport.Passed,
+			MultiplicityWarning:    allScores[0].Score <= scoreThreshold,
+			AnchorOOSSharpe:        anchorOOSSharpe,
 			AnchorPassedCompliance: anchorPassed,
 		}
 
@@ -316,7 +316,8 @@ func encodeWfBestParams(r *OptimizedWalkForwardResult) string {
 	return string(b)
 }
 
-func RunIVS(scoredParams []ParamScore, searchSpace SearchSpace, cfg IVSConfig) (map[string]float64, bool) {	if len(scoredParams) == 0 {
+func RunIVS(scoredParams []ParamScore, searchSpace SearchSpace, cfg IVSConfig) (map[string]float64, bool) {
+	if len(scoredParams) == 0 {
 		return nil, false
 	}
 
@@ -479,9 +480,9 @@ func NewOptimizedWalkForwardConfig(base BacktestConfig, strategyID string) Optim
 			EmbargoTradingDays: 2,
 		},
 		OptimizationConfig: OptimizationConfig{
-			StrategyID:      strategyID,
-			SearchSpace:     DefaultSearchSpace(strategyID),
-			ObjectiveType:   ObjectiveComposite,
+			StrategyID:    strategyID,
+			SearchSpace:   DefaultSearchSpace(strategyID),
+			ObjectiveType: ObjectiveComposite,
 			ObjectiveWeights: map[ObjectiveType]float64{
 				ObjectiveSharpe:       0.5,
 				ObjectiveMinDD:        0.3,

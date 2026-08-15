@@ -68,9 +68,9 @@ func TestOrchestrator_NewOrchestrator_CustomConfig(t *testing.T) {
 
 func TestOrchestrator_NewOrchestrator_InvalidConfig(t *testing.T) {
 	o, err := NewOrchestrator(nil, OrchestratorConfig{
-		RebalanceBars:    -1,
-		KellyFraction:    0,
-		MaxPositionPct:   0,
+		RebalanceBars:  -1,
+		KellyFraction:  0,
+		MaxPositionPct: 0,
 	})
 	if err != nil {
 		t.Fatalf("NewOrchestrator failed: %v", err)
@@ -405,11 +405,11 @@ func TestOrchestrator_Run_AllowFractional(t *testing.T) {
 
 func TestOrchestrator_Run_ResultJSONRoundtrip(t *testing.T) {
 	result := &OrchestrationRunResult{
-		PoolSharpe:   1.5,
-		PoolSortino:  2.0,
-		PoolMaxDD:    5.0,
+		PoolSharpe:    1.5,
+		PoolSortino:   2.0,
+		PoolMaxDD:     5.0,
 		PoolReturnPct: 12.5,
-		StrategyPnL:  map[string]float64{"a": 100, "b": -50},
+		StrategyPnL:   map[string]float64{"a": 100, "b": -50},
 	}
 	enriched := EnrichResultJSON(result)
 	if enriched.NumTrades != len(result.Trades) {
@@ -450,7 +450,6 @@ func TestOrchestrator_EnrichResultJSON_NoTrades(t *testing.T) {
 		t.Error("expected daily returns from equity")
 	}
 }
-
 
 func TestOrchestrator_Run_PoolHaltsOnDrawdown(t *testing.T) {
 	ts := time.Date(2025, 12, 1, 9, 30, 0, 0, time.UTC)

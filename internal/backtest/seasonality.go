@@ -6,26 +6,26 @@ import (
 )
 
 type SeasonalityOverlay struct {
-	TurnOfMonthBoost       float64
-	TurnOfMonthDaysBefore  int
-	TurnOfMonthDaysAfter   int
-	JanuaryBoost           float64
-	SeptemberReduction     float64
-	NovemberBoost          float64
-	DecemberBoost          float64
-	HolidayCalAdjust       bool
+	TurnOfMonthBoost      float64
+	TurnOfMonthDaysBefore int
+	TurnOfMonthDaysAfter  int
+	JanuaryBoost          float64
+	SeptemberReduction    float64
+	NovemberBoost         float64
+	DecemberBoost         float64
+	HolidayCalAdjust      bool
 }
 
 func NewSeasonalityOverlay() *SeasonalityOverlay {
 	return &SeasonalityOverlay{
-		TurnOfMonthBoost:       1.5,
-		TurnOfMonthDaysBefore:  2,
-		TurnOfMonthDaysAfter:   4,
-		JanuaryBoost:           2.0,
-		SeptemberReduction:     0.5,
-		NovemberBoost:          1.25,
-		DecemberBoost:          1.25,
-		HolidayCalAdjust:       true,
+		TurnOfMonthBoost:      1.5,
+		TurnOfMonthDaysBefore: 2,
+		TurnOfMonthDaysAfter:  4,
+		JanuaryBoost:          2.0,
+		SeptemberReduction:    0.5,
+		NovemberBoost:         1.25,
+		DecemberBoost:         1.25,
+		HolidayCalAdjust:      true,
 	}
 }
 
@@ -46,10 +46,10 @@ func addFixedHolidays(year int) {
 }
 
 func addFloatingHolidays(year int) {
-	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 1, nthWeekday(year, time.January, time.Monday, 3))] = true   // MLK
-	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 2, nthWeekday(year, time.February, time.Monday, 3))] = true   // Presidents
-	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 5, lastWeekday(year, time.May, time.Monday))] = true         // Memorial
-	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 9, nthWeekday(year, time.September, time.Monday, 1))] = true // Labor
+	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 1, nthWeekday(year, time.January, time.Monday, 3))] = true     // MLK
+	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 2, nthWeekday(year, time.February, time.Monday, 3))] = true    // Presidents
+	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 5, lastWeekday(year, time.May, time.Monday))] = true           // Memorial
+	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 9, nthWeekday(year, time.September, time.Monday, 1))] = true   // Labor
 	usHolidays[fmt.Sprintf("%04d-%02d-%02d", year, 11, nthWeekday(year, time.November, time.Thursday, 4))] = true // Thanksgiving
 
 	juneteenth := fmt.Sprintf("%04d-06-19", year)
@@ -98,7 +98,7 @@ func calculateEaster(year int) string {
 	l := (32 + 2*e + 2*i - h - k) % 7
 	m := (a + 11*h + 22*l) / 451
 	month := (h + l - 7*m + 114) / 31
-	day := (h + l - 7*m + 114) % 31 + 1
+	day := (h+l-7*m+114)%31 + 1
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day)
 }
 

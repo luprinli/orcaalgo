@@ -24,6 +24,10 @@ type ProcessSignalRequest struct {
 	RunningCapital   float64 // current equity available
 	AllowFractional  bool    // permit sub-1-share positions (orchestrator sizing)
 	IsExit           bool    // exit signal — skips volatility/capital/position checks
+	// DisableRegimeGate turns off the regime participation gate for this signal
+	// (all regimes at full participation). Diagnostic mode for measuring raw
+	// signal quality independent of regime gating.
+	DisableRegimeGate bool
 }
 
 // ProcessSignalResult is the output of RiskPipeline.ProcessSignal.
@@ -95,7 +99,7 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	// replaces the previous binary block so regime sensitivity is
 	// risk-proportional rather than all-or-nothing.
 	var regimeWeight float64 = 1.0
-	if p.RegimeMatrix != nil {
+	if p.RegimeMatrix != nil && !req.DisableRegimeGate {
 		regimeWeight = p.RegimeMatrix.ParticipationForRegime(req.StrategyID, p.CurrentRegime)
 		if regimeWeight <= 0 {
 			monitor.RecordReject()
@@ -118,7 +122,7 @@ func (p *RiskPipeline) ProcessSignal(ctx context.Context, req ProcessSignalReque
 	// handled above in step 3b).
 	size *= regimeWeight
 	kelly := p.KellyMult
-	if p.RegimeMatrix != nil {
+	if p.RegimeMatrix != nil && !req.DisableRegimeGate {
 		if k := p.RegimeMatrix.KellyForRegime(req.StrategyID, p.CurrentRegime); k > 0 {
 			// DOWNWARD-only override: lower Kelly in HighVol/Crisis (≤0.25, HP#6).
 			// The previous `override > kelly` could only raise, so the per-regime

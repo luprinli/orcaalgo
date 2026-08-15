@@ -9,49 +9,49 @@ import (
 type StopLossType string
 
 const (
-	StopLossNone    StopLossType = "none"
-	StopLossFixed   StopLossType = "fixed"
-	StopLossATR     StopLossType = "atr"
-	StopLossTrail   StopLossType = "trailing"
+	StopLossNone  StopLossType = "none"
+	StopLossFixed StopLossType = "fixed"
+	StopLossATR   StopLossType = "atr"
+	StopLossTrail StopLossType = "trailing"
 )
 
 type TakeProfitType string
 
 const (
-	TakeProfitNone     TakeProfitType = "none"
-	TakeProfitFixed    TakeProfitType = "fixed"
-	TakeProfitATR      TakeProfitType = "atr"
-	TakeProfitRR       TakeProfitType = "risk_reward"
+	TakeProfitNone  TakeProfitType = "none"
+	TakeProfitFixed TakeProfitType = "fixed"
+	TakeProfitATR   TakeProfitType = "atr"
+	TakeProfitRR    TakeProfitType = "risk_reward"
 )
 
 type StopLossConfig struct {
-	Type          StopLossType
-	StopPoints    types.Price
-	StopPercent   float64
-	ATRPeriod     int
-	ATRMultiplier float64
+	Type            StopLossType
+	StopPoints      types.Price
+	StopPercent     float64
+	ATRPeriod       int
+	ATRMultiplier   float64
 	TrailActivation float64
 	TrailDistance   types.Price
 }
 
 type TakeProfitConfig struct {
-	Type           TakeProfitType
-	TakePoints     types.Price
-	TakePercent    float64
-	ATRMultiplier  float64
-	RRRatio        float64
+	Type          TakeProfitType
+	TakePoints    types.Price
+	TakePercent   float64
+	ATRMultiplier float64
+	RRRatio       float64
 }
 
 type ActiveStop struct {
-	TradeID        int
-	EntryPrice     types.Price
-	Side           string
-	StopPrice      types.Price
-	TakePrice      types.Price
-	PeakPrice      types.Price
-	ATRValue       float64
-	StopType       StopLossType
-	TakeType       TakeProfitType
+	TradeID    int
+	EntryPrice types.Price
+	Side       string
+	StopPrice  types.Price
+	TakePrice  types.Price
+	PeakPrice  types.Price
+	ATRValue   float64
+	StopType   StopLossType
+	TakeType   TakeProfitType
 }
 
 func DefaultStopLossConfig() *StopLossConfig {
@@ -66,10 +66,10 @@ func DefaultStopLossConfig() *StopLossConfig {
 
 func DefaultTakeProfitConfig() *TakeProfitConfig {
 	return &TakeProfitConfig{
-		Type:      TakeProfitNone,
-		TakePoints: 0,
+		Type:        TakeProfitNone,
+		TakePoints:  0,
 		TakePercent: 2.0,
-		RRRatio:   2.0,
+		RRRatio:     2.0,
 	}
 }
 
@@ -184,6 +184,23 @@ func CheckStopHit(candle Candle, stop *ActiveStop) (bool, float64) {
 	}
 
 	return false, 0
+}
+
+// resolveStopTarget returns the deterministic same-bar exit decision for a stop:
+// the stop is checked BEFORE the take-profit, so when a single bar's range
+// contains both levels the conservative stop-loss wins (Rule 10). Returns
+// (reason, exitPrice); reason is empty when neither is hit.
+func resolveStopTarget(candle Candle, stop *ActiveStop) (string, float64) {
+	if stop == nil {
+		return "", 0
+	}
+	if stopHit, sp := CheckStopHit(candle, stop); stopHit {
+		return "stop_loss", sp
+	}
+	if tpHit, tp := CheckTakeProfitHit(candle, stop); tpHit {
+		return "take_profit", tp
+	}
+	return "", 0
 }
 
 func CheckTakeProfitHit(candle Candle, stop *ActiveStop) (bool, float64) {

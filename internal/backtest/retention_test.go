@@ -17,12 +17,12 @@ func TestClassifyResults_TiersAndViability(t *testing.T) {
 	cfg.T2SampleCap = 100
 
 	results := []ComboResult{
-		mkCombo("s", "A", "1d", 2.0, 5, 2.0, 100, ""),   // island (best)
-		mkCombo("s", "B", "1d", 1.9, 6, 1.9, 90, ""),    // island (top-K) / pareto
-		mkCombo("s", "C", "1d", 1.6, 7, 1.5, 80, ""),    // plateau (>= 1.9-0.5=1.4) -> T1
-		mkCombo("s", "D", "1d", 0.2, 20, 1.0, 40, ""),   // viable, below plateau -> T2
-		mkCombo("s", "E", "1d", -1.0, 30, 0.5, 10, ""),  // viable loss -> T2
-		mkCombo("s", "F", "1d", 0.0, 0, 0.0, 0, ""),     // zero trades -> T3
+		mkCombo("s", "A", "1d", 2.0, 5, 2.0, 100, ""),             // island (best)
+		mkCombo("s", "B", "1d", 1.9, 6, 1.9, 90, ""),              // island (top-K) / pareto
+		mkCombo("s", "C", "1d", 1.6, 7, 1.5, 80, ""),              // plateau (>= 1.9-0.5=1.4) -> T1
+		mkCombo("s", "D", "1d", 0.2, 20, 1.0, 40, ""),             // viable, below plateau -> T2
+		mkCombo("s", "E", "1d", -1.0, 30, 0.5, 10, ""),            // viable loss -> T2
+		mkCombo("s", "F", "1d", 0.0, 0, 0.0, 0, ""),               // zero trades -> T3
 		mkCombo("s", "G", "1d", 0.0, 0, 0.0, 0, "no candle data"), // error -> T3
 	}
 
@@ -84,7 +84,7 @@ func TestBuildRunSummary(t *testing.T) {
 	results := []ComboResult{
 		mkCombo("s", "A", "1d", 2.0, 5, 2.0, 100, ""),
 		mkCombo("s", "B", "1d", 1.0, 10, 1.5, 50, ""),
-		mkCombo("s", "C", "1d", 0.0, 0, 0.0, 0, ""),          // zero trade
+		mkCombo("s", "C", "1d", 0.0, 0, 0.0, 0, ""),               // zero trade
 		mkCombo("s", "D", "1d", 0.0, 0, 0.0, 0, "no candle data"), // error
 	}
 	sum := BuildRunSummary(results, cfg)

@@ -37,6 +37,7 @@ RULE_SEVERITY = {
     1: "CRITICAL", 2: "CRITICAL", 3: "MEDIUM", 4: "CRITICAL",
     5: "HIGH", 6: "CRITICAL", 7: "HIGH", 8: "CRITICAL",
     9: "HIGH", 10: "HIGH", 11: "CRITICAL", 12: "HIGH", 13: "CRITICAL",
+    14: "HIGH", 15: "HIGH",
 }
 
 CANONICAL_MATH_FUNCS = ["kelly", "brier", "platt", "wilson", "ewma"]
@@ -66,6 +67,7 @@ class Violation:
                 1: "§3.1-3.5", 2: "§6.8", 3: "§5.1", 4: "§9.3", 5: "§9.2",
                 6: "§3.1.3", 7: "§2.1.2", 8: "§4.2.2", 9: "§9.1.3", 10: "Antipattern #10",
                 11: "Antipattern #17", 12: "§9.1.3", 13: "§9.1.3 (benchmark gate)",
+                14: "strategy_logic_audit §1", 15: "strategy_abstraction_plan §1",
             }
             self.spec_ref = refs.get(self.rule, "")
 
@@ -620,6 +622,62 @@ def check_rule_13(changed_only: bool = False) -> list[Violation]:
     return violations
 
 
+# ─── Rule 14: No regime gating in runners ─────────────────────────────────
+def check_rule_14(changed_only: bool = False) -> list[Violation]:
+    """Flag regime gating inside strategy runners.
+
+    A runner is a pure signal generator; regime gating belongs to the
+    RiskPipeline (soft participation weight). `if regime == N { return nil }`
+    in a runner re-duplicates the pipeline gate (strategy_logic_audit §1).
+    """
+    violations = []
+    changed = set(get_changed_files()) if changed_only else None
+    for runner in ROOT.glob("internal/strategy/*_runner.go"):
+        fname = str(runner)
+        if changed_only and not any(fname.replace("\\", "/").endswith(c) for c in changed):
+            continue
+        try:
+            content = runner.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if re.search(r"if regime\s*[!=]=", line):
+                violations.append(Violation(
+                    14, fname, i,
+                    "Runner gates on regime (if regime == ...). Regime gating belongs "
+                    "to the RiskPipeline soft participation weight, not the runner."
+                ))
+    return violations
+
+
+# ─── Rule 15: No inline standard-deviation math in runners ────────────────
+def check_rule_15(changed_only: bool = False) -> list[Violation]:
+    """Flag inline std-from-variance math in strategy runners.
+
+    A `math.Sqrt(variance / ...)` computation is a canonical indicator
+    reimplementation. Use the shared `sampleStd` / indicator library instead
+    (strategy_abstraction_plan §1).
+    """
+    violations = []
+    changed = set(get_changed_files()) if changed_only else None
+    for runner in ROOT.glob("internal/strategy/*_runner.go"):
+        fname = str(runner)
+        if changed_only and not any(fname.replace("\\", "/").endswith(c) for c in changed):
+            continue
+        try:
+            content = runner.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for i, line in enumerate(content.splitlines(), 1):
+            if re.search(r"math\.Sqrt\(variance", line):
+                violations.append(Violation(
+                    15, fname, i,
+                    "Inline standard-deviation math (math.Sqrt(variance ...)). "
+                    "Use the canonical sampleStd/indicator library."
+                ))
+    return violations
+
+
 # ─── Output formatters ───────────────────────────────────────────────────────
 def format_text(violations: list[Violation], min_severity: str = "HIGH") -> str:
     min_rank = SEVERITY_RANK.get(min_severity, 1)
@@ -670,7 +728,7 @@ def main():
     checks = [
         check_rule_1, check_rule_2, check_rule_3, check_rule_4, check_rule_5,
         check_rule_6, check_rule_7, check_rule_8, check_rule_9, check_rule_10,
-        check_rule_11, check_rule_12, check_rule_13,
+        check_rule_11, check_rule_12, check_rule_13, check_rule_14, check_rule_15,
     ]
 
     violations: list[Violation] = []

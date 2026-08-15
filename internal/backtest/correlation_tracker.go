@@ -6,29 +6,29 @@ import (
 )
 
 type CorrelationTracker struct {
-	mu              sync.RWMutex
-	equityHistories map[string][]float64
-	window          int
-	threshold       float64
-	brakeDuration   int
-	brakes          map[string]int
+	mu                sync.RWMutex
+	equityHistories   map[string][]float64
+	window            int
+	threshold         float64
+	brakeDuration     int
+	brakes            map[string]int
 	velocityThreshold float64
-	cooldown        int
-	velocityCooldown map[string]int
-	rhoHistory      map[string]float64
+	cooldown          int
+	velocityCooldown  map[string]int
+	rhoHistory        map[string]float64
 }
 
 func NewCorrelationTracker(window int, threshold float64) *CorrelationTracker {
 	return &CorrelationTracker{
-		equityHistories:  make(map[string][]float64),
-		window:           window,
-		threshold:        threshold,
-		brakeDuration:    10,
-		brakes:           make(map[string]int),
+		equityHistories:   make(map[string][]float64),
+		window:            window,
+		threshold:         threshold,
+		brakeDuration:     10,
+		brakes:            make(map[string]int),
 		velocityThreshold: 0.3,
-		cooldown:         3,
-		velocityCooldown: make(map[string]int),
-		rhoHistory:       make(map[string]float64),
+		cooldown:          3,
+		velocityCooldown:  make(map[string]int),
+		rhoHistory:        make(map[string]float64),
 	}
 }
 

@@ -8,12 +8,12 @@ import "github.com/lee-econ/orca-core/internal/types"
 type IchimokuRunner struct {
 	*BaseRunner
 
-	CloudConfirm   bool
-	UseChandelier  bool
-	AtrMultiplier  float64
-	peakPrice      types.Price
-	prevTenkan     float64
-	prevKijun      float64
+	CloudConfirm  bool
+	UseChandelier bool
+	AtrMultiplier float64
+	peakPrice     types.Price
+	prevTenkan    float64
+	prevKijun     float64
 }
 
 func NewIchimokuRunner() *IchimokuRunner {
@@ -22,13 +22,15 @@ func NewIchimokuRunner() *IchimokuRunner {
 		CloudConfirm:  true,
 		UseChandelier: true,
 		AtrMultiplier: 2.0,
-		peakPrice:      0,
+		peakPrice:     0,
 	}
 }
 
 func (r *IchimokuRunner) Name() string { return "ichimoku_cloud" }
 func (r *IchimokuRunner) Type() string { return "trend" }
-func (r *IchimokuRunner) Version() (irVersion string, canonicalVersion string) { return r.BaseRunner.Version() }
+func (r *IchimokuRunner) Version() (irVersion string, canonicalVersion string) {
+	return r.BaseRunner.Version()
+}
 
 func (r *IchimokuRunner) Reset() {
 	r.BaseRunner.Reset()
@@ -38,9 +40,9 @@ func (r *IchimokuRunner) Reset() {
 
 func (r *IchimokuRunner) Params() map[string]float64 {
 	return map[string]float64{
-		"cloud_confirm":   boolToFloat(r.CloudConfirm),
-		"use_chandelier":  boolToFloat(r.UseChandelier),
-		"atr_multiplier":  r.AtrMultiplier,
+		"cloud_confirm":  boolToFloat(r.CloudConfirm),
+		"use_chandelier": boolToFloat(r.UseChandelier),
+		"atr_multiplier": r.AtrMultiplier,
 	}
 }
 
@@ -65,28 +67,24 @@ func (r *IchimokuRunner) ParamDefs() []ParamDef {
 }
 
 func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
 	}
 
-	r.PushPriceOnly(price)
+	r.PushPrice(price, candle.High, candle.Low, candle.Volume)
 	sc := StopLossChecker{}
 
 	if r.HistCount < 52 {
 		return nil
 	}
 
-	tenkan, kijun, senkouA, senkouB, _ := IchimokuCloud(r.PriceHistory, r.PriceHistory, r.PriceHistory, r.HistCount)
+	tenkan, kijun, senkouA, senkouB, _ := IchimokuCloud(r.LinearHighs(r.HistCount), r.LinearLows(r.HistCount), r.LinearPrices(r.HistCount), r.HistCount)
 	if tenkan <= 0 || kijun <= 0 || senkouA <= 0 || senkouB <= 0 {
 		return nil
 	}
 
-	atr := ATR(r.PriceHistory, r.HistCount, 14)
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, 14)
 
 	if r.PositionOpen {
 		stopDist := atr * r.AtrMultiplier
@@ -97,12 +95,12 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 			}
 			if tenkan < kijun && r.prevTenkan >= r.prevKijun {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() - stopDist)
 			if sc.IsStopLossHit(price, trailingStop, "BUY") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if price.Compare(r.peakPrice) < 0 {
@@ -110,12 +108,12 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 			}
 			if tenkan > kijun && r.prevTenkan <= r.prevKijun {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 			trailingStop := types.PriceFromFloat(r.peakPrice.Float64() + stopDist)
 			if sc.IsStopLossHit(price, trailingStop, "SELL") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 
@@ -128,7 +126,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 	r.prevKijun = kijun
 	r.peakPrice = price
 
-	prevTenkanVal, prevKijunVal, prevSa, prevSb, _ := IchimokuCloud(r.PriceHistory, r.PriceHistory, r.PriceHistory, r.HistCount-1)
+	prevTenkanVal, prevKijunVal, prevSa, prevSb, _ := IchimokuCloud(r.LinearHighs(r.HistCount-1), r.LinearLows(r.HistCount-1), r.LinearPrices(r.HistCount-1), r.HistCount-1)
 	if prevTenkanVal <= 0 || prevKijunVal <= 0 {
 		return nil
 	}
@@ -151,7 +149,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 			return nil
 		}
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if tenkanCrossDown {
@@ -159,7 +157,7 @@ func (r *IchimokuRunner) Evaluate(candle Candle, regime int8) *Signal {
 			return nil
 		}
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-stopDist*2), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

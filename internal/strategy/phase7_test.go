@@ -81,7 +81,7 @@ func TestSessionScalpRunner_MaxTradesPerDay(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		candle2 := Candle{Symbol: "SPY", Time: now.Add(time.Duration(i+1) * time.Minute), Open: mkPrice(110.0), High: mkPrice(111.0), Low: mkPrice(109.0), Close: mkPrice(110.0), Volume: 1000000}
 		sig := r.Evaluate(candle2, 1)
-		if sig != nil && sig.Quantity > 0 {
+		if sig != nil && sig.Action == SignalEntry {
 			// Trade registered
 		}
 	}
@@ -96,8 +96,8 @@ func TestSessionScalpRunner_MaxTradesPerDay(t *testing.T) {
 	// Next day should reset.
 	nextDay := Candle{Symbol: "SPY", Time: now.Add(24 * time.Hour), Open: mkPrice(100.0), High: mkPrice(105.0), Low: mkPrice(95.0), Close: mkPrice(100.0), Volume: 1000000}
 	r.Evaluate(nextDay, 1)
-	if r.dailyTradeCount != 0 {
-		t.Errorf("daily trade count should reset to 0 on new day, got %d", r.dailyTradeCount)
+	if r.tradesToday != 0 {
+		t.Errorf("daily trade count should reset to 0 on new day, got %d", r.tradesToday)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestOrbRunner_SkipsNarrowRangeDay(t *testing.T) {
 
 func TestTrendRunner_CHOPFilter(t *testing.T) {
 	r := NewTrendRunner()
-	r.AdxThreshold = 5  // allow signals even with low ADX
+	r.AdxThreshold = 5   // allow signals even with low ADX
 	r.ChopThreshold = 50 // very permissive
 
 	// Seed with choppy data.

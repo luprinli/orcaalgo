@@ -19,11 +19,12 @@ import (
 )
 
 func main() {
-	optimize := flag.Bool("optimize", false, "Quick full-period light optimization, then re-run with those params (fast approximation; use --walk-forward for OOS-validated params)")
+	optimize := flag.Bool("optimize", true, "Quick full-period light optimization, then re-run with those params (fast approximation; use --walk-forward for OOS-validated params; disable with --optimize=false)")
 	walkForward := flag.Bool("walk-forward", false, "Embedded walk-forward: per-window IS optimization -> OOS with IVS plateau detection (canonical, single source of truth)")
 	pipeline := flag.Bool("pipeline", true, "Wire the RiskPipeline for per-signal gating (HP#17 canonical path; disable with --pipeline=false)")
 	dataSource := flag.String("data-source", "stooq", "Data source for candles (stooq | yahoo | synthetic)")
 	benchmarkSymbol := flag.String("benchmark", "", "Benchmark ticker for the market-based filter (e.g. SPY). Empty disables BenchmarkPass/IR/Alpha columns.")
+	regimeOff := flag.Bool("regime-off", false, "Disable the regime participation gate (all regimes at full participation) — diagnostic mode to measure raw signal quality")
 	flag.Parse()
 
 	cfg := db.DefaultConfig()
@@ -122,9 +123,10 @@ func main() {
 					StrategyID: s, Symbols: []string{sym},
 					StartDate: start, EndDate: end, InitialCapital: 100000,
 					Timeframe: tf, DataSource: *dataSource, SizingPercent: 0.02, KellyFraction: 0.25,
-					WarmUpBars:  50,
-					ApplyGate:   true,
-					GateProfile: "research",
+					WarmUpBars:        50,
+					ApplyGate:         true,
+					GateProfile:       "research",
+					DisableRegimeGate: *regimeOff,
 				}
 
 				optimized := false

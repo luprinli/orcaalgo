@@ -84,16 +84,12 @@ func (r *DonchianBreakoutRunner) ParamDefs() []ParamDef {
 }
 
 func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
-		return nil
-	}
-
 	price := candle.Close
 	if price.IsZero() {
 		return nil
 	}
 
-	r.PushPriceOnly(price)
+	r.PushPrice(price, candle.High, candle.Low, candle.Volume)
 	sc := StopLossChecker{}
 
 	period := int(r.ChannelPeriod)
@@ -101,12 +97,12 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	upperDC, _, lowerDC := DonchianChannel(r.PriceHistory, r.HistCount, period)
+	upperDC, _, lowerDC := DonchianChannel(r.LinearPrices(r.HistCount), r.HistCount, period)
 	if upperDC <= 0 || lowerDC <= 0 {
 		return nil
 	}
 
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	channelRange := (upperDC - lowerDC) / upperDC * 100.0
 	if channelRange < r.MinRangePct {
 		return nil
@@ -126,7 +122,7 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 			if sc.IsStopLossHit(price, trailingStop, "BUY") || reversal {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if price.Compare(r.peakPrice) < 0 {
@@ -137,7 +133,7 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 
 			if sc.IsStopLossHit(price, trailingStop, "SELL") || reversal {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -150,14 +146,14 @@ func (r *DonchianBreakoutRunner) Evaluate(candle Candle, regime int8) *Signal {
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("BUY", price, types.PriceFromFloat(price.Float64()-stopDist), types.PriceFromFloat(price.Float64()+profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if price.Float64() <= lowerDC*(1.0-entryBuffer) {
 		stopDist := atr * r.AtrMultiplier * stopMult
 		profitDist := stopDist * r.ProfitATRMult * profitMult
 		r.OpenPosition("SELL", price, types.PriceFromFloat(price.Float64()+stopDist), types.PriceFromFloat(price.Float64()-profitDist), candle.Time)
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

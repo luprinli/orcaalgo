@@ -244,18 +244,18 @@ func (f *PropFirmEnforcer) TotalReturnPct() float64 {
 
 func (f *PropFirmEnforcer) Summary() ComplianceReport {
 	return ComplianceReport{
-		Passed:            !f.halted,
-		HaltReason:        f.haltReason,
-		FinalBalance:      f.CurrentBalance,
-		PeakBalance:       f.PeakBalance,
-		MaxDailyLossPct:   f.maxDailyLossObserved(),
-		NumBreaches:       len(f.DailyBreaches),
-		Breaches:          f.DailyBreaches,
-		TotalReturnPct:    f.TotalReturnPct(),
-		ProfitTargetMet:   f.profitTargetMet,
-		TradingDays:       f.TradingDays,
-		MinTradingDays:    f.MinTradingDays,
-		CurrentPhase:      f.currentPhase,
+		Passed:          !f.halted,
+		HaltReason:      f.haltReason,
+		FinalBalance:    f.CurrentBalance,
+		PeakBalance:     f.PeakBalance,
+		MaxDailyLossPct: f.maxDailyLossObserved(),
+		NumBreaches:     len(f.DailyBreaches),
+		Breaches:        f.DailyBreaches,
+		TotalReturnPct:  f.TotalReturnPct(),
+		ProfitTargetMet: f.profitTargetMet,
+		TradingDays:     f.TradingDays,
+		MinTradingDays:  f.MinTradingDays,
+		CurrentPhase:    f.currentPhase,
 	}
 }
 
@@ -304,8 +304,8 @@ func (f *PropFirmEnforcer) MarkViolated(reason string) {
 	f.haltReason = reason
 }
 
-func (f *PropFirmEnforcer) IsHalted() bool       { return f.halted }
-func (f *PropFirmEnforcer) IsSoftHalted() bool    { return f.softHalted && !f.halted }
+func (f *PropFirmEnforcer) IsHalted() bool     { return f.halted }
+func (f *PropFirmEnforcer) IsSoftHalted() bool { return f.softHalted && !f.halted }
 func (f *PropFirmEnforcer) SoftHaltMultiplier() float64 {
 	if f.IsSoftHalted() {
 		return 0.5

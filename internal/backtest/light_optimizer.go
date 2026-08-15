@@ -431,20 +431,20 @@ func estimateBarCount(timeframe string, start, end time.Time) int {
 // ParamSensitivityResult holds per-parameter sensitivity scores and stability
 // classifications for a single strategy's search space.
 type ParamSensitivityResult struct {
-	StrategyID   string
-	Weights      [3]float64
-	Scores       map[string]float64          // param name -> normalized sensitivity [0,1]
-	Stability    map[string]string           // param name -> "robust"|"moderate"|"sensitive"
-	BestKnown    map[string]float64          // best params from full sweep
-	Evaluations  int                         // total sub-backtests run
-	Errors       []string
+	StrategyID  string
+	Weights     [3]float64
+	Scores      map[string]float64 // param name -> normalized sensitivity [0,1]
+	Stability   map[string]string  // param name -> "robust"|"moderate"|"sensitive"
+	BestKnown   map[string]float64 // best params from full sweep
+	Evaluations int                // total sub-backtests run
+	Errors      []string
 }
 
 // SensitivityReport aggregates sensitivity results across strategies.
 type SensitivityReport struct {
-	Results      []ParamSensitivityResult
-	GeneratedAt  time.Time
-	ConfigHash   string
+	Results     []ParamSensitivityResult
+	GeneratedAt time.Time
+	ConfigHash  string
 }
 
 // RunParameterSensitivity evaluates each optimisable dimension independently to

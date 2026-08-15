@@ -79,14 +79,14 @@ func TestFeeModel(t *testing.T) {
 func TestBacktestRecorderProducesOutput(t *testing.T) {
 	rec := NewBacktestRecorder()
 	rec.Record(&model.TradingState{
-		Timestamp:    time.Now(),
-		Balance:      100000,
-		Position:     100,
-		MidPrice:     50000,
-		Fee:          5.0,
+		Timestamp:     time.Now(),
+		Balance:       100000,
+		Position:      100,
+		MidPrice:      50000,
+		Fee:           5.0,
 		TradingVolume: 1000,
 		TradingValue:  50000,
-		NumTrades:    10,
+		NumTrades:     10,
 	}, nil)
 
 	states := rec.States()

@@ -268,7 +268,7 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 	if !pairOK {
 		if r.PositionOpen {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: invertSideForClose(r.CurrentSide), Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: invertSideForClose(r.CurrentSide), Action: SignalExit}
 		}
 		return nil
 	}
@@ -304,17 +304,17 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		// Time-based exit.
 		if r.barsHeld >= r.MaxHold {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: invertSideForClose(r.CurrentSide), Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: invertSideForClose(r.CurrentSide), Action: SignalExit}
 		}
 
 		// Exit when spread reverts to mean.
 		if r.CurrentSide == "BUY" && zScore >= exitZ {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 		}
 		if r.CurrentSide == "SELL" && zScore <= -exitZ {
 			r.ClosePosition()
-			return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 		}
 		return nil
 	}
@@ -331,7 +331,7 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		r.EntryPrice = price
 		r.PositionOpen = true
 		r.CurrentSide = "BUY"
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if zScore >= r.EntryZ {
@@ -340,7 +340,7 @@ func (r *PairsRunner) Evaluate(candle Candle, regime int8) *Signal {
 		r.EntryPrice = price
 		r.PositionOpen = true
 		r.CurrentSide = "SELL"
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil
@@ -378,7 +378,7 @@ func (r *PairsRunner) computeSpreadStats() (mean, stdDev float64) {
 			variance += diff * diff
 		}
 	}
-	stdDev = math.Sqrt(variance / float64(count-1))
+	stdDev = sampleStd(variance, count)
 	return
 }
 

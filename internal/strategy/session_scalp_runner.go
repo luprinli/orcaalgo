@@ -22,14 +22,11 @@ type SessionScalpRunner struct {
 	TimeExitMinutes   float64
 	TimezoneOffset    int
 	MaxTradesPerDay   int
-	dailyTradeCount   int
-	currentDay        string
-
-	openingHigh  float64
-	openingLow   float64
-	rangeSet     bool
-	barsInRange  int
-	volumeBuffer []float64
+	openingHigh       float64
+	openingLow        float64
+	rangeSet          bool
+	barsInRange       int
+	volumeBuffer      []float64
 }
 
 func NewSessionScalpRunner() *SessionScalpRunner {
@@ -46,8 +43,8 @@ func NewSessionScalpRunner() *SessionScalpRunner {
 		TakeProfitAtrMult: 1.5,
 		StopLossAtrMult:   1.0,
 		TimeExitMinutes:   60,
-		TimezoneOffset:    0,
-		MaxTradesPerDay:   10,
+		TimezoneOffset:    -4, // ET (EDT); use -5 during standard time
+		MaxTradesPerDay:   3,  // a session scalp takes 1-3 trades, not 10
 		openingLow:        math.MaxFloat64,
 		volumeBuffer:      make([]float64, 128),
 	}
@@ -123,40 +120,32 @@ func (r *SessionScalpRunner) ParamDefs() []ParamDef {
 	}
 }
 
+// window returns the configured session window as a Session (Rule 8).
+func (r *SessionScalpRunner) window() Session {
+	return Session{
+		StartHour:      r.SessionStartHour,
+		StartMin:       r.SessionStartMin,
+		EndHour:        r.SessionEndHour,
+		EndMin:         r.SessionEndMin,
+		TimezoneOffset: r.TimezoneOffset,
+	}
+}
+
 func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
-	if regime == 3 {
+	// Enforce max trades per day limit (shared day-scoped counter, Rule 5).
+	if !r.CanTrade(candle.Time, r.MaxTradesPerDay) {
 		return nil
 	}
 
-	// Reset daily trade count on new trading day.
-	day := candle.Time.Format("2006-01-02")
-	if day != r.currentDay {
-		r.currentDay = day
-		r.dailyTradeCount = 0
-	}
-
-	// Enforce max trades per day limit.
-	if r.MaxTradesPerDay > 0 && r.dailyTradeCount >= r.MaxTradesPerDay {
-		return nil
-	}
-
-	hour, min := candle.Time.Hour(), candle.Time.Minute()
-	localHour := hour + r.TimezoneOffset
-	if localHour < 0 {
-		localHour += 24
-	} else if localHour > 23 {
-		localHour -= 24
-	}
-	totalMin := localHour*60 + min
-	sessionStartMin := r.SessionStartHour*60 + r.SessionStartMin
-	sessionEndMin := r.SessionEndHour*60 + r.SessionEndMin
-
-	if totalMin < sessionStartMin || totalMin >= sessionEndMin {
+	// Session window check (shared Session type, Rule 8).
+	if !r.window().InWindow(candle.Time) {
 		return nil
 	}
 
 	idx := r.HistIdx % r.BufferSize
 	r.PriceHistory[idx] = candle.Close.Float64()
+	r.HighHistory[idx] = candle.High.Float64()
+	r.LowHistory[idx] = candle.Low.Float64()
 	r.volumeBuffer[idx] = candle.Volume
 	r.HistIdx++
 	if r.HistCount < r.BufferSize {
@@ -174,17 +163,17 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 			if r.CurrentSide == "SELL" {
 				exitSide = "BUY"
 			}
-			return &Signal{Symbol: candle.Symbol, Side: exitSide, Quantity: 0}
+			return &Signal{Symbol: candle.Symbol, Side: exitSide, Action: SignalExit}
 		}
 		if r.CurrentSide == "BUY" {
 			if sc.IsStopLossHit(candle.Low, r.StopLoss, "BUY") || tc.IsTakeProfitHit(candle.High, r.TakeProfit, "BUY") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalExit}
 			}
 		} else {
 			if sc.IsStopLossHit(candle.High, r.StopLoss, "SELL") || tc.IsTakeProfitHit(candle.Low, r.TakeProfit, "SELL") {
 				r.ClosePosition()
-				return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 0}
+				return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalExit}
 			}
 		}
 		return nil
@@ -209,7 +198,7 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 		return nil
 	}
 
-	atr := ATR(r.PriceHistory, r.HistCount, int(r.AtrPeriod))
+	atr := TrueRangeATR(r.HighHistory, r.LowHistory, r.PriceHistory, r.HistCount, int(r.AtrPeriod))
 	if atr <= 0 {
 		return nil
 	}
@@ -232,8 +221,8 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(candle.Close.Float64()-atr*r.StopLossAtrMult*stopMult),
 			types.PriceFromFloat(candle.Close.Float64()+atr*r.TakeProfitAtrMult*profitMult),
 			candle.Time)
-		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "BUY", Quantity: 1.0}
+		r.RecordTrade(candle.Time)
+		return &Signal{Symbol: candle.Symbol, Side: "BUY", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	if candle.Close.Float64() <= breakoutLow {
@@ -241,8 +230,8 @@ func (r *SessionScalpRunner) Evaluate(candle Candle, regime int8) *Signal {
 			types.PriceFromFloat(candle.Close.Float64()+atr*r.StopLossAtrMult*stopMult),
 			types.PriceFromFloat(candle.Close.Float64()-atr*r.TakeProfitAtrMult*profitMult),
 			candle.Time)
-		r.dailyTradeCount++
-		return &Signal{Symbol: candle.Symbol, Side: "SELL", Quantity: 1.0}
+		r.RecordTrade(candle.Time)
+		return &Signal{Symbol: candle.Symbol, Side: "SELL", Action: SignalEntry, Quantity: 1.0}
 	}
 
 	return nil

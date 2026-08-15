@@ -27,11 +27,11 @@ const (
 	// peak memory bounded independently of matrix size. The cap is a runaway guard,
 	// not a performance limit, so it sits above the full universe. Override with
 	// ORCA_MATRIX_MAX_COMBOS.
-	defaultMaxCombos     = 5000
-	defaultEquityPoints  = 2000
-	defaultChunkSize     = 50
-	defaultCandleCap     = 6
-	maxWorkersHardCap    = 16
+	defaultMaxCombos    = 5000
+	defaultEquityPoints = 2000
+	defaultChunkSize    = 50
+	defaultCandleCap    = 6
+	maxWorkersHardCap   = 16
 )
 
 func envInt(name string, def int) int {
