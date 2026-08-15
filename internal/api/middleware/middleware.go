@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -39,7 +40,11 @@ func loadJWTSecret() {
 		}
 		s := os.Getenv("ORCA_JWT_SECRET")
 		if s == "" {
-			panic("ORCA_JWT_SECRET environment variable is required but not set")
+			// HP #10: do not panic for recoverable errors. The secret is
+			// validated at startup (main.go); if this path is reached it
+			// degrades to an auth failure rather than a process crash.
+			slog.Error("ORCA_JWT_SECRET environment variable is required but not set")
+			return
 		}
 		jwtSecret = []byte(s)
 	})

@@ -65,7 +65,9 @@ class TestSourceScaleConsistency:
             ("SPY", "1h", dt.datetime(2024, 1, 1, 1), 1_010_000, "stooq"),
         ]
         checks, warnings, errors = [], [], []
-        _check_source_scale_consistency(_FakeConn(rows), dt.date(2020, 1, 1), dt.date(2026, 1, 1), checks, warnings, errors)
+        _check_source_scale_consistency(
+            _FakeConn(rows), dt.date(2020, 1, 1), dt.date(2026, 1, 1), checks, warnings, errors
+        )
         assert checks[-1]["passed"] is True
 
     def test_cross_source_discontinuity_fails(self):
@@ -75,7 +77,9 @@ class TestSourceScaleConsistency:
             ("NVDA", "5m", dt.datetime(2026, 3, 14, 16, 0), 200_000_000, "stooq"),
         ]
         checks, warnings, errors = [], [], []
-        _check_source_scale_consistency(_FakeConn(rows), dt.date(2026, 1, 1), dt.date(2026, 8, 1), checks, warnings, errors)
+        _check_source_scale_consistency(
+            _FakeConn(rows), dt.date(2026, 1, 1), dt.date(2026, 8, 1), checks, warnings, errors
+        )
         assert checks[-1]["passed"] is False
         assert "NVDA" in checks[-1]["detail"]
 
@@ -86,7 +90,9 @@ class TestSourceScaleConsistency:
             ("BTC-USD", "1d", dt.datetime(2024, 1, 2), 60_000_000, "stooq"),
         ]
         checks, warnings, errors = [], [], []
-        _check_source_scale_consistency(_FakeConn(rows), dt.date(2024, 1, 1), dt.date(2024, 1, 3), checks, warnings, errors)
+        _check_source_scale_consistency(
+            _FakeConn(rows), dt.date(2024, 1, 1), dt.date(2024, 1, 3), checks, warnings, errors
+        )
         assert checks[-1]["passed"] is True
 
 
@@ -117,7 +123,6 @@ class TestDatasetVersioning:
         assert a != b
 
     def test_dataset_metadata_carries_lineage(self):
-        from orca.ml.barriers import BarrierConfig
         from orca.ml.dataset import build_dataset_from_trade_logs
 
         ds = build_dataset_from_trade_logs([], {}, generation_id="gen-abc")

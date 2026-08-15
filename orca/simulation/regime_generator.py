@@ -130,7 +130,11 @@ def generate_regime_aware(
         params = regime_params_for_state(regime, regime_params_override)
 
         daily_returns = _generate_daily_minute_bars(
-            price=price, params=params, n_minutes=TRADING_MINUTES_PER_DAY, rng=rng, model=model,
+            price=price,
+            params=params,
+            n_minutes=TRADING_MINUTES_PER_DAY,
+            rng=rng,
+            model=model,
         )
 
         minute_prices = price * np.exp(np.cumsum(daily_returns))
@@ -143,9 +147,7 @@ def generate_regime_aware(
             bar_low = min(bar_open, bar_close) * (1 - abs(rng.normal(0, params.sigma * 0.2)))
             bar_vol = max(1000, int(rng.exponential(5000) * params.volume_mult))
 
-            minute_dt = bday + timedelta(
-                hours=9, minutes=30 + m
-            )
+            minute_dt = bday + timedelta(hours=9, minutes=30 + m)
 
             times.append(minute_dt)
             opens.append(bar_open)
@@ -163,19 +165,21 @@ def generate_regime_aware(
 
         day_idx += 1
 
-    df = pd.DataFrame({
-        "timestamp": times,
-        "open": opens,
-        "high": highs,
-        "low": lows,
-        "close": closes,
-        "volume": volumes,
-        "regime_label": regimes if len(regimes) == len(times) else None,
-        "data_source": "synthetic",
-        "generation_id": generation_id,
-        "symbol": symbol,
-        "timeframe": "1m",
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": times,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+            "regime_label": regimes if len(regimes) == len(times) else None,
+            "data_source": "synthetic",
+            "generation_id": generation_id,
+            "symbol": symbol,
+            "timeframe": "1m",
+        }
+    )
 
     if output_dir:
         out_path = Path(output_dir)
@@ -183,9 +187,13 @@ def generate_regime_aware(
         df.to_parquet(out_path / f"{symbol}_{generation_id}_1m.parquet")
         np.save(out_path / f"{symbol}_{generation_id}_labels.npy", regime_labels)
         meta = {
-            "generation_id": generation_id, "symbol": symbol,
-            "start": start_date, "end": end_date, "model": model,
-            "n_candles": len(df), "n_trading_days": n_trading_days,
+            "generation_id": generation_id,
+            "symbol": symbol,
+            "start": start_date,
+            "end": end_date,
+            "model": model,
+            "n_candles": len(df),
+            "n_trading_days": n_trading_days,
             "seed": seed,
         }
         with open(out_path / f"{generation_id}_meta.json", "w") as f:
@@ -216,9 +224,12 @@ def _generate_daily_minute_bars(
         base_returns += trend * dt
 
     if model == "heston" and params.sigma > 0.01:
-        v = np.ones(n_minutes) * params.sigma ** 2
+        v = np.ones(n_minutes) * params.sigma**2
         for t in range(1, n_minutes):
-            v[t] = max(0.0001, v[t - 1] + 0.05 * (params.sigma ** 2 - v[t - 1]) + params.sigma * 0.1 * rng.normal())
+            v[t] = max(
+                0.0001,
+                v[t - 1] + 0.05 * (params.sigma**2 - v[t - 1]) + params.sigma * 0.1 * rng.normal(),
+            )
         vol_factor = np.sqrt(v) / params.sigma
         base_returns *= vol_factor
 
@@ -230,12 +241,20 @@ def _generate_daily_minute_bars(
 
 
 def _compute_generation_id(
-    symbol: str, start: str, end: str, model: str, seed: int | None, regime_labels: np.ndarray,
+    symbol: str,
+    start: str,
+    end: str,
+    model: str,
+    seed: int | None,
+    regime_labels: np.ndarray,
 ) -> str:
     """Deterministic generation ID from config hash."""
     config = {
-        "symbol": symbol, "start": start, "end": end,
-        "model": model, "seed": seed,
+        "symbol": symbol,
+        "start": start,
+        "end": end,
+        "model": model,
+        "seed": seed,
         "regime_hash": hashlib.sha256(regime_labels.tobytes()).hexdigest()[:16],
     }
     payload = json.dumps(config, sort_keys=True, default=str)
@@ -272,6 +291,7 @@ def generate_regime_ticks(
 
         regime = int(row.get("regime_label", REGIME_CALM))
         from orca.simulation.regime import DEFAULT_REGIME_PARAMS
+
         regime_defaults = DEFAULT_REGIME_PARAMS.get(regime, DEFAULT_REGIME_PARAMS[REGIME_CALM])
         spread_factor = regime_defaults.get("spread_mult", 1.0)
         half_spread = 0.00005 * spread_factor
@@ -281,16 +301,18 @@ def generate_regime_ticks(
         for i in range(n):
             price = max(0.01, path[i])
             tick_time = row["timestamp"] + timedelta(seconds=i * (60 / n))
-            ticks.append({
-                "timestamp_ms": int(tick_time.timestamp() * 1000),
-                "price": round(price, 4),
-                "bid": round(price * (1 - half_spread), 4),
-                "ask": round(price * (1 + half_spread), 4),
-                "volume": volume_per_tick,
-                "symbol": row.get("symbol", ""),
-                "generation_id": generation_id,
-                "regime_label": regime,
-            })
+            ticks.append(
+                {
+                    "timestamp_ms": int(tick_time.timestamp() * 1000),
+                    "price": round(price, 4),
+                    "bid": round(price * (1 - half_spread), 4),
+                    "ask": round(price * (1 + half_spread), 4),
+                    "volume": volume_per_tick,
+                    "symbol": row.get("symbol", ""),
+                    "generation_id": generation_id,
+                    "regime_label": regime,
+                }
+            )
 
     df = pd.DataFrame(ticks)
     if output_dir:

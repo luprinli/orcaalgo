@@ -97,8 +97,10 @@ def test_verify_metrics_strengthen_score():
 
 
 def test_scores_are_finite_and_sorted():
-    rows = [_row(sharpe_ratio=s, max_drawdown_ratio=d) for s, d in
-            [(0.4, 0.3), (1.0, 0.1), (2.0, 0.05), (0.8, 0.2)]]
+    rows = [
+        _row(sharpe_ratio=s, max_drawdown_ratio=d)
+        for s, d in [(0.4, 0.3), (1.0, 0.1), (2.0, 0.05), (0.8, 0.2)]
+    ]
     out = score_backtest_parameters(rows)
     finals = [r["final_score"] for r in out]
     assert all(f >= 0 for f in finals)

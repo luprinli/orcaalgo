@@ -6,7 +6,7 @@ Uses yfinance for reliable access without rate limiting issues.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 
 def fetch_vix_historical(
@@ -24,10 +24,10 @@ def fetch_vix_historical(
     """
     try:
         import yfinance as yf
-    except ImportError:
+    except ImportError as err:
         raise ImportError(
             "yfinance is required for VIX ingestion. Install with: pip install yfinance"
-        )
+        ) from err
 
     ticker = yf.Ticker("^VIX")
     df = ticker.history(start=str(start), end=str(end) + timedelta(days=1))
@@ -45,11 +45,13 @@ def fetch_vix_historical(
             change = close_val - prev_close
         prev_close = close_val
 
-        logs.append({
-            "timestamp": idx.to_pydatetime(),
-            "vix_value": close_val,
-            "vix_change": change,
-            "source": "yahoo",
-        })
+        logs.append(
+            {
+                "timestamp": idx.to_pydatetime(),
+                "vix_value": close_val,
+                "vix_change": change,
+                "source": "yahoo",
+            }
+        )
 
     return logs

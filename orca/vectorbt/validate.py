@@ -64,8 +64,7 @@ def compare_results(
         diffs[key] = diff
         if diff > tolerance[key]:
             failures.append(
-                f"{key}: vbt={vbt_val:.4f} go={go_val:.4f} "
-                f"diff={diff:.4f} > tol={tolerance[key]}"
+                f"{key}: vbt={vbt_val:.4f} go={go_val:.4f} diff={diff:.4f} > tol={tolerance[key]}"
             )
 
     go_version = go_metrics.get("_cli_version", "unknown")
@@ -93,13 +92,20 @@ def _run_orca_go_backtest(
     Backward compat: tries --output json first; if unsupported, parses stdout.
     """
     cmd = [
-        "orca-cli", "backtest",
-        "--symbol", symbol,
-        "--strategy", strategy,
-        "--start", start,
-        "--end", end,
-        "--timeframe", timeframe,
-        "--params", ",".join(f"{k}={v}" for k, v in params.items()),
+        "orca-cli",
+        "backtest",
+        "--symbol",
+        symbol,
+        "--strategy",
+        strategy,
+        "--start",
+        start,
+        "--end",
+        end,
+        "--timeframe",
+        timeframe,
+        "--params",
+        ",".join(f"{k}={v}" for k, v in params.items()),
     ]
 
     version = _detect_cli_version()
@@ -107,9 +113,7 @@ def _run_orca_go_backtest(
         cmd.extend(["--output", "json"])
 
     try:
-        result = subprocess.run(  # noqa: S603 — intentional CLI tool, trusted path
-            cmd, capture_output=True, text=True, timeout=120
-        )
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
     except FileNotFoundError:
         return {
             "_cli_version": "unknown",
@@ -140,7 +144,7 @@ def _detect_cli_version() -> tuple[int, ...]:
     """Detect orca-cli version. Returns (0, 0, 0) if undetectable."""
     try:
         r = subprocess.run(
-            ["orca-cli", "--version"],  # noqa: S607 — intentionally PATH-resolved binary
+            ["orca-cli", "--version"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -149,7 +153,7 @@ def _detect_cli_version() -> tuple[int, ...]:
             cleaned = token.lstrip("v")
             if cleaned and (cleaned[0].isdigit() or cleaned[:1].replace(".", "").isdigit()):
                 return tuple(int(x) for x in cleaned.split("."))
-    except Exception:  # noqa: S110 — version detection is best-effort, not critical
+    except Exception:
         pass
     return (0, 0, 0)
 

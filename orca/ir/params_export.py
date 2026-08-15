@@ -10,7 +10,7 @@ from orca.ir.loader import load_ir
 
 def extract_params(gkr_dir: str | Path = "configs/strategies") -> dict:
     gkr_dir = Path(gkr_dir)
-    result = {"strategies": []}
+    result: dict[str, list] = {"strategies": []}
 
     for yaml_path in sorted(gkr_dir.glob("*.gkr.yaml")):
         ir = load_ir(yaml_path)
@@ -51,14 +51,16 @@ def extract_params(gkr_dir: str | Path = "configs/strategies") -> dict:
             params["risk_per_trade_pct"] = rp.risk_per_trade_pct
             params["kelly_multiplier"] = rp.kelly_multiplier
             names = ["regime_w_calm", "regime_w_trending", "regime_w_highvol", "regime_w_crisis"]
-            for name, mult in zip(names, rp.regime_multipliers):
+            for name, mult in zip(names, rp.regime_multipliers, strict=False):
                 params[name] = mult
 
-        result["strategies"].append({
-            "id": strat_id,
-            "kind": _infer_kind(strat_id),
-            "params": params,
-        })
+        result["strategies"].append(
+            {
+                "id": strat_id,
+                "kind": _infer_kind(strat_id),
+                "params": params,
+            }
+        )
 
     return result
 

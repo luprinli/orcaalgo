@@ -58,10 +58,9 @@ def block_bootstrap_monte_carlo(
 
     for sim in range(n_simulations):
         indices = rng.integers(0, n_blocks, size=n_blocks)
-        sampled = np.concatenate([
-            returns[i * block_size : min((i + 1) * block_size, n)]
-            for i in indices
-        ])
+        sampled = np.concatenate(
+            [returns[i * block_size : min((i + 1) * block_size, n)] for i in indices]
+        )
         if len(sampled) < 2:
             continue
 

@@ -143,6 +143,7 @@ def profit_curve(
 def _compute_roc_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
+
         return float(roc_auc_score(y_true, y_prob))
     except ImportError:
         desc = np.argsort(y_prob)[::-1]

@@ -104,12 +104,12 @@ def generate_heston_prices(
         dW1 = rng.normal(0, np.sqrt(dt))
         dW2 = params.rho * dW1 + np.sqrt(1 - params.rho**2) * rng.normal(0, np.sqrt(dt))
 
-        v[t + 1] = v[t] + params.kappa * (params.theta - max(v[t], 0)) * dt + params.sigma * sqrt_v * dW2
+        v[t + 1] = (
+            v[t] + params.kappa * (params.theta - max(v[t], 0)) * dt + params.sigma * sqrt_v * dW2
+        )
         v[t + 1] = max(v[t + 1], 0)
 
-        S[t + 1] = S[t] * np.exp(
-            (params.mu - 0.5 * max(v[t], 0)) * dt + sqrt_v * dW1
-        )
+        S[t + 1] = S[t] * np.exp((params.mu - 0.5 * max(v[t], 0)) * dt + sqrt_v * dW1)
 
     return S
 
@@ -148,7 +148,7 @@ def prices_to_ohlcv(
     records = []
 
     for i in range(0, n, group_size):
-        group = prices[i: min(i + group_size, n)]
+        group = prices[i : min(i + group_size, n)]
         if len(group) == 0:
             continue
 
@@ -160,21 +160,23 @@ def prices_to_ohlcv(
         if add_spread and rng is not None:
             half_spread = spread_pct / 200.0
             noise = rng.uniform(-half_spread, half_spread)
-            open_price *= (1 + noise)
-            close_price *= (1 + noise)
-            high_price *= (1 + half_spread)
-            low_price *= (1 - half_spread)
+            open_price *= 1 + noise
+            close_price *= 1 + noise
+            high_price *= 1 + half_spread
+            low_price *= 1 - half_spread
 
         volume = rng.exponential(100000) + 1000 if rng else 100000
 
-        records.append({
-            "symbol": symbol,
-            "open": round(open_price, 4),
-            "high": round(high_price, 4),
-            "low": round(low_price, 4),
-            "close": round(close_price, 4),
-            "volume": int(volume),
-        })
+        records.append(
+            {
+                "symbol": symbol,
+                "open": round(open_price, 4),
+                "high": round(high_price, 4),
+                "low": round(low_price, 4),
+                "close": round(close_price, 4),
+                "volume": int(volume),
+            }
+        )
 
     return pd.DataFrame(records)
 
@@ -263,14 +265,16 @@ def main() -> None:
     if args.json:
         output = []
         for _, row in df.iterrows():
-            output.append({
-                "symbol": row["symbol"],
-                "open": float(row["open"]),
-                "high": float(row["high"]),
-                "low": float(row["low"]),
-                "close": float(row["close"]),
-                "volume": int(row["volume"]),
-            })
+            output.append(
+                {
+                    "symbol": row["symbol"],
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "volume": int(row["volume"]),
+                }
+            )
         print(json.dumps(output))
         return
 

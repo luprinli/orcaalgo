@@ -83,7 +83,9 @@ def export_to_onnx(
 
         logger.info(
             "exported ONNX: %s (%d bytes, %d features)",
-            onnx_path, onnx_path.stat().st_size, n_features,
+            onnx_path,
+            onnx_path.stat().st_size,
+            n_features,
         )
 
         return ONNXExportResult(

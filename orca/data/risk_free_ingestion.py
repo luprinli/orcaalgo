@@ -33,9 +33,11 @@ def fetch_risk_free_yield(start: date, end: date) -> list[dict]:
     logs = []
     for idx in df.index:
         close = float(df.loc[idx, "Close"])
-        logs.append({
-            "timestamp": idx.to_pydatetime(),
-            "value": close / 100.0,
-            "source": "yahoo",
-        })
+        logs.append(
+            {
+                "timestamp": idx.to_pydatetime(),
+                "value": close / 100.0,
+                "source": "yahoo",
+            }
+        )
     return logs

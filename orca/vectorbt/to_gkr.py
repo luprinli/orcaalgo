@@ -43,8 +43,7 @@ def params_to_gkr(
     """
     if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise ValueError(
-            f"Unsupported schema_version: {schema_version}. "
-            f"Supported: {SUPPORTED_SCHEMA_VERSIONS}"
+            f"Unsupported schema_version: {schema_version}. Supported: {SUPPORTED_SCHEMA_VERSIONS}"
         )
 
     output_dir = Path(output_dir)
@@ -81,8 +80,7 @@ def _build_v1_config(
         "version": 1,
         "strategy_id": strategy_name,
         "parameters": {
-            k: float(v) if isinstance(v, (int, float, bool)) else v
-            for k, v in params.items()
+            k: float(v) if isinstance(v, (int, float, bool)) else v for k, v in params.items()
         },
         "metrics": {
             "sharpe_ratio": metrics.get("sharpe_ratio") if metrics else None,

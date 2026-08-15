@@ -35,7 +35,9 @@ def generate_random_trades(
     return pnls
 
 
-def resample_actual_trades(actual_pnls: list[float], num_trades: int, block_len: int = 7) -> list[float]:
+def resample_actual_trades(
+    actual_pnls: list[float], num_trades: int, block_len: int = 7
+) -> list[float]:
     if len(actual_pnls) == 0:
         return []
     if num_trades <= 0:
@@ -126,7 +128,12 @@ def run_simulation(
 
         if (i + 1) % 100 == 0:
             import sys
-            print(f"  Simulation {i + 1}/{num_simulations} (pass rate: {passes/(i+1)*100:.1f}%)", file=sys.stderr, flush=True)
+
+            print(
+                f"  Simulation {i + 1}/{num_simulations} (pass rate: {passes / (i + 1) * 100:.1f}%)",
+                file=sys.stderr,
+                flush=True,
+            )
 
     pass_probability = (passes / num_simulations) * 100
     avg_final_balance = np.mean(final_balances) if final_balances else 0
@@ -151,18 +158,36 @@ def main():
     parser.add_argument("--days", type=int, default=20, help="Trading days in period")
     parser.add_argument("--simulations", type=int, default=1000, help="Number of Monte Carlo runs")
     parser.add_argument("--capital", type=float, default=100000.0, help="Starting balance")
-    parser.add_argument("--starting-balance", type=float, default=None, help="Starting balance (alt)")
-    parser.add_argument("--monthly-target", type=float, default=10.0, help="Monthly profit target (pct)")
-    parser.add_argument("--profit-target", type=float, default=None, help="Monthly profit target (alt)")
-    parser.add_argument("--consistency-threshold", type=float, default=30.0, help="Consistency outlier threshold (pct)")
-    parser.add_argument("--daily-loss-limit", type=float, default=5.0, help="Daily loss limit (pct)")
+    parser.add_argument(
+        "--starting-balance", type=float, default=None, help="Starting balance (alt)"
+    )
+    parser.add_argument(
+        "--monthly-target", type=float, default=10.0, help="Monthly profit target (pct)"
+    )
+    parser.add_argument(
+        "--profit-target", type=float, default=None, help="Monthly profit target (alt)"
+    )
+    parser.add_argument(
+        "--consistency-threshold",
+        type=float,
+        default=30.0,
+        help="Consistency outlier threshold (pct)",
+    )
+    parser.add_argument(
+        "--daily-loss-limit", type=float, default=5.0, help="Daily loss limit (pct)"
+    )
     parser.add_argument("--max-drawdown", type=float, default=10.0, help="Max drawdown (pct)")
     parser.add_argument("--win-rate", type=float, default=0.55, help="Win rate (0-1)")
     parser.add_argument("--avg-win", type=float, default=1.0, help="Average win amount")
     parser.add_argument("--avg-loss", type=float, default=0.8, help="Average loss amount")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--json", action="store_true", help="Output JSON to stdout only")
-    parser.add_argument("--trade-pnls", type=str, default=None, help="JSON array of actual trade PnLs for resampling")
+    parser.add_argument(
+        "--trade-pnls",
+        type=str,
+        default=None,
+        help="JSON array of actual trade PnLs for resampling",
+    )
     args = parser.parse_args()
 
     random.seed(args.seed)
@@ -204,24 +229,28 @@ def main():
     )
 
     if args.json:
-        print(json.dumps({
-            "pass_probability": result["pass_probability_pct"],
-            "avg_final_balance": result["avg_final_balance"],
-            "median_final_balance": result["median_final_balance"],
-            "bust_probability": 100.0 - result["pass_probability_pct"],
-            "passes": result["passes"],
-            "simulations": args.simulations,
-        }))
+        print(
+            json.dumps(
+                {
+                    "pass_probability": result["pass_probability_pct"],
+                    "avg_final_balance": result["avg_final_balance"],
+                    "median_final_balance": result["median_final_balance"],
+                    "bust_probability": 100.0 - result["pass_probability_pct"],
+                    "passes": result["passes"],
+                    "simulations": args.simulations,
+                }
+            )
+        )
         return
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print("Monte Carlo Results:")
     print(f"  Pass probability:     {result['pass_probability_pct']:.1f}%")
     print(f"  Bust probability:     {100.0 - result['pass_probability_pct']:.1f}%")
     print(f"  Avg final balance:    ${result['avg_final_balance']:,.0f}")
     print(f"  Median final balance: ${result['median_final_balance']:,.0f}")
     print(f"  Threshold met (>80%): {result['passed_threshold']}")
-    print(f"{'='*50}")
+    print(f"{'=' * 50}")
 
     if result["passed_threshold"]:
         print("\nPASS: Probability exceeds 80% threshold for prop firm qualification")

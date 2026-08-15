@@ -18,7 +18,8 @@ from orca.ml.features import (
 
 
 def make_test_data(
-    n_bars: int = 60, seed: int = 42,
+    n_bars: int = 60,
+    seed: int = 42,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Generate synthetic OHLCV data."""
     rng = np.random.default_rng(seed)
@@ -150,10 +151,17 @@ class TestFullFeatureVector:
         ts = datetime(2026, 7, 5, 14, 30, 0, tzinfo=UTC)
         alpha = (0.6, 0.3, 0.07, 0.03)
         fv = compute_full_feature_vector(
-            closes, highs, lows, volumes, ts,
-            hmm_alpha=alpha, hmm_confidence=0.9,
-            signal_type=2, signal_strength=0.8,
-            cvd_divergence=0.5, spread_pct=0.001,
+            closes,
+            highs,
+            lows,
+            volumes,
+            ts,
+            hmm_alpha=alpha,
+            hmm_confidence=0.9,
+            signal_type=2,
+            signal_strength=0.8,
+            cvd_divergence=0.5,
+            spread_pct=0.001,
         )
         assert fv[12] == 0.6
         assert fv[16] == 0.9

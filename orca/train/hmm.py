@@ -27,9 +27,14 @@ __all__ = [
 @dataclass(frozen=True)
 class HMMParams:
     n_states: int = 4
-    state_labels: list[str] = field(default_factory=lambda: [
-        "CALM", "TRENDING", "HIGH_VOL", "CRISIS",
-    ])
+    state_labels: list[str] = field(
+        default_factory=lambda: [
+            "CALM",
+            "TRENDING",
+            "HIGH_VOL",
+            "CRISIS",
+        ]
+    )
     transition: list[list[float]] = field(default_factory=list)
     initial_probs: list[float] = field(default_factory=list)
     emission_means: list[float] = field(default_factory=list)
@@ -44,9 +49,15 @@ class HMMParams:
     def from_dict(cls, data: dict) -> HMMParams:
         return cls(
             n_states=data.get("n_states", 4),
-            state_labels=data.get("state_labels", [
-                "CALM", "TRENDING", "HIGH_VOL", "CRISIS",
-            ]),
+            state_labels=data.get(
+                "state_labels",
+                [
+                    "CALM",
+                    "TRENDING",
+                    "HIGH_VOL",
+                    "CRISIS",
+                ],
+            ),
             transition=data.get("transition", []),
             initial_probs=data.get("initial_probs", []),
             emission_means=data.get("emission_means", []),
@@ -59,23 +70,27 @@ def load_params(path: str | Path) -> HMMParams:
         return HMMParams.from_dict(json.load(f))
 
 
-def export_params_json(params: HMMParams, path: str | Path = "configs/hmm_params.json") -> HMMParams:
+def export_params_json(
+    params: HMMParams, path: str | Path = "configs/hmm_params.json"
+) -> HMMParams:
     params.to_json(path)
     return params
 
 
-def export_params_odin(params: HMMParams, path: str | Path = "odin/risk/hmm_params.odin") -> HMMParams:
+def export_params_odin(
+    params: HMMParams, path: str | Path = "odin/risk/hmm_params.odin"
+) -> HMMParams:
     lines = [
         "package risk",
         "",
-        "import \"core:math\"",
+        'import "core:math"',
         "",
         "calibrated_hmm :: proc() -> HMM_Model {",
         "    return HMM_Model{",
         "        transition = [4][4]f64{",
     ]
 
-    for i, row in enumerate(params.transition):
+    for _i, row in enumerate(params.transition):
         vals = ", ".join(f"{v:.6f}" for v in row)
         lines.append(f"            {{{vals}}},")
 

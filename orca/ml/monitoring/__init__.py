@@ -29,6 +29,7 @@ __version__ = "0.2.0"
 
 # ─── Data Classes ─────────────────────────────────────────────────────────────
 
+
 class ModelStatus(Enum):
     HEALTHY = auto()
     STALE = auto()
@@ -85,6 +86,7 @@ class ModelHealthReport:
 
 # ─── Monitoring Configuration ─────────────────────────────────────────────────
 
+
 @dataclass(frozen=True)
 class MonitorConfig:
     staleness_days_warn: int = 30
@@ -99,6 +101,7 @@ class MonitorConfig:
 
 
 # ─── Distribution Analysis ────────────────────────────────────────────────────
+
 
 def compute_prediction_distribution(
     pwin_values: list[float],
@@ -133,6 +136,7 @@ def compute_prediction_distribution(
 
 
 # ─── Model Staleness ──────────────────────────────────────────────────────────
+
 
 def check_model_staleness(
     last_trained_at: datetime,
@@ -172,6 +176,7 @@ def check_model_staleness(
 
 # ─── Win Rate Degradation ─────────────────────────────────────────────────────
 
+
 def check_win_rate_degradation(
     win_rate_recent: float,
     win_rate_historical: float,
@@ -206,6 +211,7 @@ def check_win_rate_degradation(
 
 # ─── Acceptance Rate Check ────────────────────────────────────────────────────
 
+
 def check_acceptance_rate(
     acceptance_rate: float,
     min_rate: float = 0.30,
@@ -215,8 +221,9 @@ def check_acceptance_rate(
     reason = f"Signal acceptance rate {acceptance_rate:.2%} below minimum {min_rate:.2%}"
     if accepted_total > 0:
         from orca.math.wilson import wilson_ci
+
         ci_low, ci_high = wilson_ci(accepted_wins, accepted_total)
-        reason = f"Signal acceptance rate {acceptance_rate:.2%} [95% CI: {ci_low:.2%}–{ci_high:.2%}] below minimum {min_rate:.2%}"
+        reason = f"Signal acceptance rate {acceptance_rate:.2%} [95% CI: {ci_low:.2%}-{ci_high:.2%}] below minimum {min_rate:.2%}"
     if acceptance_rate < min_rate:
         return Alert(
             AlertSeverity.WARN,
@@ -230,6 +237,7 @@ def check_acceptance_rate(
 
 
 # ─── Model Health Report Generator ────────────────────────────────────────────
+
 
 def generate_health_report(
     model_name: str,
@@ -254,13 +262,16 @@ def generate_health_report(
     )
 
     wr_alert = check_win_rate_degradation(
-        recent_win_rate, historical_win_rate,
+        recent_win_rate,
+        historical_win_rate,
         warn_delta=config.win_rate_degradation_warn,
         critical_delta=config.win_rate_degradation_critical,
     )
 
     distribution = compute_prediction_distribution(
-        recent_pwins, recent_accepted, bins=config.prediction_bins,
+        recent_pwins,
+        recent_accepted,
+        bins=config.prediction_bins,
     )
     distribution = replace(distribution, model_name=model_name)
 
@@ -288,11 +299,16 @@ def generate_health_report(
 
     if psi_total >= config.psi_critical_threshold:
         severity = ModelStatus.FAILED
-        alerts.append(Alert(
-            AlertSeverity.CRITICAL, model_name, "psi",
-            psi_total, config.psi_critical_threshold,
-            f"PSI {psi_total:.3f} exceeds critical threshold {config.psi_critical_threshold}",
-        ))
+        alerts.append(
+            Alert(
+                AlertSeverity.CRITICAL,
+                model_name,
+                "psi",
+                psi_total,
+                config.psi_critical_threshold,
+                f"PSI {psi_total:.3f} exceeds critical threshold {config.psi_critical_threshold}",
+            )
+        )
 
     return ModelHealthReport(
         model_name=model_name,
@@ -312,6 +328,7 @@ def generate_health_report(
 
 # ─── Persistence Helpers ──────────────────────────────────────────────────────
 
+
 def health_report_to_dict(report: ModelHealthReport) -> dict[str, Any]:
     return {
         "model_name": report.model_name,
@@ -327,7 +344,9 @@ def health_report_to_dict(report: ModelHealthReport) -> dict[str, Any]:
         "distribution": {
             "mean_pwin": report.distribution.mean_pwin if report.distribution else 0,
             "acceptance_rate": report.distribution.acceptance_rate if report.distribution else 0,
-        } if report.distribution else {},
+        }
+        if report.distribution
+        else {},
         "alerts": [
             {"severity": a.severity.name, "metric": a.metric, "message": a.message}
             for a in report.alerts

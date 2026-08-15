@@ -50,14 +50,18 @@ def correlation_filter(
     keep = [i for i in range(n_features) if i not in redundant]
     logger.info(
         "correlation_filter: %d features removed, %d kept (threshold=%.2f)",
-        len(redundant), len(keep), threshold,
+        len(redundant),
+        len(keep),
+        threshold,
     )
     if pairs:
         for i, j, c in pairs:
             logger.info(
                 "  removed feature %d (%s) — correlated with %d (%s), r=%.3f",
-                j, FEATURE_NAMES[j] if j < len(FEATURE_NAMES) else f"f{j}",
-                i, FEATURE_NAMES[i] if i < len(FEATURE_NAMES) else f"f{i}",
+                j,
+                FEATURE_NAMES[j] if j < len(FEATURE_NAMES) else f"f{j}",
+                i,
+                FEATURE_NAMES[i] if i < len(FEATURE_NAMES) else f"f{i}",
                 c,
             )
     return keep, pairs
@@ -134,11 +138,13 @@ def rank_features_by_mi(
     """
     scores = mutual_information_score(features, target)
     if feature_names is None:
-        feature_names = FEATURE_NAMES[:features.shape[1]]
+        feature_names = FEATURE_NAMES[: features.shape[1]]
 
     ranked = sorted(
-        [(i, feature_names[i] if i < len(feature_names) else f"f{i}", float(scores[i]))
-         for i in range(len(scores))],
+        [
+            (i, feature_names[i] if i < len(feature_names) else f"f{i}", float(scores[i]))
+            for i in range(len(scores))
+        ],
         key=lambda x: x[2],
         reverse=True,
     )
@@ -179,8 +185,12 @@ def validate_features(
     bottom_n = max(1, int(len(mi_ranked) * mi_bottom_pct))
     flagged = mi_ranked[-bottom_n:]
 
-    logger.info("feature validation complete: %d kept, %d redundant, %d low-MI flagged",
-                len(keep_idx), len(redundant_pairs), len(flagged))
+    logger.info(
+        "feature validation complete: %d kept, %d redundant, %d low-MI flagged",
+        len(keep_idx),
+        len(redundant_pairs),
+        len(flagged),
+    )
 
     return {
         "keep_indices": keep_idx,

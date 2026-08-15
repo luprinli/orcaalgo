@@ -19,7 +19,7 @@ class TestResampleBlockBootstrap:
         assert len(result) == 12
         blocks_found = False
         for i in range(len(result) - 3):
-            a, b, c = result[i], result[i+1], result[i+2]
+            a, b, c = result[i], result[i + 1], result[i + 2]
             if b == a + 1 and c == a + 2:
                 blocks_found = True
                 break

@@ -26,6 +26,9 @@ def platt_calibrate_segment(
     result = platt_scale(train_p, train_y, val_p, val_y)
 
     if result.improvement_pct < min_improvement_pct:
-        return result, f"Improvement ({result.improvement_pct:.1f}%) below threshold ({min_improvement_pct}%)"
+        return (
+            result,
+            f"Improvement ({result.improvement_pct:.1f}%) below threshold ({min_improvement_pct}%)",
+        )
 
     return result, f"Calibrated: improvement {result.improvement_pct:.1f}%"

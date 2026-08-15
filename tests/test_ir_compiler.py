@@ -44,7 +44,10 @@ class TestCompilerOutput:
         assert "strategy.register" in code
 
     def test_signal_trend_generates_trend(self):
-        node = make_node("signal.trend", {"fast_period": 10, "slow_period": 30, "atr_period": 7, "atr_multiplier": 1.5})
+        node = make_node(
+            "signal.trend",
+            {"fast_period": 10, "slow_period": 30, "atr_period": 7, "atr_multiplier": 1.5},
+        )
         ir = make_ir(node)
         code = compile_strategy(ir, 4)
 
@@ -109,7 +112,7 @@ class TestCompilerOutput:
     def test_compile_all_loads_real_files(self, tmp_path):
         out = tmp_path / "gen.odin"
         try:
-            result = compile_all(gkr_dir="configs/strategies", output=out)
+            compile_all(gkr_dir="configs/strategies", output=out)
         except Exception:
             pytest.skip("Strategy YAML files not available")
             return

@@ -25,10 +25,10 @@ logger = logging.getLogger("orca.ml.train.exit_labels")
 
 @dataclass(frozen=True)
 class ExitLabel:
-    urgency: float          # 0.0 (hold) to 1.0 (exit now)
-    forward_return: float   # return over the look-forward window
-    exit_bar: int           # bar index of the exit
-    label_type: str         # "favorable", "adverse", "neutral"
+    urgency: float  # 0.0 (hold) to 1.0 (exit now)
+    forward_return: float  # return over the look-forward window
+    exit_bar: int  # bar index of the exit
+    label_type: str  # "favorable", "adverse", "neutral"
 
 
 def path_dependent_label(
@@ -159,7 +159,11 @@ def batch_exit_labels(
             continue
 
         label_result = path_dependent_label(
-            prices, len(prices) // 2, exit_price, entry_price, look_forward,
+            prices,
+            len(prices) // 2,
+            exit_price,
+            entry_price,
+            look_forward,
         )
 
         features = build_exit_features(

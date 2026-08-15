@@ -13,13 +13,14 @@ def _to_py_datetime(val):
     """Convert numpy datetime64 or pandas Timestamp to Python datetime."""
     import numpy as np
     import pandas as pd
+
     if isinstance(val, (np.datetime64, pd.Timestamp)):
-        return val.astype('datetime64[us]').astype('M8[us]').astype(object)
-    if hasattr(val, 'to_pydatetime'):
+        return val.astype("datetime64[us]").astype("M8[us]").astype(object)
+    if hasattr(val, "to_pydatetime"):
         return val.to_pydatetime()
-    if hasattr(val, 'astype'):
+    if hasattr(val, "astype"):
         try:
-            return val.astype('datetime64[us]').astype('M8[us]').astype(object)
+            return val.astype("datetime64[us]").astype("M8[us]").astype(object)
         except Exception:
             pass
     return val
@@ -67,6 +68,7 @@ def upsert_candles(
     """
     import psycopg2
     import psycopg2.extras
+
     conn = get_connection()
     inserted = 0
 
@@ -89,18 +91,24 @@ def upsert_candles(
             rows = []
             for idx in df.index:
                 bar = df.loc[idx]
-                rows.append((
-                    symbol_id, timeframe, idx.to_pydatetime(),
-                    int(round(float(bar["open"]) * 100000)),
-                    int(round(float(bar["high"]) * 100000)),
-                    int(round(float(bar["low"]) * 100000)),
-                    int(round(float(bar["close"]) * 100000)),
-                    int(round(float(bar["volume"]))),
-                    source,
-                    generation_id,
-                ))
+                rows.append(
+                    (
+                        symbol_id,
+                        timeframe,
+                        idx.to_pydatetime(),
+                        round(float(bar["open"]) * 100000),
+                        round(float(bar["high"]) * 100000),
+                        round(float(bar["low"]) * 100000),
+                        round(float(bar["close"]) * 100000),
+                        round(float(bar["volume"])),
+                        source,
+                        generation_id,
+                    )
+                )
 
-            psycopg2.extras.execute_values(cur, """
+            psycopg2.extras.execute_values(
+                cur,
+                """
                 INSERT INTO candles
                     (symbol_id, timeframe, time, open_raw, high_raw, low_raw, close_raw, volume, source, generation_id)
                 VALUES %s
@@ -111,7 +119,10 @@ def upsert_candles(
                     close_raw = EXCLUDED.close_raw,
                     volume = EXCLUDED.volume,
                     generation_id = EXCLUDED.generation_id
-            """, rows, page_size=batch_size)
+            """,
+                rows,
+                page_size=batch_size,
+            )
             inserted = cur.rowcount
         conn.commit()
     finally:
@@ -132,20 +143,31 @@ def insert_regime_logs(logs: list[dict], batch_size: int = 500) -> int:
     """
     import psycopg2
     import psycopg2.extras
+
     conn = get_connection()
     inserted = 0
 
     try:
         with conn.cursor() as cur:
             rows = [
-                (_to_py_datetime(l["timestamp"]), l["symbol"], int(l["hmm_state"]), float(l["confidence"]))
-                for l in logs
+                (
+                    _to_py_datetime(log["timestamp"]),
+                    log["symbol"],
+                    int(log["hmm_state"]),
+                    float(log["confidence"]),
+                )
+                for log in logs
             ]
-            psycopg2.extras.execute_values(cur, """
+            psycopg2.extras.execute_values(
+                cur,
+                """
                 INSERT INTO regime_logs (timestamp, symbol, hmm_state, confidence)
                 VALUES %s
                 ON CONFLICT DO NOTHING
-            """, rows, page_size=batch_size)
+            """,
+                rows,
+                page_size=batch_size,
+            )
             inserted = cur.rowcount
         conn.commit()
     finally:

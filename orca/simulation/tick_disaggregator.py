@@ -151,14 +151,16 @@ def disaggregate_1m_to_ticks(
             if tick_vol <= 0:
                 continue
 
-            all_rows.append({
-                "timestamp_ms": int(candle_time.timestamp() * 1000) + ts_offset,
-                "price": price,
-                "bid": bid,
-                "ask": ask,
-                "volume": tick_vol,
-                "symbol": symbol,
-            })
+            all_rows.append(
+                {
+                    "timestamp_ms": int(candle_time.timestamp() * 1000) + ts_offset,
+                    "price": price,
+                    "bid": bid,
+                    "ask": ask,
+                    "volume": tick_vol,
+                    "symbol": symbol,
+                }
+            )
 
     if not all_rows:
         return pd.DataFrame(columns=["timestamp_ms", "price", "bid", "ask", "volume", "symbol"])

@@ -1,6 +1,5 @@
 """Tests for validation functions in orca.simulation.validate."""
 
-
 import numpy as np
 
 from orca.simulation.validate import (

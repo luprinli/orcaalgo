@@ -19,6 +19,7 @@ logger = logging.getLogger("orca.ml.train.exit_model")
 
 try:
     import lightgbm as lgb
+
     HAS_LIGHTGBM = True
 except ImportError:
     lgb = None
@@ -38,9 +39,18 @@ class ExitTrainingResult:
 
 
 FEATURE_NAMES = [
-    "pnl_atr", "stop_distance", "bars_since_entry",
-    "vol_change", "hmm_state", "cvd_trend", "volume_trend",
-    "adx", "mae", "mfe", "hour_sin", "signal_confidence",
+    "pnl_atr",
+    "stop_distance",
+    "bars_since_entry",
+    "vol_change",
+    "hmm_state",
+    "cvd_trend",
+    "volume_trend",
+    "adx",
+    "mae",
+    "mfe",
+    "hour_sin",
+    "signal_confidence",
 ]
 
 

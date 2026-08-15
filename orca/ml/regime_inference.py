@@ -54,6 +54,7 @@ def main() -> None:
 def _predict(model_path: str, X: np.ndarray) -> tuple[np.ndarray, int]:
     try:
         import xgboost as xgb
+
         model = xgb.XGBClassifier()
         model.load_model(model_path)
         probs = model.predict_proba(X)
@@ -72,7 +73,7 @@ def _predict(model_path: str, X: np.ndarray) -> tuple[np.ndarray, int]:
     n_classes = len(model_data.get("classes", [0, 1, 2, 3, 4, 5]))
 
     if len(importances) > 0:
-        logits = np.dot(X, importances[:X.shape[1]])
+        logits = np.dot(X, importances[: X.shape[1]])
         state = int(np.argmax(logits))
         probs = np.zeros((1, n_classes))
         probs[0, state] = 1.0

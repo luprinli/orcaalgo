@@ -41,9 +41,7 @@ def export_sweep_to_pipeline(
         candidates: [{rank, params, metrics}]
     """
     if strategy_name not in STRATEGY_MAP:
-        raise ValueError(
-            f"Unknown strategy '{strategy_name}'. Available: {list(STRATEGY_MAP)}"
-        )
+        raise ValueError(f"Unknown strategy '{strategy_name}'. Available: {list(STRATEGY_MAP)}")
 
     if param_grid is None:
         strategy_fn = STRATEGY_MAP[strategy_name]
@@ -66,27 +64,31 @@ def export_sweep_to_pipeline(
     top = df.nlargest(top_k, metric)
 
     candidates = []
-    for rank, (idx, row) in enumerate(top.iterrows(), 1):
+    for rank, (_idx, row) in enumerate(top.iterrows(), 1):
         params = {}
         for col in df.columns:
             if col not in (metric, "start", "end", "duration", "exposure"):
                 if not col.startswith("_"):
                     params[col] = float(row[col]) if pd.notna(row[col]) else 0.0
 
-        candidates.append({
-            "rank": rank,
-            "params": params,
-            "metrics": {metric: float(row[metric])},
-        })
+        candidates.append(
+            {
+                "rank": rank,
+                "params": params,
+                "metrics": {metric: float(row[metric])},
+            }
+        )
 
     combos = []
     for c in candidates:
-        combos.append({
-            "strategy": strategy_name,
-            "symbol": [symbol],
-            "timeframe": [timeframe],
-            "params": c["params"],
-        })
+        combos.append(
+            {
+                "strategy": strategy_name,
+                "symbol": [symbol],
+                "timeframe": [timeframe],
+                "params": c["params"],
+            }
+        )
 
     return {
         "pipeline": {
@@ -114,8 +116,12 @@ def export_to_file(
 ) -> Path:
     """Export sweep results to a JSON file."""
     result = export_sweep_to_pipeline(
-        symbol=symbol, start=start, end=end,
-        strategy_name=strategy_name, param_grid=param_grid, top_k=top_k,
+        symbol=symbol,
+        start=start,
+        end=end,
+        strategy_name=strategy_name,
+        param_grid=param_grid,
+        top_k=top_k,
     )
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -126,6 +132,7 @@ def export_to_file(
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser(description="Export VBT sweep to Go pipeline JSON")
     p.add_argument("--symbol", default="SPY")
     p.add_argument("--start", default="2022-01-01")
@@ -134,5 +141,7 @@ if __name__ == "__main__":
     p.add_argument("--top-k", type=int, default=20)
     p.add_argument("--output", default="sweep_export.json")
     args = p.parse_args()
-    path = export_to_file(args.symbol, args.start, args.end, args.strategy, args.output, top_k=args.top_k)
+    path = export_to_file(
+        args.symbol, args.start, args.end, args.strategy, args.output, top_k=args.top_k
+    )
     print(f"Exported to {path}")

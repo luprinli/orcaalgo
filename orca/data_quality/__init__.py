@@ -32,11 +32,13 @@ _Candle = Candle
 def _try_import_psycopg():
     try:
         import psycopg
+
         return ("psycopg3", psycopg)
     except ImportError:
         pass
     try:
         import psycopg2
+
         return ("psycopg2", psycopg2)
     except ImportError:
         pass
@@ -55,6 +57,7 @@ def _load_candles_from_db(
     version, pg = _try_import_psycopg()
     if pg is None:
         import logging
+
         logging.getLogger("orca.data_quality").debug("No psycopg available, using synthetic data")
         return _generate_sample_data()
 
@@ -88,6 +91,7 @@ def _load_candles_from_db(
         return candles_by_symbol
     except Exception:
         import logging
+
         logging.getLogger("orca.data_quality").debug(
             "Database query failed, using synthetic data", exc_info=True
         )
@@ -101,16 +105,33 @@ def _load_candles_from_db(
 
 def _generate_sample_data() -> dict:
     symbols = [
-        "EURUSD:1d", "GBPUSD:1d", "USDJPY:1d", "USDCHF:1d",
-        "AUDUSD:1d", "USDCAD:1d", "NZDUSD:1d",
-        "SPX500:1d", "NAS100:1d", "XAUUSD:1d", "BTCUSD:1d", "ETHUSD:1d",
+        "EURUSD:1d",
+        "GBPUSD:1d",
+        "USDJPY:1d",
+        "USDCHF:1d",
+        "AUDUSD:1d",
+        "USDCAD:1d",
+        "NZDUSD:1d",
+        "SPX500:1d",
+        "NAS100:1d",
+        "XAUUSD:1d",
+        "BTCUSD:1d",
+        "ETHUSD:1d",
     ]
     candles_by_symbol: dict = {}
     base_prices = {
-        "EURUSD": 1.08, "GBPUSD": 1.26, "USDJPY": 150.0, "USDCHF": 0.88,
-        "AUDUSD": 0.66, "USDCAD": 1.35, "NZDUSD": 0.61,
-        "SPX500": 5000.0, "NAS100": 17500.0, "XAUUSD": 2300.0,
-        "BTCUSD": 60000.0, "ETHUSD": 3000.0,
+        "EURUSD": 1.08,
+        "GBPUSD": 1.26,
+        "USDJPY": 150.0,
+        "USDCHF": 0.88,
+        "AUDUSD": 0.66,
+        "USDCAD": 1.35,
+        "NZDUSD": 0.61,
+        "SPX500": 5000.0,
+        "NAS100": 17500.0,
+        "XAUUSD": 2300.0,
+        "BTCUSD": 60000.0,
+        "ETHUSD": 3000.0,
     }
     for sym_tf in symbols:
         sym = sym_tf.split(":")[0]

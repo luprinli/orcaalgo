@@ -29,14 +29,15 @@ logger = logging.getLogger("orca.ml.barriers")
 
 
 class BarrierLabel(IntEnum):
-    UPPER_HIT = 1     # win — upper (profit) barrier hit first
-    LOWER_HIT = -1    # loss — lower (stop) barrier hit first
-    TIME_HIT = 0      # time barrier — label determined by return at barrier
+    UPPER_HIT = 1  # win — upper (profit) barrier hit first
+    LOWER_HIT = -1  # loss — lower (stop) barrier hit first
+    TIME_HIT = 0  # time barrier — label determined by return at barrier
 
 
 @dataclass(frozen=True)
 class BarrierConfig:
     """Configuration for triple-barrier labeling."""
+
     profit_factor: float = BARRIER_PROFIT_FACTOR
     stop_factor: float = BARRIER_STOP_FACTOR
     time_horizon: int = BARRIER_TIME_HORIZON
@@ -46,11 +47,12 @@ class BarrierConfig:
 @dataclass(frozen=True)
 class BarrierResult:
     """Result of triple-barrier labeling for a single trade."""
+
     label: BarrierLabel
-    exit_bar: int          # bar index where barrier was hit (relative to entry)
-    exit_price: float      # price at exit
-    return_pct: float      # percentage return at exit
-    hit_barrier: str       # "upper", "lower", or "time"
+    exit_bar: int  # bar index where barrier was hit (relative to entry)
+    exit_price: float  # price at exit
+    return_pct: float  # percentage return at exit
+    hit_barrier: str  # "upper", "lower", or "time"
 
 
 def compute_barriers(
@@ -94,7 +96,7 @@ def triple_barrier_label(
 
     # Estimate sigma from recent returns (20-bar lookback)
     if entry_idx >= 20:
-        lookback = prices[max(0, entry_idx - 20):entry_idx + 1]
+        lookback = prices[max(0, entry_idx - 20) : entry_idx + 1]
         log_returns = np.diff(np.log(lookback[lookback > 0]))
         sigma = float(np.std(log_returns)) if len(log_returns) > 0 else 0.01
     else:
@@ -165,7 +167,10 @@ def batch_triple_barrier_labels(
     results = []
     for i in range(len(entry_prices)):
         result = triple_barrier_label(
-            entry_prices[i], prices, int(entry_indices[i]), config,
+            entry_prices[i],
+            prices,
+            int(entry_indices[i]),
+            config,
         )
         results.append(result)
     return results
@@ -192,7 +197,7 @@ def compute_sigma_from_prices(
     sigma = np.full(len(prices), np.nan)
 
     for i in range(lookback, len(prices)):
-        window = log_returns[i - lookback:i]
+        window = log_returns[i - lookback : i]
         sigma[i] = float(np.std(window))
 
     return sigma

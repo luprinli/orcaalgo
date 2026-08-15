@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from orca.ml.monitoring import (
     ModelHealthReport,
@@ -11,7 +11,6 @@ from orca.ml.monitoring import (
     compute_prediction_distribution,
     generate_health_report,
 )
-from datetime import datetime, timedelta, timezone
 
 
 class TestComputePredictionDistribution:
@@ -48,12 +47,12 @@ class TestComputePredictionDistribution:
 
 class TestCheckModelStaleness:
     def test_stale(self):
-        trained = datetime.now(timezone.utc) - timedelta(days=10)
+        trained = datetime.now(UTC) - timedelta(days=10)
         alert = check_model_staleness(trained, warn_days=7, critical_days=30)
         assert alert is not None
 
     def test_critical(self):
-        trained = datetime.now(timezone.utc) - timedelta(days=45)
+        trained = datetime.now(UTC) - timedelta(days=45)
         alert = check_model_staleness(trained, warn_days=7, critical_days=30)
         assert alert is not None
 
@@ -100,7 +99,7 @@ class TestGenerateHealthReport:
         report = generate_health_report(
             model_name="test_model",
             model_version="1.0.0",
-            last_trained_at=datetime.now(timezone.utc),
+            last_trained_at=datetime.now(UTC),
             recent_pwins=pwins,
             recent_accepted=accepted,
             historical_win_rate=0.60,
@@ -118,7 +117,7 @@ class TestGenerateHealthReport:
         report = generate_health_report(
             model_name="stale_model",
             model_version="1.0.0",
-            last_trained_at=datetime.now(timezone.utc) - timedelta(days=60),
+            last_trained_at=datetime.now(UTC) - timedelta(days=60),
             recent_pwins=pwins,
             recent_accepted=[True] * 10,
             historical_win_rate=0.65,

@@ -29,10 +29,7 @@ def _build_graph_payload(ir: StrategyIRV04) -> dict[str, Any]:
 
 
 def _build_param_payload(ir: StrategyIRV04) -> dict[str, Any]:
-    nodes = [
-        {"id": n.id, "params": dict(sorted(n.params.items()))}
-        for n in ir.strategy.nodes
-    ]
+    nodes = [{"id": n.id, "params": dict(sorted(n.params.items()))} for n in ir.strategy.nodes]
     return {
         "ir_version": ir.ir_version,
         "canonical_version": ir.canonical_version,

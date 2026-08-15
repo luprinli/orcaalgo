@@ -56,7 +56,9 @@ class TestTripleBarrierLabel:
         prices = np.full(30, 100.0)
         prices[25] = 99.0
         result = triple_barrier_label(
-            100.0, prices, 0,
+            100.0,
+            prices,
+            0,
             BarrierConfig(time_horizon=20, min_return=0.0),
         )
         assert result.hit_barrier == "time"

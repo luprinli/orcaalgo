@@ -14,7 +14,9 @@ import pytest
 
 API_BASE = f"{os.environ.get('ORCA_API_URL', 'http://localhost:8080')}/api/v1"
 UI_BASE = os.environ.get("ORCA_UI_URL", "http://localhost:5173")
-ADMIN_PASSWORD = os.environ.get("ORCA_ADMIN_PASSWORD", "dev-admin-password-do-not-use-in-production")
+ADMIN_PASSWORD = os.environ.get(
+    "ORCA_ADMIN_PASSWORD", "dev-admin-password-do-not-use-in-production"
+)
 AUTH = {"username": "admin", "password": ADMIN_PASSWORD}
 
 

@@ -114,15 +114,19 @@ class TestKellyWithAttenuators:
 
     def test_per_trade_cap_limit(self):
         result = kelly_with_attenuators(
-            p=0.90, price=0.30, side="yes",
-            multiplier=1.0, edge_discount=0.0,
+            p=0.90,
+            price=0.30,
+            side="yes",
+            multiplier=1.0,
+            edge_discount=0.0,
             per_trade_cap_pct=0.05,
         )
         assert result.per_trade_cap <= 0.05
 
     def test_exposure_headroom_limit(self):
         result = kelly_with_attenuators(
-            p=0.60, price=0.50,
+            p=0.60,
+            price=0.50,
             total_exposure_cap_pct=0.30,
             current_exposure_pct=0.28,
         )
@@ -130,7 +134,8 @@ class TestKellyWithAttenuators:
 
     def test_exposure_headroom_saturated(self):
         result = kelly_with_attenuators(
-            p=0.60, price=0.50,
+            p=0.60,
+            price=0.50,
             total_exposure_cap_pct=0.30,
             current_exposure_pct=0.35,
         )
@@ -143,9 +148,12 @@ class TestKellyWithAttenuators:
 
     def test_all_attenuators_applied(self):
         result = kelly_with_attenuators(
-            p=0.60, price=0.50,
-            multiplier=0.25, edge_discount=0.02,
-            per_trade_cap_pct=0.02, total_exposure_cap_pct=0.30,
+            p=0.60,
+            price=0.50,
+            multiplier=0.25,
+            edge_discount=0.02,
+            per_trade_cap_pct=0.02,
+            total_exposure_cap_pct=0.30,
             current_exposure_pct=0.10,
         )
         raw = result.raw_kelly
@@ -202,7 +210,9 @@ class TestKellyRegimeMultipliers:
     def test_kelly_attenuators_still_apply(self):
         """Even with regime-specific Kelly, all three attenuators must apply."""
         result = kelly_with_attenuators(
-            p=0.65, price=0.50, side="yes",
+            p=0.65,
+            price=0.50,
+            side="yes",
             multiplier=0.15,
             edge_discount=0.02,
             per_trade_cap_pct=0.02,

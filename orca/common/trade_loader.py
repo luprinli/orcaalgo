@@ -35,7 +35,8 @@ def load_trades_from_db_or_synthetic(
         try:
             result = subprocess.run(
                 [
-                    "python", "-c",
+                    "python",
+                    "-c",
                     f"""
 import json, sys
 sys.path.insert(0, ".")
@@ -47,7 +48,9 @@ except Exception:
     print(json.dumps([]))
 """,
                 ],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
             if result.stdout.strip():
                 return json.loads(result.stdout)
@@ -69,26 +72,32 @@ def _generate_synthetic_trades(count: int, generator: str) -> list[dict]:
             entry = random.uniform(20, 500)
             conf = random.uniform(0.5, 0.9)
             pnl = random.uniform(-100, 200)
-            samples.append({
-                "symbol": s,
-                "side": side,
-                "entry_price": round(entry, 2),
-                "exit_price": round(entry * (1 + pnl / (entry * 10)), 2),
-                "quantity": random.randint(1, 100),
-                "pnl": round(pnl, 2),
-                "cost": round(entry * random.randint(1, 100), 2),
-                "confidence": round(conf, 4),
-                "placed_at": (datetime.now(UTC) - timedelta(days=random.randint(1, 90))).isoformat(),
-                "outcome": "win" if pnl > 0 else "loss",
-            })
+            samples.append(
+                {
+                    "symbol": s,
+                    "side": side,
+                    "entry_price": round(entry, 2),
+                    "exit_price": round(entry * (1 + pnl / (entry * 10)), 2),
+                    "quantity": random.randint(1, 100),
+                    "pnl": round(pnl, 2),
+                    "cost": round(entry * random.randint(1, 100), 2),
+                    "confidence": round(conf, 4),
+                    "placed_at": (
+                        datetime.now(UTC) - timedelta(days=random.randint(1, 90))
+                    ).isoformat(),
+                    "outcome": "win" if pnl > 0 else "loss",
+                }
+            )
     elif generator == "calibration":
         for _ in range(count):
             p = random.random()
             outcome = "win" if random.random() < p else "loss"
-            samples.append({
-                "confidence": p,
-                "outcome": outcome,
-                "side": random.choice(["BUY", "SELL"]),
-            })
+            samples.append(
+                {
+                    "confidence": p,
+                    "outcome": outcome,
+                    "side": random.choice(["BUY", "SELL"]),
+                }
+            )
 
     return samples

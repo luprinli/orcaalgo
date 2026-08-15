@@ -42,37 +42,64 @@ DEFAULT_AVG_DURATION: dict[int, int] = {
 
 # Transition matrix: rows = from_regime, cols = to_regime
 # CANONICAL — must match internal/risk/hmm.go DefaultHMM() and orca/train/hmm.py _generate_synthetic_returns()
-DEFAULT_TRANSITION_MATRIX: np.ndarray = np.array([
-    [0.85, 0.10, 0.04, 0.01],   # Calm
-    [0.08, 0.80, 0.10, 0.02],   # Trending
-    [0.03, 0.10, 0.80, 0.07],   # HighVol
-    [0.01, 0.02, 0.10, 0.87],   # Crisis
-], dtype=np.float64)
+DEFAULT_TRANSITION_MATRIX: np.ndarray = np.array(
+    [
+        [0.85, 0.10, 0.04, 0.01],  # Calm
+        [0.08, 0.80, 0.10, 0.02],  # Trending
+        [0.03, 0.10, 0.80, 0.07],  # HighVol
+        [0.01, 0.02, 0.10, 0.87],  # Crisis
+    ],
+    dtype=np.float64,
+)
 
 # Per-regime parameter presets (can be overridden by calibration)
 DEFAULT_REGIME_PARAMS: dict[int, dict[str, Any]] = {
     REGIME_CALM: {
-        "mu": 0.0002, "sigma": 0.008, "jump_intensity": 0.0,
-        "jump_mean": 0.0, "jump_std": 0.0, "volume_mult": 1.0,
-        "spread_mult": 1.0, "correlation_mult": 1.0, "fill_prob": 1.0,
+        "mu": 0.0002,
+        "sigma": 0.008,
+        "jump_intensity": 0.0,
+        "jump_mean": 0.0,
+        "jump_std": 0.0,
+        "volume_mult": 1.0,
+        "spread_mult": 1.0,
+        "correlation_mult": 1.0,
+        "fill_prob": 1.0,
         "trend_bias": 0.0,
     },
     REGIME_TRENDING: {
-        "mu": 0.0008, "sigma": 0.014, "jump_intensity": 0.02,
-        "jump_mean": 0.0, "jump_std": 0.01, "volume_mult": 1.1,
-        "spread_mult": 1.0, "correlation_mult": 1.0, "fill_prob": 0.98,
+        "mu": 0.0008,
+        "sigma": 0.014,
+        "jump_intensity": 0.02,
+        "jump_mean": 0.0,
+        "jump_std": 0.01,
+        "volume_mult": 1.1,
+        "spread_mult": 1.0,
+        "correlation_mult": 1.0,
+        "fill_prob": 0.98,
         "trend_bias": 0.6,
     },
     REGIME_HIGH_VOL: {
-        "mu": -0.0003, "sigma": 0.028, "jump_intensity": 0.08,
-        "jump_mean": -0.005, "jump_std": 0.025, "volume_mult": 1.3,
-        "spread_mult": 2.0, "correlation_mult": 1.5, "fill_prob": 0.90,
+        "mu": -0.0003,
+        "sigma": 0.028,
+        "jump_intensity": 0.08,
+        "jump_mean": -0.005,
+        "jump_std": 0.025,
+        "volume_mult": 1.3,
+        "spread_mult": 2.0,
+        "correlation_mult": 1.5,
+        "fill_prob": 0.90,
         "trend_bias": -0.3,
     },
     REGIME_CRISIS: {
-        "mu": -0.0015, "sigma": 0.065, "jump_intensity": 0.25,
-        "jump_mean": -0.015, "jump_std": 0.050, "volume_mult": 0.5,
-        "spread_mult": 3.0, "correlation_mult": 2.0, "fill_prob": 0.70,
+        "mu": -0.0015,
+        "sigma": 0.065,
+        "jump_intensity": 0.25,
+        "jump_mean": -0.015,
+        "jump_std": 0.050,
+        "volume_mult": 0.5,
+        "spread_mult": 3.0,
+        "correlation_mult": 2.0,
+        "fill_prob": 0.70,
         "trend_bias": -0.8,
     },
 }
@@ -81,6 +108,7 @@ DEFAULT_REGIME_PARAMS: dict[int, dict[str, Any]] = {
 @dataclass(frozen=True)
 class RegimeParams:
     """Parameters for a single regime state."""
+
     regime_id: int
     name: str
     mu: float
@@ -100,12 +128,17 @@ class RegimeParams:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "regime_id": self.regime_id, "name": self.name,
-            "mu": self.mu, "sigma": self.sigma,
+            "regime_id": self.regime_id,
+            "name": self.name,
+            "mu": self.mu,
+            "sigma": self.sigma,
             "jump_intensity": self.jump_intensity,
-            "jump_mean": self.jump_mean, "jump_std": self.jump_std,
-            "volume_mult": self.volume_mult, "spread_mult": self.spread_mult,
-            "correlation_mult": self.correlation_mult, "fill_prob": self.fill_prob,
+            "jump_mean": self.jump_mean,
+            "jump_std": self.jump_std,
+            "volume_mult": self.volume_mult,
+            "spread_mult": self.spread_mult,
+            "correlation_mult": self.correlation_mult,
+            "fill_prob": self.fill_prob,
             "trend_bias": self.trend_bias,
             "annualized_vol": self.annualized_vol,
         }
@@ -123,11 +156,15 @@ def regime_params_for_state(
     return RegimeParams(
         regime_id=regime_id,
         name=REGIME_NAMES.get(regime_id, "Unknown"),
-        mu=params["mu"], sigma=params["sigma"],
+        mu=params["mu"],
+        sigma=params["sigma"],
         jump_intensity=params["jump_intensity"],
-        jump_mean=params["jump_mean"], jump_std=params["jump_std"],
-        volume_mult=params["volume_mult"], spread_mult=params["spread_mult"],
-        correlation_mult=params["correlation_mult"], fill_prob=params["fill_prob"],
+        jump_mean=params["jump_mean"],
+        jump_std=params["jump_std"],
+        volume_mult=params["volume_mult"],
+        spread_mult=params["spread_mult"],
+        correlation_mult=params["correlation_mult"],
+        fill_prob=params["fill_prob"],
         trend_bias=params["trend_bias"],
     )
 
@@ -185,10 +222,7 @@ class RegimeSequenceGenerator:
             labels[t] = current
 
         if start_date is not None:
-            timestamps = np.array([
-                start_date + timedelta(days=i)
-                for i in range(n_days)
-            ])
+            timestamps = np.array([start_date + timedelta(days=i) for i in range(n_days)])
         else:
             timestamps = np.arange(n_days, dtype=np.float64)
 

@@ -42,19 +42,21 @@ def walk_forward_validate(
         best_is = _find_best(is_df, param_grid)
         oos_metrics = _evaluate_params(oos_df, best_is["params"])
 
-        windows.append({
-            "window": window_num,
-            "train_start": str(is_df.index[0])[:10],
-            "train_end": str(is_df.index[-1])[:10],
-            "test_start": str(oos_df.index[0])[:10],
-            "test_end": str(oos_df.index[-1])[:10],
-            "is_sharpe": best_is.get("sharpe_ratio", 0),
-            "oos_sharpe": oos_metrics.get("sharpe_ratio", 0),
-            "oos_win_rate": oos_metrics.get("win_rate", 0),
-            "oos_return": oos_metrics.get("total_return", 0),
-            "oos_trades": oos_metrics.get("num_trades", 0),
-            "best_params": best_is["params"],
-        })
+        windows.append(
+            {
+                "window": window_num,
+                "train_start": str(is_df.index[0])[:10],
+                "train_end": str(is_df.index[-1])[:10],
+                "test_start": str(oos_df.index[0])[:10],
+                "test_end": str(oos_df.index[-1])[:10],
+                "is_sharpe": best_is.get("sharpe_ratio", 0),
+                "oos_sharpe": oos_metrics.get("sharpe_ratio", 0),
+                "oos_win_rate": oos_metrics.get("win_rate", 0),
+                "oos_return": oos_metrics.get("total_return", 0),
+                "oos_trades": oos_metrics.get("num_trades", 0),
+                "best_params": best_is["params"],
+            }
+        )
         start += step_size
         window_num += 1
 
@@ -84,7 +86,7 @@ def _find_best(df, param_grid: dict) -> dict:
     values = list(param_grid.values())
     best = {"sharpe_ratio": -999, "params": {}}
     for combo in product(*values):
-        params = dict(zip(keys, combo))
+        params = dict(zip(keys, combo, strict=False))
         metrics = _evaluate_params(df, params)
         if metrics.get("sharpe_ratio", -999) > best["sharpe_ratio"]:
             best = {"params": params, **metrics}

@@ -19,8 +19,8 @@ def fetch_fear_greed_index(limit: int = 0) -> list[dict[str, Any]]:
     Returns:
         List of dicts with {timestamp, value, value_classification}.
     """
-    import urllib.request
     import json as _json
+    import urllib.request
 
     url = f"https://api.alternative.me/fng/?limit={limit}&format=json"
     try:
@@ -35,7 +35,7 @@ def fetch_fear_greed_index(limit: int = 0) -> list[dict[str, Any]]:
         value_str = entry.get("value", "50")
         classification = entry.get("value_classification", "Neutral")
 
-        ts = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
+        ts = datetime.datetime.fromtimestamp(timestamp, tz=datetime.UTC)
         value = int(value_str)
         score = value
 
@@ -49,11 +49,13 @@ def fetch_fear_greed_index(limit: int = 0) -> list[dict[str, Any]]:
         }
         label = label_map.get(classification, "Neutral")
 
-        results.append({
-            "timestamp": ts,
-            "score": score,
-            "label": label,
-        })
+        results.append(
+            {
+                "timestamp": ts,
+                "score": score,
+                "label": label,
+            }
+        )
 
     return results
 
@@ -73,6 +75,7 @@ def backfill_sentiment(
     """
     import psycopg2
     import psycopg2.extras
+
     from orca.data.db_integration import get_connection
 
     stats = {"rows_inserted": 0, "rows_skipped": 0, "errors": []}
@@ -90,19 +93,20 @@ def backfill_sentiment(
 
     conn = get_connection()
     try:
-        rows = [
-            (e["timestamp"], e["score"], e["label"])
-            for e in entries
-            if 0 <= e["score"] <= 100
-        ]
+        rows = [(e["timestamp"], e["score"], e["label"]) for e in entries if 0 <= e["score"] <= 100]
         with conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, """
+            psycopg2.extras.execute_values(
+                cur,
+                """
                 INSERT INTO sentiment_logs (timestamp, score, label)
                 VALUES %s
                 ON CONFLICT (timestamp) DO UPDATE SET
                     score = EXCLUDED.score,
                     label = EXCLUDED.label
-            """, rows, page_size=500)
+            """,
+                rows,
+                page_size=500,
+            )
             stats["rows_inserted"] = cur.rowcount
         conn.commit()
         if verbose:

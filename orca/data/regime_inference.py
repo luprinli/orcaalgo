@@ -38,7 +38,7 @@ def infer_regimes(
     confidences = np.zeros(n, dtype=np.float64)
 
     for i in range(lookback, n):
-        window_returns = log_returns[i - lookback:i]
+        window_returns = log_returns[i - lookback : i]
         ann_vol = np.std(window_returns) * np.sqrt(252)
         total_return = close_prices[i] / close_prices[i - lookback] - 1.0
 
@@ -86,10 +86,12 @@ def build_regime_logs(
         labels, confs = infer_regimes(prices, timestamps, lookback)
         for i in range(len(labels)):
             if confs[i] > 0:
-                logs.append({
-                    "timestamp": timestamps[i],
-                    "symbol": symbol,
-                    "hmm_state": int(labels[i]),
-                    "confidence": float(confs[i]),
-                })
+                logs.append(
+                    {
+                        "timestamp": timestamps[i],
+                        "symbol": symbol,
+                        "hmm_state": int(labels[i]),
+                        "confidence": float(confs[i]),
+                    }
+                )
     return logs

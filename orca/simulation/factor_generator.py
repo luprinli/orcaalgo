@@ -12,6 +12,7 @@ import pandas as pd
 @dataclass(frozen=True)
 class FactorConfig:
     """Regime-specific factor parameters."""
+
     trend_phi: float
     mr_theta: float
     vol_sigma: float
@@ -62,9 +63,7 @@ class FactorGenerator:
             residual = rng.normal(0, cfg.vol_sigma)
             beta_trend = 0.5
             beta_mr = 0.3
-            log_returns[t] = (
-                cfg.drift + beta_trend * trend[t] + beta_mr * mr[t] + residual
-            )
+            log_returns[t] = cfg.drift + beta_trend * trend[t] + beta_mr * mr[t] + residual
 
         return log_returns
 
@@ -72,7 +71,7 @@ class FactorGenerator:
         """Generate price path from log-returns. Returns array where prices[0] == start_price."""
         log_returns = self.generate_log_returns()
         log_prices = np.insert(np.cumsum(log_returns), 0, 0) + np.log(start_price)
-        return np.exp(log_prices)[:self.n]
+        return np.exp(log_prices)[: self.n]
 
 
 def generate_1m_candles_from_factors(
@@ -151,16 +150,18 @@ def generate_1m_candles_from_factors(
 
         price = minute_prices[-1]
 
-    df = pd.DataFrame({
-        "timestamp": times,
-        "open": opens,
-        "high": highs,
-        "low": lows,
-        "close": closes,
-        "volume": volumes,
-        "regime_label": regimes,
-        "data_source": "synthetic",
-        "symbol": symbol,
-        "timeframe": "1m",
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": times,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+            "regime_label": regimes,
+            "data_source": "synthetic",
+            "symbol": symbol,
+            "timeframe": "1m",
+        }
+    )
     return df

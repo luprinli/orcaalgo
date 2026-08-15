@@ -3,7 +3,7 @@
 Purely additive integration — nothing in orca/optimize/ or internal/ is modified.
 VectorBT handles high-throughput parameter discovery (1000+ combos, multi-symbol,
 multi-timeframe grid/random search) and exports narrowed candidate ranges to GKR YAML.
-The Go engine handles Stages 2–5 (refined search, walk-forward, multi-metric gate,
+The Go engine handles Stages 2-5 (refined search, walk-forward, multi-metric gate,
 live deployment).
 
 Modules:

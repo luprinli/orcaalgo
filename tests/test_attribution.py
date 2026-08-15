@@ -20,17 +20,19 @@ def _make_trades(n: int, seed: int = 42) -> list[dict]:
         entry = random.uniform(20, 500)
         conf = random.uniform(0.5, 0.9)
         pnl = random.uniform(-100, 200)
-        trades.append({
-            "symbol": s,
-            "side": side,
-            "entry_price": round(entry, 2),
-            "exit_price": round(entry * (1 + pnl / (entry * 10)), 2),
-            "quantity": random.randint(1, 100),
-            "pnl": round(pnl, 2),
-            "cost": round(entry * random.randint(1, 100), 2),
-            "confidence": round(conf, 4),
-            "outcome": "win" if pnl > 0 else "loss",
-        })
+        trades.append(
+            {
+                "symbol": s,
+                "side": side,
+                "entry_price": round(entry, 2),
+                "exit_price": round(entry * (1 + pnl / (entry * 10)), 2),
+                "quantity": random.randint(1, 100),
+                "pnl": round(pnl, 2),
+                "cost": round(entry * random.randint(1, 100), 2),
+                "confidence": round(conf, 4),
+                "outcome": "win" if pnl > 0 else "loss",
+            }
+        )
     return trades
 
 
@@ -71,13 +73,40 @@ class TestComputeSlice:
         assert stats.total_pnl == -30.0
 
     def test_sufficient_data_property(self):
-        stats_small = SliceStats(n=10, wins=5, hit_rate=0.5, hit_rate_ci_low=0.2, hit_rate_ci_high=0.8, total_pnl=100.0, total_cost=1000.0, roi=0.1)
+        stats_small = SliceStats(
+            n=10,
+            wins=5,
+            hit_rate=0.5,
+            hit_rate_ci_low=0.2,
+            hit_rate_ci_high=0.8,
+            total_pnl=100.0,
+            total_cost=1000.0,
+            roi=0.1,
+        )
         assert stats_small.sufficient_data is False
-        stats_large = SliceStats(n=50, wins=25, hit_rate=0.5, hit_rate_ci_low=0.3, hit_rate_ci_high=0.7, total_pnl=500.0, total_cost=5000.0, roi=0.1)
+        stats_large = SliceStats(
+            n=50,
+            wins=25,
+            hit_rate=0.5,
+            hit_rate_ci_low=0.3,
+            hit_rate_ci_high=0.7,
+            total_pnl=500.0,
+            total_cost=5000.0,
+            roi=0.1,
+        )
         assert stats_large.sufficient_data is True
 
     def test_avg_win(self):
-        stats = SliceStats(n=4, wins=2, hit_rate=0.5, hit_rate_ci_low=0.1, hit_rate_ci_high=0.9, total_pnl=200.0, total_cost=1000.0, roi=0.2)
+        stats = SliceStats(
+            n=4,
+            wins=2,
+            hit_rate=0.5,
+            hit_rate_ci_low=0.1,
+            hit_rate_ci_high=0.9,
+            total_pnl=200.0,
+            total_cost=1000.0,
+            roi=0.2,
+        )
         assert stats.avg_win == 50.0
 
 
@@ -98,7 +127,7 @@ class TestAttributePnl:
         trades = _make_trades(50)
         report = attribute_pnl(trades)
         assert len(report.by_side) >= 1
-        for side_key, stats in report.by_side.items():
+        for _side_key, stats in report.by_side.items():
             assert isinstance(stats, SliceStats)
             assert stats.n > 0
 

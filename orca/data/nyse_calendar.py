@@ -12,16 +12,16 @@ from datetime import date
 def _year_holidays(year: int) -> list[date]:
     """Return NYSE holiday dates for a given year."""
     return [
-        date(year, 1, 1),   # New Year's Day
-        _nth_weekday(year, 1, 1, 3),   # MLK Day (3rd Monday of January)
-        _nth_weekday(year, 2, 1, 3),   # Presidents Day (3rd Monday of February)
-        _last_monday(year, 5),          # Memorial Day (last Monday of May)
-        _juneteenth(year),              # Juneteenth
-        date(year, 7, 4),               # Independence Day
-        _nth_weekday(year, 9, 1, 1),   # Labor Day (1st Monday of September)
+        date(year, 1, 1),  # New Year's Day
+        _nth_weekday(year, 1, 1, 3),  # MLK Day (3rd Monday of January)
+        _nth_weekday(year, 2, 1, 3),  # Presidents Day (3rd Monday of February)
+        _last_monday(year, 5),  # Memorial Day (last Monday of May)
+        _juneteenth(year),  # Juneteenth
+        date(year, 7, 4),  # Independence Day
+        _nth_weekday(year, 9, 1, 1),  # Labor Day (1st Monday of September)
         _nth_weekday(year, 11, 4, 4),  # Thanksgiving (4th Thursday of November)
-        date(year, 12, 25),             # Christmas Day
-        _good_friday(year),             # Good Friday
+        date(year, 12, 25),  # Christmas Day
+        _good_friday(year),  # Good Friday
     ]
 
 
@@ -32,6 +32,7 @@ def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
     n: 1-based occurrence (1=first, 4=fourth)
     """
     from calendar import monthrange
+
     first_day, days_in_month = monthrange(year, month)
     day = 1 + (weekday - first_day) % 7 + (n - 1) * 7
     if day > days_in_month:
@@ -42,6 +43,7 @@ def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
 def _last_monday(year: int, month: int) -> date:
     """Return the last Monday of a given month."""
     from calendar import monthrange
+
     _, days_in_month = monthrange(year, month)
     last_day = date(year, month, days_in_month)
     offset = (last_day.weekday() - 0) % 7
@@ -70,10 +72,10 @@ def _good_friday(year: int) -> date:
     h = (19 * a + b - d - g + 15) % 30
     i = c // 4
     k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
+    ll = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * ll) // 451
+    month = (h + ll - 7 * m + 114) // 31
+    day = ((h + ll - 7 * m + 114) % 31) + 1
     easter = date(year, month, day)
     return easter - date.resolution * 2  # Good Friday = Easter Sunday - 2 days
 
@@ -119,6 +121,7 @@ def get_trading_days(start: date, end: date) -> list[date]:
         List of trading days (Mon-Fri, excluding NYSE holidays).
     """
     import datetime as _datetime
+
     days = []
     current = start
     while current <= end:

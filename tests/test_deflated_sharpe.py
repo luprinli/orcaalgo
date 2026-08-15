@@ -52,9 +52,7 @@ def test_deflated_sharpe_ratio_single_trial_equals_psr():
     # With one trial there is no deflation: DSR == PSR against zero.
     result = deflated_sharpe_ratio(0.5, 100, n_trials=1)
     assert abs(result["expected_max_sharpe"]) < 1e-15
-    assert abs(
-        result["deflated_sharpe_ratio"] - result["probabilistic_sharpe_ratio"]
-    ) < 1e-12
+    assert abs(result["deflated_sharpe_ratio"] - result["probabilistic_sharpe_ratio"]) < 1e-12
 
 
 def test_minimum_track_record_length_non_positive_edge():
@@ -77,12 +75,14 @@ def test_cscv_pbo_low_for_genuine_strategy():
     rng = np.random.default_rng(7)
     t = 400
     # Strategy 0 has strong genuine drift; strategies 1..3 are pure noise.
-    returns = np.column_stack([
-        rng.normal(0.004, 0.01, t),
-        rng.normal(0.0, 0.01, t),
-        rng.normal(0.0, 0.01, t),
-        rng.normal(0.0, 0.01, t),
-    ])
+    returns = np.column_stack(
+        [
+            rng.normal(0.004, 0.01, t),
+            rng.normal(0.0, 0.01, t),
+            rng.normal(0.0, 0.01, t),
+            rng.normal(0.0, 0.01, t),
+        ]
+    )
     result = cscv_pbo(returns, n_splits=16, seed=1)
     assert result["n_combinations"] > 0
     assert result["pbo"] < 0.1

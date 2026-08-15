@@ -17,7 +17,11 @@ def test_kelly_never_exceeds_cap():
     ]
     for p, price in test_cases:
         result = kelly_with_attenuators(
-            p=p, price=price, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+            p=p,
+            price=price,
+            side="yes",
+            multiplier=0.25,
+            per_trade_cap_pct=0.02,
         )
         assert result.final_allocation <= 0.02, (
             f"Size {result.final_allocation} exceeded cap for p={p}, price={price}"
@@ -29,12 +33,16 @@ def test_extreme_decimals():
     import sys
 
     from orca.sizing.kelly import kelly_with_attenuators
+
     tiny = sys.float_info.min
-    huge = sys.float_info.max
 
     try:
         result = kelly_with_attenuators(
-            p=tiny, price=0.5, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+            p=tiny,
+            price=0.5,
+            side="yes",
+            multiplier=0.25,
+            per_trade_cap_pct=0.02,
         )
         assert result.final_allocation >= 0
     except (ValueError, OverflowError):
@@ -42,7 +50,11 @@ def test_extreme_decimals():
 
     try:
         result = kelly_with_attenuators(
-            p=0.5, price=1 - tiny, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+            p=0.5,
+            price=1 - tiny,
+            side="yes",
+            multiplier=0.25,
+            per_trade_cap_pct=0.02,
         )
         assert result.final_allocation >= 0
     except (ValueError, OverflowError, ZeroDivisionError):

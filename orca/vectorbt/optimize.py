@@ -100,10 +100,12 @@ def _sweep_vectorbt(
         for i in range(int(np.prod(shape))):
             idx_tuple = np.unravel_index(i, shape)
             combo = dict(zip(param_grid.keys(), idx_tuple, strict=False))
-            all_results.append({
-                "params": combo,
-                "sharpe_ratio": round(float(results[metric].values.flat[i]), 4),
-            })
+            all_results.append(
+                {
+                    "params": combo,
+                    "sharpe_ratio": round(float(results[metric].values.flat[i]), 4),
+                }
+            )
 
         return {
             "strategy_id": strategy_name,
@@ -150,14 +152,8 @@ def _extract_vbt_metrics(results, best_idx) -> dict[str, Any]:
     """Extract metrics in the standard format matching sweeper.py output."""
     return {
         "sharpe_ratio": round(float(results.get("sharpe", pd.Series([0])).iloc[0]), 4),
-        "max_drawdown": round(
-            float(results.get("max_drawdown", pd.Series([0])).iloc[0]), 2
-        ),
-        "total_return": round(
-            float(results.get("total_return", pd.Series([0])).iloc[0]), 2
-        ),
-        "win_rate": round(
-            float(results.get("win_rate", pd.Series([0])).iloc[0]), 1
-        ),
+        "max_drawdown": round(float(results.get("max_drawdown", pd.Series([0])).iloc[0]), 2),
+        "total_return": round(float(results.get("total_return", pd.Series([0])).iloc[0]), 2),
+        "win_rate": round(float(results.get("win_rate", pd.Series([0])).iloc[0]), 1),
         "num_trades": int(results.get("trades", pd.Series([0])).iloc[0]),
     }

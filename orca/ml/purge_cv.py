@@ -41,6 +41,7 @@ class PurgedKFold:
         n_splits: Number of folds.
         embargo_pct: Fraction of samples to embargo after test boundary.
     """
+
     n_splits: int = CV_N_SPLITS
     embargo_pct: float = CV_EMBARGO_PCT
 
@@ -70,9 +71,7 @@ class PurgedKFold:
         """
         n_samples = len(X)
         if n_samples < self.n_splits * 2:
-            raise ValueError(
-                f"Too few samples ({n_samples}) for {self.n_splits} splits"
-            )
+            raise ValueError(f"Too few samples ({n_samples}) for {self.n_splits} splits")
 
         # Determine indices in temporal order
         if timestamps is not None:
@@ -122,7 +121,10 @@ class PurgedKFold:
 
             logger.debug(
                 "Fold %d: train=%d samples test=%d samples embargo=%d purge=%s",
-                k, len(train_idx), len(test_idx), embargo_samples,
+                k,
+                len(train_idx),
+                len(test_idx),
+                embargo_samples,
                 "t1" if t1 is not None else "none",
             )
 
@@ -173,12 +175,14 @@ class PurgedKFold:
                 logger.warning("Fold %d: empty set, skipping", k)
                 continue
 
-            folds.append(PurgedFold(
-                train_indices=train_idx,
-                test_indices=test_idx,
-                train_start=timestamps[train_idx[0]] if timestamps is not None else None,
-                test_start=timestamps[test_idx[0]] if timestamps is not None else None,
-            ))
+            folds.append(
+                PurgedFold(
+                    train_indices=train_idx,
+                    test_indices=test_idx,
+                    train_start=timestamps[train_idx[0]] if timestamps is not None else None,
+                    test_start=timestamps[test_idx[0]] if timestamps is not None else None,
+                )
+            )
 
         return folds
 

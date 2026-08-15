@@ -1,6 +1,5 @@
 """Maps OrcaAlgo strategy IDs to VectorBT indicator configurations."""
 
-
 STRATEGY_INDICATORS: dict[str, dict] = {
     "intraday_mr": {
         "description": "RSI-based mean reversion with entry/exit thresholds",
@@ -37,6 +36,7 @@ STRATEGY_INDICATORS: dict[str, dict] = {
         },
     },
 }
+
 
 def get_config(strategy_id: str) -> dict:
     if strategy_id not in STRATEGY_INDICATORS:

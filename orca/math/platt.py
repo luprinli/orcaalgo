@@ -60,7 +60,9 @@ def platt_scale(
         p_cal_val = np.clip(p_cal_val, EPS, 1 - EPS)
         val_brier = brier_score(list(p_cal_val), list(val_y.astype(int)))
         raw_val_brier = brier_score(list(val_raw_p), list(val_y.astype(int)))
-        improvement = ((raw_val_brier - val_brier) / raw_val_brier * 100) if raw_val_brier > 0 else 0.0
+        improvement = (
+            ((raw_val_brier - val_brier) / raw_val_brier * 100) if raw_val_brier > 0 else 0.0
+        )
     else:
         val_brier = train_brier
         improvement = ((raw_brier - train_brier) / raw_brier * 100) if raw_brier > 0 else 0.0

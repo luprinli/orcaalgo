@@ -34,7 +34,12 @@ def ks_test_synthetic_vs_real(
 ) -> dict[str, Any]:
     """Kolmogorov-Smirnov two-sample test on daily returns."""
     if len(synthetic_returns) < 5 or len(real_returns) < 5:
-        return {"passed": False, "statistic": 1.0, "p_value": 0.0, "detail": "Insufficient data for KS test"}
+        return {
+            "passed": False,
+            "statistic": 1.0,
+            "p_value": 0.0,
+            "detail": "Insufficient data for KS test",
+        }
 
     stat, p_value = kstest(synthetic_returns, real_returns)
     passed = p_value > 0.05
@@ -51,8 +56,12 @@ def autocorrelation_check(
     syn_sq = synthetic_returns**2
     real_sq = real_returns**2
 
-    syn_acf = np.array([np.corrcoef(syn_sq[:-lag], syn_sq[lag:])[0, 1] for lag in range(1, max_lag)])
-    real_acf = np.array([np.corrcoef(real_sq[:-lag], real_sq[lag:])[0, 1] for lag in range(1, max_lag)])
+    syn_acf = np.array(
+        [np.corrcoef(syn_sq[:-lag], syn_sq[lag:])[0, 1] for lag in range(1, max_lag)]
+    )
+    real_acf = np.array(
+        [np.corrcoef(real_sq[:-lag], real_sq[lag:])[0, 1] for lag in range(1, max_lag)]
+    )
 
     syn_acf = syn_acf[np.isfinite(syn_acf)]
     real_acf = real_acf[np.isfinite(real_acf)]
@@ -60,14 +69,12 @@ def autocorrelation_check(
     if len(syn_acf) < 2:
         return {"passed": False, "detail": "Insufficient valid ACF values"}
 
-    rmse = float(np.sqrt(np.mean((syn_acf - real_acf[:len(syn_acf)]) ** 2)))
+    rmse = float(np.sqrt(np.mean((syn_acf - real_acf[: len(syn_acf)]) ** 2)))
     passed = rmse < 0.15
     return {"passed": passed, "rmse": rmse}
 
 
-def fat_tail_check(
-    synthetic_returns: np.ndarray, real_returns: np.ndarray
-) -> dict[str, Any]:
+def fat_tail_check(synthetic_returns: np.ndarray, real_returns: np.ndarray) -> dict[str, Any]:
     """Verify excess kurtosis is within 20% of real data."""
     if len(synthetic_returns) < 10 or len(real_returns) < 10:
         return {"passed": False, "detail": "Insufficient data for kurtosis check"}
@@ -91,9 +98,7 @@ def fat_tail_check(
         return {"passed": False, "detail": "Kurtosis computation failed"}
 
 
-def drawdown_check(
-    synthetic_returns: np.ndarray, real_returns: np.ndarray
-) -> dict[str, Any]:
+def drawdown_check(synthetic_returns: np.ndarray, real_returns: np.ndarray) -> dict[str, Any]:
     """Check max drawdown distribution is within expected range."""
     if len(synthetic_returns) < 10 or len(real_returns) < 10:
         return {"passed": False, "detail": "Insufficient data for drawdown check"}
@@ -254,8 +259,7 @@ def validate_strategy_coverage(
             "error": f"No data available for symbol={symbol} source={data_source}. Run seed-all first with --generate-first.",
             "data_check": data_check,
             "strategies": {
-                strat: {"error": "no data available", "passed": False}
-                for strat in strategies
+                strat: {"error": "no data available", "passed": False} for strat in strategies
             },
         }
 
@@ -265,10 +269,14 @@ def validate_strategy_coverage(
     for strat in strategies:
         try:
             cmd = [
-                orca_cli_path, "backtest",
-                "--strategy", strat,
-                "--symbol", symbol,
-                "--data-source", data_source,
+                orca_cli_path,
+                "backtest",
+                "--strategy",
+                strat,
+                "--symbol",
+                symbol,
+                "--data-source",
+                data_source,
                 "--json",
             ]
             if generation_id:
@@ -311,6 +319,7 @@ def _check_data_availability(
     """
     try:
         from orca.data.db_integration import get_connection
+
         conn = get_connection()
         try:
             with conn.cursor() as cur:
@@ -344,6 +353,7 @@ def _ensure_data_exists(
     """Generate data if it doesn't exist, breaking the circular dependency."""
     try:
         from datetime import date, timedelta
+
         from orca.data.seed_all import seed_all
 
         check = _check_data_availability(symbol, data_source, generation_id)

@@ -17,14 +17,27 @@ from playwright_backtest_matrix import _analyze_results
 
 # ── _analyze_results ──────────────────────────────────────────────
 
+
 def test_analyze_results_with_trades() -> None:
     """Results with num_trades > 0 should appear in analysis."""
     completed: dict[str, Any] = {
         "results": [
-            {"strategy_id": "grid_trading", "symbol": "USDEUR", "timeframe": "1d",
-             "sharpe_ratio": 0.85, "total_return": 0.02, "num_trades": 9},
-            {"strategy_id": "intraday_mr", "symbol": "USDJPY", "timeframe": "1d",
-             "sharpe_ratio": 0.0, "total_return": 0.0, "num_trades": 0},
+            {
+                "strategy_id": "grid_trading",
+                "symbol": "USDEUR",
+                "timeframe": "1d",
+                "sharpe_ratio": 0.85,
+                "total_return": 0.02,
+                "num_trades": 9,
+            },
+            {
+                "strategy_id": "intraday_mr",
+                "symbol": "USDJPY",
+                "timeframe": "1d",
+                "sharpe_ratio": 0.0,
+                "total_return": 0.0,
+                "num_trades": 0,
+            },
         ],
         "failed": 0,
         "status": "completed",
@@ -40,7 +53,8 @@ def test_analyze_results_with_trades() -> None:
 def test_analyze_results_empty() -> None:
     """Empty results should produce zeroes, not crash."""
     analysis = _analyze_results(
-        {"results": [], "failed": 0, "status": "completed"}, "empty",
+        {"results": [], "failed": 0, "status": "completed"},
+        "empty",
     )
     assert analysis["total_combos"] == 0
     assert analysis["combos_with_trades"] == 0
@@ -51,8 +65,13 @@ def test_analyze_results_missing_fields() -> None:
     """Results missing num_trades should not crash."""
     completed: dict[str, Any] = {
         "results": [
-            {"strategy_id": "grid_trading", "symbol": "USDEUR", "timeframe": "1d",
-             "sharpe_ratio": 0.5, "total_return": 0.01},
+            {
+                "strategy_id": "grid_trading",
+                "symbol": "USDEUR",
+                "timeframe": "1d",
+                "sharpe_ratio": 0.5,
+                "total_return": 0.01,
+            },
         ],
         "failed": 0,
         "status": "completed",
@@ -66,10 +85,22 @@ def test_analyze_results_multi_timeframe() -> None:
     """Multiple timeframes should each appear in analysis."""
     completed: dict[str, Any] = {
         "results": [
-            {"strategy_id": "grid_trading", "symbol": "USDEUR", "timeframe": "1d",
-             "sharpe_ratio": 0.8, "total_return": 0.02, "num_trades": 5},
-            {"strategy_id": "grid_trading", "symbol": "USDEUR", "timeframe": "1h",
-             "sharpe_ratio": 0.3, "total_return": 0.01, "num_trades": 3},
+            {
+                "strategy_id": "grid_trading",
+                "symbol": "USDEUR",
+                "timeframe": "1d",
+                "sharpe_ratio": 0.8,
+                "total_return": 0.02,
+                "num_trades": 5,
+            },
+            {
+                "strategy_id": "grid_trading",
+                "symbol": "USDEUR",
+                "timeframe": "1h",
+                "sharpe_ratio": 0.3,
+                "total_return": 0.01,
+                "num_trades": 3,
+            },
         ],
         "failed": 0,
         "status": "completed",
@@ -85,12 +116,30 @@ def test_analyze_results_top_performers_sorted() -> None:
     """Top performers should be sorted by sharpe_ratio descending."""
     completed: dict[str, Any] = {
         "results": [
-            {"strategy_id": "low", "symbol": "A", "timeframe": "1d",
-             "sharpe_ratio": -0.5, "total_return": -0.01, "num_trades": 5},
-            {"strategy_id": "high", "symbol": "B", "timeframe": "1d",
-             "sharpe_ratio": 2.0, "total_return": 0.05, "num_trades": 10},
-            {"strategy_id": "mid", "symbol": "C", "timeframe": "1d",
-             "sharpe_ratio": 0.5, "total_return": 0.02, "num_trades": 7},
+            {
+                "strategy_id": "low",
+                "symbol": "A",
+                "timeframe": "1d",
+                "sharpe_ratio": -0.5,
+                "total_return": -0.01,
+                "num_trades": 5,
+            },
+            {
+                "strategy_id": "high",
+                "symbol": "B",
+                "timeframe": "1d",
+                "sharpe_ratio": 2.0,
+                "total_return": 0.05,
+                "num_trades": 10,
+            },
+            {
+                "strategy_id": "mid",
+                "symbol": "C",
+                "timeframe": "1d",
+                "sharpe_ratio": 0.5,
+                "total_return": 0.02,
+                "num_trades": 7,
+            },
         ],
         "failed": 0,
         "status": "completed",

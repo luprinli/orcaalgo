@@ -10,8 +10,21 @@ def test_forced_validation_symbols():
 
 
 def test_split_is_deterministic():
-    tickers = ["AAPL", "MSFT", "NVDA", "TSLA", "IWM", "GLD", "TLT",
-               "EURUSD", "GBPUSD", "BTC-USD", "^DAX", "SPY", "QQQ"]
+    tickers = [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "TSLA",
+        "IWM",
+        "GLD",
+        "TLT",
+        "EURUSD",
+        "GBPUSD",
+        "BTC-USD",
+        "^DAX",
+        "SPY",
+        "QQQ",
+    ]
     a = split_tickers(tickers)
     b = split_tickers(tickers)
     assert a == b

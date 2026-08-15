@@ -167,16 +167,17 @@ func TestOptionalAuthMiddleware_NoToken(t *testing.T) {
 	}
 }
 
-func TestGetJWTSecret_PanicsWhenEnvEmpty(t *testing.T) {
+func TestGetJWTSecret_ReturnsEmptyWhenEnvMissing(t *testing.T) {
+	t.Setenv("ORCA_JWT_SECRET", "")
 	jwtSecret = nil
 	jwtSecretOnce = sync.Once{}
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic when ORCA_JWT_SECRET not set")
-		}
-	}()
-	GetJWTSecret()
+	// HP #10: a missing secret must not panic — it degrades to an empty
+	// secret (callers guard with a 503) rather than a process crash.
+	secret := GetJWTSecret()
+	if secret != nil {
+		t.Fatalf("expected nil secret when ORCA_JWT_SECRET not set, got %q", string(secret))
+	}
 }
 
 func TestSetJWTSecret_Overrides(t *testing.T) {

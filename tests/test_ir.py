@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import ClassVar
 
 from orca.ir.loader import load_ir
 from orca.ir.validator import validate_ir
@@ -27,21 +28,41 @@ class TestStrategyLoading:
         assert ir.ir_version == "qst-ir/0.4"
         assert ir.canonical_version == "qst-canonical/0.4"
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"bar_agg", "zscore_calc", "signal_gen", "regime_gate", "position_sizer", "risk_gate"}
+        assert node_ids == {
+            "bar_agg",
+            "zscore_calc",
+            "signal_gen",
+            "regime_gate",
+            "position_sizer",
+            "risk_gate",
+        }
 
     def test_load_opening_range_breakout(self):
         ir = load_ir(STRATEGIES_DIR / "opening_range_breakout.gkr.yaml")
         assert ir.strategy.id == "orca-opening-range-breakout-v1"
         assert len(ir.strategy.nodes) == 5
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"range_detect", "breakout_signal", "regime_gate", "position_sizer", "risk_gate"}
+        assert node_ids == {
+            "range_detect",
+            "breakout_signal",
+            "regime_gate",
+            "position_sizer",
+            "risk_gate",
+        }
 
     def test_load_trend_following(self):
         ir = load_ir(STRATEGIES_DIR / "trend_following.gkr.yaml")
         assert ir.strategy.id == "orca-trend-following-v1"
         assert len(ir.strategy.nodes) == 6
         node_ids = {n.id for n in ir.strategy.nodes}
-        assert node_ids == {"ma_crossover", "atr_filter", "trend_signal", "regime_gate", "position_sizer", "risk_gate"}
+        assert node_ids == {
+            "ma_crossover",
+            "atr_filter",
+            "trend_signal",
+            "regime_gate",
+            "position_sizer",
+            "risk_gate",
+        }
 
     def test_all_strategies_have_core_capability(self):
         for f in STRATEGIES_DIR.glob("*.gkr.yaml"):
@@ -69,8 +90,12 @@ class TestStrategyLoading:
             node_ids = {n.id for n in ir.strategy.nodes}
             for out_name, out_ref in ir.strategy.outputs.items():
                 parts = out_ref.split(".")
-                assert len(parts) == 2, f"{f.name}: output '{out_name}' ref '{out_ref}' invalid format"
-                assert parts[0] in node_ids, f"{f.name}: output '{out_name}' references unknown node '{parts[0]}'"
+                assert len(parts) == 2, (
+                    f"{f.name}: output '{out_name}' ref '{out_ref}' invalid format"
+                )
+                assert parts[0] in node_ids, (
+                    f"{f.name}: output '{out_name}' references unknown node '{parts[0]}'"
+                )
 
     def test_strategies_have_valid_input_refs(self):
         for f in STRATEGIES_DIR.glob("*.gkr.yaml"):
@@ -79,7 +104,9 @@ class TestStrategyLoading:
             for node in ir.strategy.nodes:
                 for inp_port, inp_ref in node.inputs.items():
                     parts = inp_ref.split(".")
-                    assert len(parts) == 2, f"{f.name}: node '{node.id}' input '{inp_port}' ref '{inp_ref}' invalid"
+                    assert len(parts) == 2, (
+                        f"{f.name}: node '{node.id}' input '{inp_port}' ref '{inp_ref}' invalid"
+                    )
                     assert parts[0] in node_ids, (
                         f"{f.name}: node '{node.id}' references unknown upstream '{parts[0]}'"
                     )
@@ -293,7 +320,7 @@ def _make_unsafe_future_strategy() -> StrategyIRV04:
 class TestGKRRegimeGates:
     """Verify all 8 GKR configs have correct blocked_states aligned with RegimeActivationMatrix."""
 
-    KNOWN_STRATEGIES = {
+    KNOWN_STRATEGIES: ClassVar[dict[str, str]] = {
         "grid.gkr.yaml": "orca-grid-trading-v1",
         "intraday_mr.gkr.yaml": "orca-intraday-mr-v1",
         "opening_range_breakout.gkr.yaml": "orca-opening-range-breakout-v1",
@@ -307,7 +334,7 @@ class TestGKRRegimeGates:
         "volume_scalp.gkr.yaml": "orca-volume-scalp-v1",
     }
 
-    EXPECTED_BLOCKED = {
+    EXPECTED_BLOCKED: ClassVar[dict[str, list[int]]] = {
         "grid.gkr.yaml": [1, 2, 3],
         "intraday_mr.gkr.yaml": [1, 2, 3],
         "opening_range_breakout.gkr.yaml": [0, 3],
@@ -343,9 +370,7 @@ class TestGKRRegimeGates:
             gate = self._find_regime_gate(ir.strategy.nodes)
             assert gate is not None, f"{filename}: no regime gate found"
             blocked = gate.params.get("blocked_states", [])
-            assert blocked == expected, (
-                f"{filename}: blocked_states={blocked}, expected={expected}"
-            )
+            assert blocked == expected, f"{filename}: blocked_states={blocked}, expected={expected}"
 
     def test_crisis_is_always_blocked(self):
         """Crisis (regime 3) should be blocked for ALL strategies."""

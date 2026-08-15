@@ -56,8 +56,9 @@ def test_generate_sequence_produces_all_regimes() -> None:
 
 def test_generate_sequence_with_dates() -> None:
     from datetime import datetime
+
     gen = RegimeSequenceGenerator(seed=42)
-    labels, timestamps = gen.generate_sequence(100, start_date=datetime(2023, 1, 1))
+    _labels, timestamps = gen.generate_sequence(100, start_date=datetime(2023, 1, 1))
     assert len(timestamps) == 100
     assert isinstance(timestamps[0], datetime)
 
@@ -84,12 +85,14 @@ def test_avg_durations_roughly_match_default() -> None:
 
 
 def test_custom_transition_matrix() -> None:
-    custom_tm = np.array([
-        [0.9, 0.05, 0.03, 0.02],
-        [0.1, 0.8, 0.07, 0.03],
-        [0.1, 0.1, 0.7, 0.1],
-        [0.05, 0.05, 0.1, 0.8],
-    ])
+    custom_tm = np.array(
+        [
+            [0.9, 0.05, 0.03, 0.02],
+            [0.1, 0.8, 0.07, 0.03],
+            [0.1, 0.1, 0.7, 0.1],
+            [0.05, 0.05, 0.1, 0.8],
+        ]
+    )
     gen = RegimeSequenceGenerator(transition_matrix=custom_tm, seed=42)
     labels, _ = gen.generate_sequence(1000)
     assert len(labels) == 1000

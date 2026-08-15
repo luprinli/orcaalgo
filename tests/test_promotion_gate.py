@@ -32,12 +32,33 @@ def _run(rows: list[dict]):
 
 def test_gate_rejects_weak_sharpe():
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "30",
-         "Sharpe": "0.01", "WfISSharpe": "", "WfOOSSharpe": ""},
-        {"Strategy": "s2", "Symbol": "Y", "Tf": "1d", "Trades": "30",
-         "Sharpe": "-0.5", "WfISSharpe": "", "WfOOSSharpe": ""},
-        {"Strategy": "s3", "Symbol": "Z", "Tf": "1d", "Trades": "5",
-         "Sharpe": "3.0", "WfISSharpe": "", "WfOOSSharpe": ""},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "30",
+            "Sharpe": "0.01",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+        },
+        {
+            "Strategy": "s2",
+            "Symbol": "Y",
+            "Tf": "1d",
+            "Trades": "30",
+            "Sharpe": "-0.5",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+        },
+        {
+            "Strategy": "s3",
+            "Symbol": "Z",
+            "Tf": "1d",
+            "Trades": "5",
+            "Sharpe": "3.0",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+        },
     ]
     result = _run(rows)
     assert result.n_tests == 3
@@ -47,10 +68,24 @@ def test_gate_rejects_weak_sharpe():
 
 def test_gate_passes_strong_sharpe():
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "2.0", "WfOOSSharpe": "1.8"},
-        {"Strategy": "s2", "Symbol": "Y", "Tf": "1d", "Trades": "30",
-         "Sharpe": "-0.2", "WfISSharpe": "", "WfOOSSharpe": ""},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "2.0",
+            "WfOOSSharpe": "1.8",
+        },
+        {
+            "Strategy": "s2",
+            "Symbol": "Y",
+            "Tf": "1d",
+            "Trades": "30",
+            "Sharpe": "-0.2",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+        },
     ]
     result = _run(rows)
     assert result.n_candidates == 1
@@ -65,8 +100,15 @@ def test_gate_passes_strong_sharpe():
 def test_gate_walk_forward_degradation():
     # Strong IS Sharpe but OOS degraded >20% -> excluded from survivors.
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "2.0", "WfOOSSharpe": "0.5"},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "2.0",
+            "WfOOSSharpe": "0.5",
+        },
     ]
     result = _run(rows)
     assert result.bh_significant == 1
@@ -77,9 +119,17 @@ def test_gate_walk_forward_degradation():
 def test_gate_trade_distribution_negative_median_rejected():
     # Strong Sharpe + significant, but median trade PnL is negative -> excluded.
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
-         "MedianTradePnL": "-5.0", "UniqueTickers": "5"},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+            "MedianTradePnL": "-5.0",
+            "UniqueTickers": "5",
+        },
     ]
     result = _run(rows)
     assert result.bh_significant == 1
@@ -89,9 +139,17 @@ def test_gate_trade_distribution_negative_median_rejected():
 
 def test_gate_trade_distribution_single_ticker_rejected():
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
-         "MedianTradePnL": "5.0", "UniqueTickers": "1"},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+            "MedianTradePnL": "5.0",
+            "UniqueTickers": "1",
+        },
     ]
     result = _run(rows)
     assert len(result.survivors) == 0
@@ -100,8 +158,15 @@ def test_gate_trade_distribution_single_ticker_rejected():
 def test_gate_trade_distribution_absent_is_na():
     # No distribution columns -> gate is n/a and passes.
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": ""},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+        },
     ]
     result = _run(rows)
     assert len(result.survivors) == 1
@@ -110,9 +175,17 @@ def test_gate_trade_distribution_absent_is_na():
 
 def test_gate_trade_distribution_passes():
     rows = [
-        {"Strategy": "s1", "Symbol": "X", "Tf": "1d", "Trades": "100",
-         "Sharpe": "2.0", "WfISSharpe": "", "WfOOSSharpe": "",
-         "MedianTradePnL": "5.0", "UniqueTickers": "5"},
+        {
+            "Strategy": "s1",
+            "Symbol": "X",
+            "Tf": "1d",
+            "Trades": "100",
+            "Sharpe": "2.0",
+            "WfISSharpe": "",
+            "WfOOSSharpe": "",
+            "MedianTradePnL": "5.0",
+            "UniqueTickers": "5",
+        },
     ]
     result = _run(rows)
     assert len(result.survivors) == 1

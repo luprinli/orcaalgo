@@ -13,7 +13,11 @@ def test_kelly_sizing_default_params():
     from orca.sizing.kelly import kelly_with_attenuators
 
     result = kelly_with_attenuators(
-        p=0.60, price=0.55, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+        p=0.60,
+        price=0.55,
+        side="yes",
+        multiplier=0.25,
+        per_trade_cap_pct=0.02,
     )
     assert 0 < result.final_allocation <= 0.02, (
         f"Expected size in (0, 0.02], got {result.final_allocation}"
@@ -26,13 +30,21 @@ def test_kelly_sizing_edge_cases():
 
     # Extreme confidence
     result_high = kelly_with_attenuators(
-        p=0.95, price=0.50, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+        p=0.95,
+        price=0.50,
+        side="yes",
+        multiplier=0.25,
+        per_trade_cap_pct=0.02,
     )
     assert 0 <= result_high.final_allocation <= 0.02
 
     # Edge case: p < price (no edge)
     result_no_edge = kelly_with_attenuators(
-        p=0.40, price=0.50, side="yes", multiplier=0.25, per_trade_cap_pct=0.02,
+        p=0.40,
+        price=0.50,
+        side="yes",
+        multiplier=0.25,
+        per_trade_cap_pct=0.02,
     )
     assert result_no_edge.final_allocation == 0.0
 
@@ -121,11 +133,10 @@ def test_models_immutability():
 
     try:
         ts = TradeSignal(
-            symbol="SPY", signal="BUY", confidence=0.7,
-            timestamp="2024-01-01T00:00:00Z"
+            symbol="SPY", signal="BUY", confidence=0.7, timestamp="2024-01-01T00:00:00Z"
         )
         ts.confidence = 0.8
-        assert False, "Model should be frozen — mutation succeeded unexpectedly"
+        raise AssertionError("Model should be frozen — mutation succeeded unexpectedly")
     except Exception:
         pass  # Expected
 

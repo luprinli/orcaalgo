@@ -322,7 +322,12 @@ func (s *Server) registerRoutes() {
 	s.router.GET("/ws", func(c *gin.Context) {
 		token := c.Query("token")
 		if token != "" {
-			_, err := security.ValidateToken(token, middleware.GetJWTSecret())
+			secret := middleware.GetJWTSecret()
+			if len(secret) == 0 {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "JWT secret not configured"})
+				return
+			}
+			_, err := security.ValidateToken(token, secret)
 			if err != nil {
 				monitor.RecordWSAuthFailure()
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})

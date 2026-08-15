@@ -22,13 +22,15 @@ def _make_ohlcv(n: int = 200, seed: int = 42) -> pd.DataFrame:
     close = 100 + np.cumsum(np.random.randn(n) * 0.1)
     high = close + np.abs(np.random.randn(n)) * 0.5
     low = close - np.abs(np.random.randn(n)) * 0.5
-    return pd.DataFrame({
-        "open": np.roll(close, 1),
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": np.random.randint(1000, 5000, n),
-    })
+    return pd.DataFrame(
+        {
+            "open": np.roll(close, 1),
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": np.random.randint(1000, 5000, n),
+        }
+    )
 
 
 class TestRSI:
@@ -102,8 +104,12 @@ class TestTrendFollowing:
     def test_returns_series(self):
         df = _make_ohlcv(300)
         result = trend_following(
-            df["close"], df["high"], df["low"],
-            ema_fast=20, ema_slow=50, adx_threshold=22.0,
+            df["close"],
+            df["high"],
+            df["low"],
+            ema_fast=20,
+            ema_slow=50,
+            adx_threshold=22.0,
         )
         assert isinstance(result, pd.Series)
         assert len(result) == 300
@@ -111,8 +117,12 @@ class TestTrendFollowing:
     def test_values_in_set(self):
         df = _make_ohlcv(300)
         result = trend_following(
-            df["close"], df["high"], df["low"],
-            ema_fast=10, ema_slow=30, adx_threshold=15.0,
+            df["close"],
+            df["high"],
+            df["low"],
+            ema_fast=10,
+            ema_slow=30,
+            adx_threshold=15.0,
         )
         assert set(result.unique()).issubset({-1, 0, 1})
 
@@ -121,8 +131,13 @@ class TestOpeningRangeBreakout:
     def test_returns_series(self):
         df = _make_ohlcv(100)
         result = opening_range_breakout(
-            df["open"], df["high"], df["low"], df["close"],
-            range_minutes=5, atr_mult=2.0, volume_mult=1.5,
+            df["open"],
+            df["high"],
+            df["low"],
+            df["close"],
+            range_minutes=5,
+            atr_mult=2.0,
+            volume_mult=1.5,
         )
         assert isinstance(result, pd.Series)
         assert len(result) == 100
@@ -130,7 +145,10 @@ class TestOpeningRangeBreakout:
     def test_short_series_returns_zero(self):
         df = _make_ohlcv(3)
         result = opening_range_breakout(
-            df["open"], df["high"], df["low"], df["close"],
+            df["open"],
+            df["high"],
+            df["low"],
+            df["close"],
             range_minutes=5,
         )
         assert (result == 0).all()

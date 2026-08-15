@@ -11,6 +11,7 @@ from orca.ml.train.regime_classifier import (
 
 try:
     import xgboost  # noqa: F401
+
     HAS_XGBOOST = True
 except ImportError:
     HAS_XGBOOST = False
@@ -91,6 +92,7 @@ class TestBuildRegimeFeatures:
 class TestRegimeClassifier:
     def test_train_returns_result(self):
         from orca.ml.train.regime_classifier import RegimeClassifier
+
         rng = np.random.default_rng(42)
         n = 300
         X = rng.normal(0, 1, (n, 14))
@@ -103,6 +105,7 @@ class TestRegimeClassifier:
 
     def test_save_and_predict(self, tmp_path):
         from orca.ml.train.regime_classifier import RegimeClassifier
+
         rng = np.random.default_rng(42)
         n = 300
         X = rng.normal(0, 1, (n, 14))

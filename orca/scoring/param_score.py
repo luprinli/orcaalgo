@@ -50,9 +50,7 @@ class ParamScoreSettings:
     # Parameter names that are not optimisation dimensions and are ignored when
     # measuring neighbourhood distances (they would otherwise dominate the
     # distance metric and mask real plateaus).
-    ignored_params: tuple[str, ...] = field(
-        default=("initial_capital", "max_leverage", "ticker")
-    )
+    ignored_params: tuple[str, ...] = field(default=("initial_capital", "max_leverage", "ticker"))
 
 
 def _cbrt(x: float) -> float:
@@ -95,9 +93,7 @@ def _param_scales(rows: list[dict[str, Any]], ignored: tuple[str, ...]) -> dict[
         if name in ignored:
             continue
         vals = [
-            r["parameters"][name]
-            for r in rows
-            if (r.get("parameters") or {}).get(name) is not None
+            r["parameters"][name] for r in rows if (r.get("parameters") or {}).get(name) is not None
         ]
         if len(vals) < 2:
             scales[name] = 1.0
@@ -200,9 +196,7 @@ def score_backtest_parameters(
 
     scored: list[dict[str, Any]] = []
     for i, r in enumerate(eligible):
-        core_train = _cbrt(
-            (sharpe_pct[i] + EPS) * (calmar_pct[i] + EPS) * (return_pct[i] + EPS)
-        )
+        core_train = _cbrt((sharpe_pct[i] + EPS) * (calmar_pct[i] + EPS) * (return_pct[i] + EPS))
         core_score = core_train
         if id(r) in verify_pct:
             v = verify_pct[id(r)]
@@ -218,13 +212,15 @@ def score_backtest_parameters(
         quality = core_score * dd_penalty
         balance_penalty = _balance_penalty(r)
 
-        scored.append({
-            **r,
-            "core_score": core_score,
-            "drawdown_penalty": dd_penalty,
-            "quality": quality,
-            "balance_penalty": balance_penalty,
-        })
+        scored.append(
+            {
+                **r,
+                "core_score": core_score,
+                "drawdown_penalty": dd_penalty,
+                "quality": quality,
+                "balance_penalty": balance_penalty,
+            }
+        )
 
     # 3. Neighbourhood stability over the *quality* values (core * ddPenalty).
     # Held neutral for tiny pools where plateau detection is not meaningful.

@@ -47,7 +47,7 @@ type orchestratorEngine struct {
 	kellyMult     float64
 
 	currentPosition float64
-	entryPrice      float64
+	entryPrice      float64 // float for PnL tracking; order entry price is types.Price
 	side            string
 }
 

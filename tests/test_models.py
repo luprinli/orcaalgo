@@ -31,7 +31,13 @@ class TestTradeSignal:
 
     def test_rejects_extra_fields(self):
         with pytest.raises(ValidationError):
-            TradeSignal(symbol="SPY", signal="BUY", confidence=0.5, timestamp=datetime.now(UTC), extra="nope")
+            TradeSignal(
+                symbol="SPY",
+                signal="BUY",
+                confidence=0.5,
+                timestamp=datetime.now(UTC),
+                extra="nope",
+            )
 
     def test_frozen_prevents_mutation(self, sample_trade_signal):
         with pytest.raises(ValidationError):
@@ -88,8 +94,12 @@ class TestStrategyIR:
                 id="test",
                 version="1.0.0",
                 nodes=[
-                    Node(id="a", token_ref=TokenRef(token_id="t1", version=">=1.0"), params={"p": 1}),
-                    Node(id="b", token_ref=TokenRef(token_id="t2", version=">=1.0"), params={"p": 2}),
+                    Node(
+                        id="a", token_ref=TokenRef(token_id="t1", version=">=1.0"), params={"p": 1}
+                    ),
+                    Node(
+                        id="b", token_ref=TokenRef(token_id="t2", version=">=1.0"), params={"p": 2}
+                    ),
                 ],
                 outputs={"out": "a.output"},
             ),
@@ -99,8 +109,12 @@ class TestStrategyIR:
                 id="test",
                 version="1.0.0",
                 nodes=[
-                    Node(id="b", token_ref=TokenRef(token_id="t2", version=">=1.0"), params={"p": 2}),
-                    Node(id="a", token_ref=TokenRef(token_id="t1", version=">=1.0"), params={"p": 1}),
+                    Node(
+                        id="b", token_ref=TokenRef(token_id="t2", version=">=1.0"), params={"p": 2}
+                    ),
+                    Node(
+                        id="a", token_ref=TokenRef(token_id="t1", version=">=1.0"), params={"p": 1}
+                    ),
                 ],
                 outputs={"out": "a.output"},
             ),
@@ -127,6 +141,8 @@ class TestRiskModels:
         assert snap.kill_switch.is_locked is False
 
     def test_breach_condition(self):
-        bc = BreachCondition(code="DAILY_DD", current_value=5.2, threshold=5.0, message="DD exceeded")
+        bc = BreachCondition(
+            code="DAILY_DD", current_value=5.2, threshold=5.0, message="DD exceeded"
+        )
         assert bc.code == "DAILY_DD"
         assert bc.current_value >= bc.threshold

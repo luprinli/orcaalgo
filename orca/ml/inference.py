@@ -53,6 +53,7 @@ def _predict_json_model(model_path: str, X: np.ndarray) -> float:
 
     try:
         import xgboost as xgb
+
         model = xgb.XGBClassifier()
         model.load_model(model_path)
         proba = model.predict_proba(X)
@@ -68,9 +69,7 @@ def _predict_json_model(model_path: str, X: np.ndarray) -> float:
 
     importances = model_data.get("feature_importances", [])
     if len(importances) != X.shape[1]:
-        raise ValueError(
-            f"feature count mismatch: model={len(importances)} input={X.shape[1]}"
-        )
+        raise ValueError(f"feature count mismatch: model={len(importances)} input={X.shape[1]}")
 
     score = float(np.dot(X[0], importances))
     p_win = 1.0 / (1.0 + np.exp(-(platt_a * score + platt_b)))

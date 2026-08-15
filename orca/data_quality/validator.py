@@ -43,6 +43,7 @@ def run_data_quality_checks(
     if candles_by_symbol is None:
         try:
             from orca.data_quality import _load_candles_from_db
+
             candles_by_symbol = _load_candles_from_db()
         except Exception as e:
             return DataQualityReport(
@@ -56,14 +57,20 @@ def run_data_quality_checks(
         return DataQualityReport(checks=checks, warned=warned, failed=failed)
 
     total_symbols = len(candles_by_symbol)
-    checks.append(DataQualityCheck("data_exists", "pass", f"Found data for {total_symbols} symbols"))
+    checks.append(
+        DataQualityCheck("data_exists", "pass", f"Found data for {total_symbols} symbols")
+    )
 
     for symbol, candles in candles_by_symbol.items():
         if not candles:
-            checks.append(DataQualityCheck(
-                "empty_data", "warn", "No candles for symbol",
-                symbol=symbol,
-            ))
+            checks.append(
+                DataQualityCheck(
+                    "empty_data",
+                    "warn",
+                    "No candles for symbol",
+                    symbol=symbol,
+                )
+            )
             warned += 1
             continue
 
@@ -71,10 +78,14 @@ def run_data_quality_checks(
         volumes = np.array([getattr(c, "volume", 0) or 0 for c in candles])
 
         if len(closes) < 2:
-            checks.append(DataQualityCheck(
-                "insufficient_data", "warn", f"Only {len(closes)} candles",
-                symbol=symbol,
-            ))
+            checks.append(
+                DataQualityCheck(
+                    "insufficient_data",
+                    "warn",
+                    f"Only {len(closes)} candles",
+                    symbol=symbol,
+                )
+            )
             warned += 1
             continue
 
@@ -91,33 +102,48 @@ def run_data_quality_checks(
                 consecutive_zeros = 0
 
         if max_gap > 5:
-            checks.append(DataQualityCheck(
-                "gap_detected", "warn", f"Up to {max_gap} consecutive identical closes",
-                symbol=symbol,
-            ))
+            checks.append(
+                DataQualityCheck(
+                    "gap_detected",
+                    "warn",
+                    f"Up to {max_gap} consecutive identical closes",
+                    symbol=symbol,
+                )
+            )
             warned += 1
 
         max_ret = np.max(np.abs(returns)) * 100 if len(returns) > 0 else 0
         if max_ret > 50:
-            checks.append(DataQualityCheck(
-                "outlier_detected", "warn", f"Max daily return {max_ret:.1f}% exceeds 50% threshold",
-                symbol=symbol,
-            ))
+            checks.append(
+                DataQualityCheck(
+                    "outlier_detected",
+                    "warn",
+                    f"Max daily return {max_ret:.1f}% exceeds 50% threshold",
+                    symbol=symbol,
+                )
+            )
             warned += 1
 
         zero_vol = np.sum(volumes <= 0) if len(volumes) > 0 else 0
         if zero_vol > 0:
-            checks.append(DataQualityCheck(
-                "zero_volume", "warn", f"{zero_vol} candles with zero volume (stale data)",
-                symbol=symbol,
-            ))
+            checks.append(
+                DataQualityCheck(
+                    "zero_volume",
+                    "warn",
+                    f"{zero_vol} candles with zero volume (stale data)",
+                    symbol=symbol,
+                )
+            )
             warned += 1
 
     passed = total_symbols
     summary_status = "pass" if warned == 0 and failed == 0 else "warn"
-    checks.append(DataQualityCheck(
-        "summary", summary_status,
-        f"Checked {total_symbols} symbols: {passed} pass, {warned} warn, {failed} fail",
-    ))
+    checks.append(
+        DataQualityCheck(
+            "summary",
+            summary_status,
+            f"Checked {total_symbols} symbols: {passed} pass, {warned} warn, {failed} fail",
+        )
+    )
 
     return DataQualityReport(checks=checks, passed=passed, warned=warned, failed=failed)

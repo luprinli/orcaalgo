@@ -41,7 +41,7 @@ def monte_carlo_pass_probability(
         violated = False
 
         for ret in shuffled:
-            equity *= (1 + ret)
+            equity *= 1 + ret
             daily_pnl += equity * ret
 
             if abs(daily_pnl) > initial_capital * daily_loss_pct / 100:
@@ -65,7 +65,7 @@ def monte_carlo_pass_probability(
         daily_peak = initial_capital
         running_equity = initial_capital
         for ret in shuffled:
-            running_equity *= (1 + ret)
+            running_equity *= 1 + ret
             if running_equity > daily_peak:
                 daily_peak = running_equity
         worst_drawdowns.append(min(0.0, (running_equity - daily_peak) / daily_peak * 100))
@@ -78,7 +78,13 @@ def monte_carlo_pass_probability(
         "n_simulations": n_simulations,
         "n_trades": len(trades),
         "expected_return": round(float(np.mean(final_returns)), 2),
-        "return_95ci": [round(float(np.percentile(final_returns, 2.5)), 2), round(float(np.percentile(final_returns, 97.5)), 2)],
+        "return_95ci": [
+            round(float(np.percentile(final_returns, 2.5)), 2),
+            round(float(np.percentile(final_returns, 97.5)), 2),
+        ],
         "worst_drawdown_mean": round(float(np.mean(worst_drawdowns)), 2),
-        "worst_drawdown_95ci": [round(float(np.percentile(worst_drawdowns, 2.5)), 2), round(float(np.percentile(worst_drawdowns, 97.5)), 2)],
+        "worst_drawdown_95ci": [
+            round(float(np.percentile(worst_drawdowns, 2.5)), 2),
+            round(float(np.percentile(worst_drawdowns, 97.5)), 2),
+        ],
     }

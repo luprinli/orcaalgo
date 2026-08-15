@@ -15,6 +15,7 @@ class TestKillSwitchResilience:
     def test_rapid_fire_kill_switch_import(self):
         """Verify kill-switch guard symbols exist in internal/risk."""
         import importlib.util
+
         spec = importlib.util.find_spec("orca.risk")
         if spec is None:
             pytest.skip("orca.risk module not available")

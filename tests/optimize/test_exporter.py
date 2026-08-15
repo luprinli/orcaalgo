@@ -13,7 +13,13 @@ class TestExportBestParams:
             path = export_best_params(
                 "test_strat",
                 {"rsi_period": 20, "entry_threshold": 30.0},
-                {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42},
+                {
+                    "sharpe_ratio": 1.5,
+                    "max_drawdown": -10.0,
+                    "total_return": 25.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td,
             )
             assert path.exists()
@@ -22,8 +28,15 @@ class TestExportBestParams:
     def test_content_hash_present(self):
         with tempfile.TemporaryDirectory() as td:
             path = export_best_params(
-                "t", {"a": 1},
-                {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
+                "t",
+                {"a": 1},
+                {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown": -5.0,
+                    "total_return": 10.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td,
             )
             config = yaml.safe_load(open(path))
@@ -33,8 +46,15 @@ class TestExportBestParams:
     def test_optional_validation_block(self):
         with tempfile.TemporaryDirectory() as td:
             path = export_best_params(
-                "t", {"a": 1},
-                {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
+                "t",
+                {"a": 1},
+                {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown": -5.0,
+                    "total_return": 10.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 validation={"avg_oos_sharpe": 0.89, "passed_windows": 6, "total_windows": 12},
                 output_dir=td,
             )
@@ -44,7 +64,13 @@ class TestExportBestParams:
     def test_content_hash_reproducible(self):
         with tempfile.TemporaryDirectory() as td:
             params = {"rsi_period": 20}
-            metrics = {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42}
+            metrics = {
+                "sharpe_ratio": 1.5,
+                "max_drawdown": -10.0,
+                "total_return": 25.0,
+                "win_rate": 60.0,
+                "num_trades": 42,
+            }
             p1 = export_best_params("test", params, metrics, output_dir=td)
             p2 = export_best_params("test", params, metrics, output_dir=td)
             h1 = yaml.safe_load(open(p1))["content_hash"]
@@ -54,8 +80,15 @@ class TestExportBestParams:
     def test_strategy_id_in_filename(self):
         with tempfile.TemporaryDirectory() as td:
             path = export_best_params(
-                "intraday_mr", {"rsi_period": 20},
-                {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
+                "intraday_mr",
+                {"rsi_period": 20},
+                {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown": -5.0,
+                    "total_return": 10.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td,
             )
             assert "intraday_mr" in path.name

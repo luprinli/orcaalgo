@@ -37,10 +37,11 @@ logger = logging.getLogger("orca.ml.dataset")
 @dataclass(frozen=True)
 class TrainingSample:
     """A single labeled training sample."""
+
     symbol: str
     timestamp: datetime
     feature_vector: np.ndarray  # shape (21,)
-    label: int                  # binary: 1 = win, 0 = loss
+    label: int  # binary: 1 = win, 0 = loss
     label_detail: BarrierResult | None = None
     strategy_type: str = ""
     regime: int = 0
@@ -57,6 +58,7 @@ class TrainingSample:
 @dataclass(frozen=True)
 class FeatureDataset:
     """Container for a complete training dataset."""
+
     samples: list[TrainingSample] = field(default_factory=list)
     feature_names: list[str] = field(default_factory=lambda: FEATURE_NAMES.copy())
     metadata: dict = field(default_factory=dict)
@@ -166,9 +168,7 @@ def build_dataset_from_trade_logs(
             "n_trades_loaded": len(trades),
             "barrier_config": asdict(resolved_barrier),
             "generation_id": generation_id or "",
-            "dataset_id": compute_dataset_id(
-                generation_id or "", FEATURE_NAMES, resolved_barrier
-            ),
+            "dataset_id": compute_dataset_id(generation_id or "", FEATURE_NAMES, resolved_barrier),
         }
     )
 
@@ -206,7 +206,8 @@ def build_dataset_from_trade_logs(
         entry_idx = -1
         for i, ts in enumerate(timestamps):
             ts_dt = (
-                ts if isinstance(ts, datetime)
+                ts
+                if isinstance(ts, datetime)
                 else datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
             )
             if ts_dt >= entry_time:
@@ -226,12 +227,16 @@ def build_dataset_from_trade_logs(
 
         barrier_result = None
         try:
-            barrier_result = next(iter(batch_triple_barrier_labels(
-                np.array([entry_price]),
-                np.array([entry_idx]),
-                prices,
-                barrier_config or BarrierConfig(),
-            )))
+            barrier_result = next(
+                iter(
+                    batch_triple_barrier_labels(
+                        np.array([entry_price]),
+                        np.array([entry_idx]),
+                        prices,
+                        barrier_config or BarrierConfig(),
+                    )
+                )
+            )
         except Exception:
             skipped_insufficient_bars += 1
             continue
@@ -239,10 +244,10 @@ def build_dataset_from_trade_logs(
         # Compute features at entry bar
         try:
             fv = compute_full_feature_vector(
-                closes=closes[:entry_idx + 1],
-                highs=symbol_data.get("high", closes)[:entry_idx + 1],
-                lows=symbol_data.get("low", closes)[:entry_idx + 1],
-                volumes=symbol_data.get("volume", np.ones(entry_idx + 1))[:entry_idx + 1],
+                closes=closes[: entry_idx + 1],
+                highs=symbol_data.get("high", closes)[: entry_idx + 1],
+                lows=symbol_data.get("low", closes)[: entry_idx + 1],
+                volumes=symbol_data.get("volume", np.ones(entry_idx + 1))[: entry_idx + 1],
                 ts=entry_time,
                 signal_type=0,
                 signal_strength=0.0,
@@ -318,7 +323,9 @@ def split_temporal(
 
     logger.info(
         "temporal split: train=%d val=%d test=%d",
-        train.n_samples, val.n_samples, test.n_samples,
+        train.n_samples,
+        val.n_samples,
+        test.n_samples,
     )
     return train, val, test
 

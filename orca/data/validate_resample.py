@@ -32,7 +32,9 @@ def validate_resampling(
 
     for idx in derived.index:
         window_end = idx
-        window_start = window_end - pd.Timedelta(timeframe.replace("min", "T").replace("h", "H").replace("1D", "1d"))
+        window_start = window_end - pd.Timedelta(
+            timeframe.replace("min", "T").replace("h", "H").replace("1D", "1d")
+        )
         constituents = source[(source.index >= window_start) & (source.index <= window_end)]
 
         if len(constituents) == 0:

@@ -100,7 +100,8 @@ def _generate_odin_struct(node: Node, strategy_id: int) -> str:
 
 def compile_strategy(ir: StrategyIRV04, strategy_id: int) -> str:
     signal_nodes = [
-        n for n in ir.strategy.nodes
+        n
+        for n in ir.strategy.nodes
         if n.token_ref.token_id.startswith("signal.")
         or n.token_ref.token_id.startswith("indicator.")
     ]

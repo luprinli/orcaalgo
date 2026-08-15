@@ -20,7 +20,6 @@ import hashlib
 import json
 import time as _time
 from datetime import date, datetime, timedelta
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -29,13 +28,29 @@ import pandas as pd
 # seed_all fetches from Yahoo, so it uses each symbol's Yahoo ticker.
 try:
     from orca.universe_config import load_universe
+
     _cfg = load_universe()
     DEFAULT_SYMBOLS = [s["yahoo_ticker"] for s in _cfg["symbols"] if s.get("yahoo_ticker")]
 except Exception:
     DEFAULT_SYMBOLS = [
-        "SPY", "QQQ", "AAPL", "MSFT", "NVDA", "TSLA", "IWM", "GLD", "TLT",
-        "EURUSD=X", "GBPUSD=X", "USDJPY=X", "AUDUSD=X", "USDCAD=X",
-        "BTC-USD", "ETH-USD", "^GSPC", "^GDAXI",
+        "SPY",
+        "QQQ",
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "TSLA",
+        "IWM",
+        "GLD",
+        "TLT",
+        "EURUSD=X",
+        "GBPUSD=X",
+        "USDJPY=X",
+        "AUDUSD=X",
+        "USDCAD=X",
+        "BTC-USD",
+        "ETH-USD",
+        "^GSPC",
+        "^GDAXI",
     ]
 
 TIMEFRAMES_SOURCE = ["5m", "1d"]
@@ -74,8 +89,8 @@ def fetch_candles_yahoo(
     """
     try:
         import yfinance as yf
-    except ImportError:
-        raise ImportError("yfinance required. Install with: pip install yfinance")
+    except ImportError as err:
+        raise ImportError("yfinance required. Install with: pip install yfinance") from err
 
     ticker = yf.Ticker(symbol)
     df = ticker.history(
@@ -89,15 +104,17 @@ def fetch_candles_yahoo(
         return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume"])
 
     df = df.reset_index()
-    df = df.rename(columns={
-        "Datetime": "time",
-        "Date": "time",
-        "Open": "open",
-        "High": "high",
-        "Low": "low",
-        "Close": "close",
-        "Volume": "volume",
-    })
+    df = df.rename(
+        columns={
+            "Datetime": "time",
+            "Date": "time",
+            "Open": "open",
+            "High": "high",
+            "Low": "low",
+            "Close": "close",
+            "Volume": "volume",
+        }
+    )
     keep_cols = [c for c in ["time", "open", "high", "low", "close", "volume"] if c in df.columns]
     df = df[keep_cols]
     df["time"] = pd.to_datetime(df["time"])
@@ -109,8 +126,8 @@ def fetch_vix_yahoo(start: date, end: date) -> pd.DataFrame:
     """Fetch ^VIX historical data from Yahoo Finance."""
     try:
         import yfinance as yf
-    except ImportError:
-        raise ImportError("yfinance required. Install with: pip install yfinance")
+    except ImportError as err:
+        raise ImportError("yfinance required. Install with: pip install yfinance") from err
 
     ticker = yf.Ticker("^VIX")
     df = ticker.history(
@@ -150,7 +167,7 @@ def generate_sentiment_from_candles(
     labels = np.full(n, "Neutral", dtype=object)
 
     for i in range(lookback, n):
-        window = returns[i - lookback:i]
+        window = returns[i - lookback : i]
         total_return = (closes[i] / closes[i - lookback] - 1.0) * 100.0
         ann_vol = np.std(window) * np.sqrt(252)
 
@@ -172,15 +189,17 @@ def generate_sentiment_from_candles(
         else:
             labels[i] = "Extreme Greed"
 
-    return pd.DataFrame({
-        "time": timestamps,
-        "score": scores,
-        "label": labels,
-    })
+    return pd.DataFrame(
+        {
+            "time": timestamps,
+            "score": scores,
+            "label": labels,
+        }
+    )
 
 
 def seed_all(
-    symbols: Optional[list[str]] = None,
+    symbols: list[str] | None = None,
     start: date = date(2026, 6, 12),
     end: date = date(2026, 8, 12),
     reset: bool = False,
@@ -199,22 +218,23 @@ def seed_all(
         Dict with stats: {rows_candles, rows_vix, rows_regime, rows_sentiment,
                           generation_id, elapsed_seconds}
     """
+    from orca.data.db_integration import get_connection, insert_regime_logs, upsert_candles
     from orca.data.resample import resample_ohlc
     from orca.data.validate_resample import compute_effective_bpd
-    from orca.data.regime_inference import infer_regimes
-    from orca.data.db_integration import upsert_candles, insert_regime_logs, get_connection
 
     t0 = _time.monotonic()
 
     if symbols is None:
         symbols = DEFAULT_SYMBOLS
 
-    gen_id = compute_generation_id({
-        "symbols": sorted(symbols),
-        "start": str(start),
-        "end": str(end),
-        "source": "yahoo",
-    })
+    gen_id = compute_generation_id(
+        {
+            "symbols": sorted(symbols),
+            "start": str(start),
+            "end": str(end),
+            "source": "yahoo",
+        }
+    )
 
     stats = {
         "generation_id": gen_id,
@@ -252,20 +272,30 @@ def seed_all(
 
             inserted = 0
             if not candles_5m.empty:
-                inserted += upsert_candles(sym, "5m", candles_5m.set_index("time"), source="yahoo", generation_id=gen_id)
+                inserted += upsert_candles(
+                    sym, "5m", candles_5m.set_index("time"), source="yahoo", generation_id=gen_id
+                )
 
                 for tf in TIMEFRAMES_RESAMPLE:
                     derived = resample_ohlc(candles_5m.copy(), tf)
                     if not derived.empty:
-                        inserted += upsert_candles(sym, tf, derived, source="yahoo", generation_id=gen_id)
+                        inserted += upsert_candles(
+                            sym, tf, derived, source="yahoo", generation_id=gen_id
+                        )
 
             if not candles_1d.empty:
-                inserted += upsert_candles(sym, "1d", candles_1d.set_index("time"), source="yahoo", generation_id=gen_id)
+                inserted += upsert_candles(
+                    sym, "1d", candles_1d.set_index("time"), source="yahoo", generation_id=gen_id
+                )
 
             stats["rows_candles"] += inserted
 
             if verbose:
-                bpd_5m = compute_effective_bpd(candles_5m.set_index("time")) if not candles_5m.empty else 0
+                bpd_5m = (
+                    compute_effective_bpd(candles_5m.set_index("time"))
+                    if not candles_5m.empty
+                    else 0
+                )
                 print(f"{inserted} bars (5m BPD={bpd_5m:.0f})")
 
         except Exception as e:
@@ -281,18 +311,28 @@ def seed_all(
         vix_df = fetch_vix_yahoo(start, end)
         if not vix_df.empty:
             import psycopg2
+
             conn = get_connection()
             try:
                 with conn.cursor() as cur:
                     rows = [
-                        (r["time"].to_pydatetime(), int(float(r["vix_value"]) * 10000), int(float(r["vix_change"]) * 10000))
+                        (
+                            r["time"].to_pydatetime(),
+                            int(float(r["vix_value"]) * 10000),
+                            int(float(r["vix_change"]) * 10000),
+                        )
                         for _, r in vix_df.iterrows()
                     ]
-                    psycopg2.extras.execute_values(cur, """
+                    psycopg2.extras.execute_values(
+                        cur,
+                        """
                         INSERT INTO vix_logs (timestamp, vix_value, vix_change)
                         VALUES %s
                         ON CONFLICT DO NOTHING
-                    """, rows, page_size=500)
+                    """,
+                        rows,
+                        page_size=500,
+                    )
                     stats["rows_vix"] = cur.rowcount
                 conn.commit()
             finally:
@@ -308,9 +348,16 @@ def seed_all(
 
     try:
         from orca.data.regime_inference import build_regime_logs
-        regime_data = {sym: (closes, times) for sym, (closes, times) in
-                       zip(all_1d_closes.keys(), zip(all_1d_closes.values(), all_1d_times.values()))
-                       if len(closes) >= 21}
+
+        regime_data = {
+            sym: (closes, times)
+            for sym, (closes, times) in zip(
+                all_1d_closes.keys(),
+                zip(all_1d_closes.values(), all_1d_times.values(), strict=False),
+                strict=False,
+            )
+            if len(closes) >= 21
+        }
         logs = build_regime_logs(regime_data)
         if logs:
             stats["rows_regime"] = insert_regime_logs(logs)
@@ -326,27 +373,40 @@ def seed_all(
 
     try:
         import psycopg2
+
         conn = get_connection()
         total_sent = 0
         for sym, closes in all_1d_closes.items():
             if len(closes) < 22:
                 continue
-            times_dict = {s: t for s, t in zip(all_1d_closes.keys(), all_1d_times.values())}
+            times_dict = {
+                s: t for s, t in zip(all_1d_closes.keys(), all_1d_times.values(), strict=False)
+            }
             times = times_dict.get(sym)
             if times is None:
                 continue
             sentiment_df = generate_sentiment_from_candles(closes, times)
             if not sentiment_df.empty:
                 rows = [
-                    (t.to_pydatetime(), int(s), str(l))
-                    for t, s, l in zip(sentiment_df["time"], sentiment_df["score"], sentiment_df["label"])
+                    (t.to_pydatetime(), int(s), str(lbl))
+                    for t, s, lbl in zip(
+                        sentiment_df["time"],
+                        sentiment_df["score"],
+                        sentiment_df["label"],
+                        strict=False,
+                    )
                 ]
                 with conn.cursor() as cur:
-                    psycopg2.extras.execute_values(cur, """
+                    psycopg2.extras.execute_values(
+                        cur,
+                        """
                         INSERT INTO sentiment_logs (timestamp, score, label)
                         VALUES %s
                         ON CONFLICT DO NOTHING
-                    """, rows, page_size=500)
+                    """,
+                        rows,
+                        page_size=500,
+                    )
                     total_sent += cur.rowcount
         conn.commit()
         conn.close()

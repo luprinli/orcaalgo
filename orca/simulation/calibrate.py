@@ -40,8 +40,7 @@ def load_real_candles(
         import psycopg2
     except ImportError as e:
         raise ImportError(
-            "psycopg2 is required for database access. "
-            "Install with: pip install psycopg2-binary"
+            "psycopg2 is required for database access. Install with: pip install psycopg2-binary"
         ) from e
 
     conn = psycopg2.connect(_get_db_url())
@@ -74,8 +73,15 @@ def load_real_candles(
 
     times = np.array([r[0].timestamp() for r in rows])
     prices = np.array(
-        [[float(r[1]) / 100_000, float(r[2]) / 100_000, float(r[3]) / 100_000, float(r[4]) / 100_000]
-         for r in rows],
+        [
+            [
+                float(r[1]) / 100_000,
+                float(r[2]) / 100_000,
+                float(r[3]) / 100_000,
+                float(r[4]) / 100_000,
+            ]
+            for r in rows
+        ],
         dtype=np.float64,
     )
     volumes = np.array([float(r[5]) for r in rows], dtype=np.float64)
@@ -156,7 +162,9 @@ def compute_heston_params(prices: np.ndarray) -> dict[str, float]:
     sigma_v = min(sigma_v, 0.5)
 
     if len(log_returns) > 1:
-        rho = float(np.clip(np.corrcoef(log_returns[:-1], np.abs(log_returns[1:]))[0, 1], -0.99, 0.99))
+        rho = float(
+            np.clip(np.corrcoef(log_returns[:-1], np.abs(log_returns[1:]))[0, 1], -0.99, 0.99)
+        )
     else:
         rho = -0.7
 
@@ -172,7 +180,9 @@ def compute_heston_params(prices: np.ndarray) -> dict[str, float]:
             v[0] = t
             nll = 0.0
             for i in range(len(log_returns)):
-                v[i + 1] = max(v[i] + k * (t - v[i]) + s * np.sqrt(max(v[i], 0)) * rng.normal(), 1e-10)
+                v[i + 1] = max(
+                    v[i] + k * (t - v[i]) + s * np.sqrt(max(v[i], 0)) * rng.normal(), 1e-10
+                )
                 nll += 0.5 * (np.log(2 * np.pi * v[i]) + (log_returns[i] ** 2) / max(v[i], 1e-10))
             return float(nll)
 
@@ -194,9 +204,7 @@ def compute_heston_params(prices: np.ndarray) -> dict[str, float]:
     return {"kappa": kappa, "theta": theta, "sigma_v": sigma_v, "rho": rho}
 
 
-def compute_residual_distribution(
-    prices: np.ndarray, model: str = "gbm"
-) -> list[float]:
+def compute_residual_distribution(prices: np.ndarray, model: str = "gbm") -> list[float]:
     """Fit KDE on model residuals and return sample points."""
     closes = prices[:, 3] if prices.ndim == 2 else prices
     log_returns = np.diff(np.log(closes))
@@ -243,7 +251,7 @@ def calibrate_all(
 
     for symbol in symbols:
         try:
-            prices, volumes, times = load_real_candles(symbol, start, end, timeframe)
+            prices, _volumes, _times = load_real_candles(symbol, start, end, timeframe)
 
             calibration: dict[str, Any] = {
                 "symbol": symbol,
@@ -321,14 +329,16 @@ def load_candles_from_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray,
                     int(row["<TIME>"][2:4]),
                     int(row["<TIME>"][4:6]),
                 )
-                rows.append({
-                    "time": ts,
-                    "open": float(row["<OPEN>"]),
-                    "high": float(row["<HIGH>"]),
-                    "low": float(row["<LOW>"]),
-                    "close": float(row["<CLOSE>"]),
-                    "volume": float(row["<VOL>"]),
-                })
+                rows.append(
+                    {
+                        "time": ts,
+                        "open": float(row["<OPEN>"]),
+                        "high": float(row["<HIGH>"]),
+                        "low": float(row["<LOW>"]),
+                        "close": float(row["<CLOSE>"]),
+                        "volume": float(row["<VOL>"]),
+                    }
+                )
             except (KeyError, ValueError):
                 continue
 
@@ -337,13 +347,17 @@ def load_candles_from_csv(filepath: str | Path) -> tuple[np.ndarray, np.ndarray,
 
     rows.sort(key=lambda r: r["time"])
     times = np.array([r["time"].timestamp() for r in rows])
-    prices = np.array([[r["open"], r["high"], r["low"], r["close"]] for r in rows], dtype=np.float64)
+    prices = np.array(
+        [[r["open"], r["high"], r["low"], r["close"]] for r in rows], dtype=np.float64
+    )
     volumes = np.array([r["volume"] for r in rows], dtype=np.float64)
 
     return prices, volumes, times
 
 
-def scale_params_to_daily(params: dict[str, float], source_timeframe_minutes: int) -> dict[str, float]:
+def scale_params_to_daily(
+    params: dict[str, float], source_timeframe_minutes: int
+) -> dict[str, float]:
     """Scale model parameters from sub-daily timeframe to daily.
 
     5-min -> daily: periods_per_day = 390 / 5 = 78

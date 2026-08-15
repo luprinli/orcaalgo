@@ -40,7 +40,9 @@ class ResidualBootstrap:
                 dst_start = i * self.block_size
                 if dst_start + self.block_size <= self.n_real:
                     end = dst_start + self.block_size
-                    residual_path[dst_start:end] = resid_flat[src_start:src_start + self.block_size]
+                    residual_path[dst_start:end] = resid_flat[
+                        src_start : src_start + self.block_size
+                    ]
 
             drift = float(np.mean(self.real_returns))
             synthetic = drift + residual_path
@@ -78,16 +80,18 @@ def bootstrap_generate(
     end = pd.Timestamp(end_date) if end_date else start + pd.Timedelta(days=n - 1)
     timestamps = pd.date_range(start=start, end=end, periods=n)
 
-    df = pd.DataFrame({
-        "timestamp": timestamps,
-        "open": new_prices,
-        "high": new_prices * 1.005,
-        "low": new_prices * 0.995,
-        "close": new_prices,
-        "volume": np.random.poisson(1000, n),
-        "regime_label": np.zeros(n, dtype=int),
-        "data_source": "synthetic",
-        "symbol": symbol,
-        "timeframe": "1d",
-    })
+    df = pd.DataFrame(
+        {
+            "timestamp": timestamps,
+            "open": new_prices,
+            "high": new_prices * 1.005,
+            "low": new_prices * 0.995,
+            "close": new_prices,
+            "volume": np.random.poisson(1000, n),
+            "regime_label": np.zeros(n, dtype=int),
+            "data_source": "synthetic",
+            "symbol": symbol,
+            "timeframe": "1d",
+        }
+    )
     return df

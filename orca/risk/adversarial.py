@@ -61,18 +61,20 @@ def generate_events(
 
         corroborated = random.random() < 0.3  # 30% corroborated
 
-        events.append({
-            "timestamp": event_time.isoformat(),
-            "symbol": symbol,
-            "headline": headline,
-            "sentiment": sentiment,
-            "sentiment_score": -1.0 if sentiment == "negative" else 1.0,
-            "confidence": confidence,
-            "was_corroborated": corroborated,
-            "is_adversarial": True,
-        })
+        events.append(
+            {
+                "timestamp": event_time.isoformat(),
+                "symbol": symbol,
+                "headline": headline,
+                "sentiment": sentiment,
+                "sentiment_score": -1.0 if sentiment == "negative" else 1.0,
+                "confidence": confidence,
+                "was_corroborated": corroborated,
+                "is_adversarial": True,
+            }
+        )
 
-    events.sort(key=lambda e: e["timestamp"])
+    events.sort(key=lambda e: str(e["timestamp"]))
 
     with open(output, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=events[0].keys())
@@ -105,11 +107,13 @@ def inject_events(
         event_time = pd.Timestamp(event["timestamp"])
 
         relevant_trades = [
-            t for t in trades
+            t
+            for t in trades
             if t.get("symbol", "") == event["symbol"]
             and abs(
                 (pd.Timestamp(t.get("entry_time", t.get("time", ""))) - event_time).total_seconds()
-            ) < 3600
+            )
+            < 3600
         ]
 
         if guardrail_enabled and not event["was_corroborated"]:
@@ -140,7 +144,9 @@ def main():
     parser.add_argument("--generate-events", action="store_true", help="Generate synthetic events")
     parser.add_argument("--backtest-results", help="Path to backtest results JSON")
     parser.add_argument("--news-events", default="adversarial_events.csv", help="Events CSV file")
-    parser.add_argument("--output", default="adversarial_events.csv", help="Output for generated events")
+    parser.add_argument(
+        "--output", default="adversarial_events.csv", help="Output for generated events"
+    )
     parser.add_argument("--symbols", default="SPY,AAPL,MSFT,TSLA", help="Comma-separated symbols")
     parser.add_argument("--start", default="2024-01-01", help="Start date")
     parser.add_argument("--end", default="2025-12-31", help="End date")

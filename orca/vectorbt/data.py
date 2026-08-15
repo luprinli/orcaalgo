@@ -86,8 +86,7 @@ def _load_from_timescaledb(
 
     if df.empty:
         raise ValueError(
-            f"No data for {symbol} ({timeframe}) in TimescaleDB "
-            f"between {start} and {end}"
+            f"No data for {symbol} ({timeframe}) in TimescaleDB between {start} and {end}"
         )
 
     df.set_index("timestamp", inplace=True)
@@ -130,8 +129,16 @@ def _load_from_file(
         df = pd.read_csv(
             stooq_path,
             names=[
-                "ticker", "per", "date", "time",
-                "open", "high", "low", "close", "vol", "openint",
+                "ticker",
+                "per",
+                "date",
+                "time",
+                "open",
+                "high",
+                "low",
+                "close",
+                "vol",
+                "openint",
             ],
             header=0,
         )

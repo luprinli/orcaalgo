@@ -41,6 +41,7 @@ def get_sample_count(dataset, symbol: str) -> int:
 def filter_by_symbol(dataset, symbol: str):
     filtered = [s for s in dataset.samples if s.symbol == symbol]
     from orca.ml.dataset import FeatureDataset
+
     return FeatureDataset(
         samples=filtered,
         feature_names=dataset.feature_names,
@@ -52,6 +53,7 @@ def filter_by_asset_class(dataset, asset_class: str):
     symbols_upper = [s.upper() for s in ASSET_CLASS_SYMBOLS.get(asset_class, [])]
     filtered = [s for s in dataset.samples if s.symbol.upper() in symbols_upper]
     from orca.ml.dataset import FeatureDataset
+
     return FeatureDataset(
         samples=filtered,
         feature_names=dataset.feature_names,

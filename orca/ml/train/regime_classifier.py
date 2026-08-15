@@ -37,12 +37,12 @@ except ImportError:
     xgb = None
 
 REGIME_LABELS = [
-    "calm",          # 0
+    "calm",  # 0
     "accumulation",  # 1
-    "trending",      # 2
+    "trending",  # 2
     "distribution",  # 3
-    "high_vol",      # 4
-    "crisis",        # 5
+    "high_vol",  # 4
+    "crisis",  # 5
 ]
 
 REGIME_SCORE_WEIGHTS = [1.0, 0.9, 0.8, 0.7, 0.4, 0.0]
@@ -127,7 +127,9 @@ class RegimeClassifier:
 
         logger.info(
             "regime classifier: accuracy=%.3f roc_auc=%.3f passed=%v",
-            accuracy, roc_auc, passed,
+            accuracy,
+            roc_auc,
+            passed,
         )
 
         return RegimeTrainingResult(
@@ -226,6 +228,7 @@ def build_regime_features(
 def _multiclass_roc_auc(y_true: np.ndarray, y_prob: np.ndarray, n_classes: int) -> float:
     try:
         from sklearn.metrics import roc_auc_score
+
         return float(roc_auc_score(y_true, y_prob, multi_class="ovo"))
     except ImportError:
         return 0.5
@@ -270,10 +273,14 @@ def should_retrain(
 
     observed = np.array([c / total for c in regime_counts])
     expected = np.array([0.40, 0.20, 0.15, 0.10, 0.10, 0.05])
-    div = float(np.sum(observed * np.log(np.clip(observed / np.clip(expected, 0.001, 1), 0.001, 10))))
+    div = float(
+        np.sum(observed * np.log(np.clip(observed / np.clip(expected, 0.001, 1), 0.001, 10)))
+    )
 
     if div > regime_drift_threshold:
-        logger.info("should_retrain: regime drift detected (div=%.3f > %.3f)", div, regime_drift_threshold)
+        logger.info(
+            "should_retrain: regime drift detected (div=%.3f > %.3f)", div, regime_drift_threshold
+        )
         return True
 
     # Check stale accuracy from win rate

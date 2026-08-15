@@ -15,11 +15,13 @@ def _make_trades(n: int, seed: int = 42) -> list[dict]:
     for _ in range(n):
         p = random.random()
         outcome = "win" if random.random() < p else "loss"
-        trades.append({
-            "confidence": p,
-            "outcome": outcome,
-            "side": random.choice(["BUY", "SELL"]),
-        })
+        trades.append(
+            {
+                "confidence": p,
+                "outcome": outcome,
+                "side": random.choice(["BUY", "SELL"]),
+            }
+        )
     return trades
 
 
@@ -72,11 +74,21 @@ class TestCalibrationAudit:
 
     def test_sufficient_data_property(self):
         sr_small = SegmentReport(
-            name="test", n=10, brier=0.2, reliability=0.1, resolution=0.05, uncertainty=0.2,
+            name="test",
+            n=10,
+            brier=0.2,
+            reliability=0.1,
+            resolution=0.05,
+            uncertainty=0.2,
         )
         assert sr_small.sufficient_data is False
         sr_large = SegmentReport(
-            name="test", n=50, brier=0.2, reliability=0.1, resolution=0.05, uncertainty=0.2,
+            name="test",
+            n=50,
+            brier=0.2,
+            reliability=0.1,
+            resolution=0.05,
+            uncertainty=0.2,
         )
         assert sr_large.sufficient_data is True
 
@@ -109,8 +121,11 @@ class TestPlattCalibration:
         raw_p = np.random.uniform(0.3, 0.9, n).tolist()
         outcomes = [1 if random.random() < p else 0 for p in raw_p]
 
-        result, msg = platt_calibrate_segment(
-            raw_p, outcomes, min_cohort_n=200, min_improvement_pct=-100.0,
+        result, _msg = platt_calibrate_segment(
+            raw_p,
+            outcomes,
+            min_cohort_n=200,
+            min_improvement_pct=-100.0,
         )
         assert result is not None
         assert result.a is not None

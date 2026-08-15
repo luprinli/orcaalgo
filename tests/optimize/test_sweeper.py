@@ -21,14 +21,16 @@ def _make_ohlcv_csv(path: Path, n: int = 200) -> Path:
     np.random.seed(42)
     dates = pd.date_range("2023-01-02", periods=n)
     close = 100 + np.cumsum(np.random.randn(n) * 0.1)
-    df = pd.DataFrame({
-        "Date": dates,
-        "Open": np.roll(close, 1),
-        "High": close + np.abs(np.random.randn(n)) * 0.5,
-        "Low": close - np.abs(np.random.randn(n)) * 0.5,
-        "Close": close,
-        "Volume": np.random.randint(1000, 5000, n),
-    })
+    df = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": np.roll(close, 1),
+            "High": close + np.abs(np.random.randn(n)) * 0.5,
+            "Low": close - np.abs(np.random.randn(n)) * 0.5,
+            "Close": close,
+            "Volume": np.random.randint(1000, 5000, n),
+        }
+    )
     df.iloc[0, df.columns.get_loc("Open")] = 100.0
     df.to_csv(path, index=False)
     return path
@@ -37,12 +39,14 @@ def _make_ohlcv_csv(path: Path, n: int = 200) -> Path:
 class TestRSI:
     def test_rsi_returns_array(self):
         import numpy as np
+
         prices = np.linspace(100, 110, 50)
         result = _compute_rsi(prices, 14)
         assert len(result) == 50
 
     def test_rsi_bounded(self):
         import numpy as np
+
         np.random.seed(123)
         prices = 100 + np.cumsum(np.random.randn(300) * 0.05)
         result = _compute_rsi(prices, 14)
@@ -54,18 +58,24 @@ class TestRSI:
 class TestGenerateSignals:
     def test_returns_array(self):
         import numpy as np
-        df = pd.DataFrame({
-            "Close": 100 + np.cumsum(np.random.randn(200) * 0.1),
-        })
+
+        df = pd.DataFrame(
+            {
+                "Close": 100 + np.cumsum(np.random.randn(200) * 0.1),
+            }
+        )
         params = {"rsi_period": 20, "entry_threshold": 30, "exit_threshold": 50}
         result = _generate_signals(df, params)
         assert result.ndim == 1
 
     def test_signal_values_in_set(self):
         import numpy as np
-        df = pd.DataFrame({
-            "Close": 100 + np.cumsum(np.random.randn(200) * 0.1),
-        })
+
+        df = pd.DataFrame(
+            {
+                "Close": 100 + np.cumsum(np.random.randn(200) * 0.1),
+            }
+        )
         params = {"rsi_period": 20, "entry_threshold": 30, "exit_threshold": 50}
         result = _generate_signals(df, params)
         assert set(result).issubset({-1, 0, 1})
@@ -85,6 +95,7 @@ class TestEvaluateParams:
 
     def test_short_data_returns_zeros(self):
         import numpy as np
+
         df = pd.DataFrame({"Close": np.array([100.0])})
         metrics = _evaluate_params(df, {"rsi_period": 20})
         assert metrics["sharpe_ratio"] == 0
@@ -126,7 +137,9 @@ class TestSweepStrategy:
     def test_random_sweep(self, tmp_path):
         csv_path = _make_ohlcv_csv(tmp_path / "test.csv", n=200)
         param_grid = {"rsi_period": [14, 20], "entry_threshold": [25, 30]}
-        result = sweep_strategy("intraday_mr", str(csv_path), param_grid, method="random", n_random=5)
+        result = sweep_strategy(
+            "intraday_mr", str(csv_path), param_grid, method="random", n_random=5
+        )
         assert result["n_trials"] <= 5
         assert result["method"] == "random"
 

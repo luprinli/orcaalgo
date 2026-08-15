@@ -63,13 +63,15 @@ class TestMutualInformation:
         rng = np.random.default_rng(42)
         # Feature 0 is strongly predictive
         y = rng.binomial(1, 0.55, 500)
-        X = np.column_stack([
-            y * 2.0 + rng.normal(0, 0.1, 500),  # strong signal
-            rng.normal(0, 1, 500),                # noise
-            rng.normal(0, 1, 500),                # noise
-            rng.normal(0, 1, 500),                # noise
-            rng.normal(0, 1, 500),                # noise
-        ])
+        X = np.column_stack(
+            [
+                y * 2.0 + rng.normal(0, 0.1, 500),  # strong signal
+                rng.normal(0, 1, 500),  # noise
+                rng.normal(0, 1, 500),  # noise
+                rng.normal(0, 1, 500),  # noise
+                rng.normal(0, 1, 500),  # noise
+            ]
+        )
         ranked = rank_features_by_mi(X, y)
         # Feature 0 should have highest MI
         assert ranked[0][0] == 0
@@ -163,8 +165,12 @@ class TestShouldRetrain:
     def test_brier_degradation(self):
         X = make_test_features(500, 5)
         should, triggers, _ = should_retrain(
-            X, X, 0.65, 0.60,
-            current_brier=0.25, training_brier=0.15,
+            X,
+            X,
+            0.65,
+            0.60,
+            current_brier=0.25,
+            training_brier=0.15,
         )
         assert should
         assert any("brier" in t for t in triggers)

@@ -111,6 +111,7 @@ class TestPredictJSONModel:
             path.write_text(json.dumps(model_data))
 
             from orca.ml.inference import _predict_json_model
+
             X = np.array([[1.0, 1.0] + [0.0] * 19], dtype=np.float64)
             p = _predict_json_model(str(path), X)
             assert 0.0 <= p <= 1.0
@@ -126,6 +127,7 @@ class TestPredictJSONModel:
             path.write_text(json.dumps(model_data))
 
             from orca.ml.inference import _predict_json_model
+
             X = np.array([[1.0] + [0.0] * 20], dtype=np.float64)
             p = _predict_json_model(str(path), X)
             assert 0.5 < p < 0.7
@@ -137,6 +139,7 @@ class TestPredictJSONModel:
             path.write_text(json.dumps(model_data))
 
             from orca.ml.inference import _predict_json_model
+
             X = np.array([[1.0] + [0.0] * 20], dtype=np.float64)
             p = _predict_json_model(str(path), X)
             assert 0.0 <= p <= 1.0

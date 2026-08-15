@@ -45,6 +45,7 @@ def _predict(model_path: str, X: np.ndarray) -> float:
 
     try:
         import lightgbm as lgb
+
         model = lgb.Booster(model_file=model_path)
         return float(model.predict(X)[0])
     except (ImportError, Exception):
@@ -52,6 +53,7 @@ def _predict(model_path: str, X: np.ndarray) -> float:
 
     try:
         import xgboost as xgb
+
         model = xgb.XGBRegressor()
         model.load_model(model_path)
         return float(model.predict(X)[0])

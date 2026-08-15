@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bayesian parameter optimization using optuna. Calls the Go REST API for backtests."""
+
 import json
 import os
 import time
@@ -102,14 +103,16 @@ class BayesianOptimizer:
             study.optimize(self.objective, n_trials=1)
             if progress_callback:
                 pct = (trial_num + 1) / self.n_trials * 100
-                progress_callback({
-                    "status": "running",
-                    "progress_pct": round(pct, 1),
-                    "current_trial": trial_num + 1,
-                    "total_trials": self.n_trials,
-                    "best_value": study.best_value if study.best_trial else None,
-                    "elapsed_s": round(time.time() - start_time, 1),
-                })
+                progress_callback(
+                    {
+                        "status": "running",
+                        "progress_pct": round(pct, 1),
+                        "current_trial": trial_num + 1,
+                        "total_trials": self.n_trials,
+                        "best_value": study.best_value if study.best_trial else None,
+                        "elapsed_s": round(time.time() - start_time, 1),
+                    }
+                )
 
         if progress_callback:
             progress_callback({"status": "completed", "progress_pct": 100})
@@ -121,24 +124,30 @@ class BayesianOptimizer:
             "elapsed_s": round(time.time() - start_time, 1),
             "trials": [
                 {"number": t.number, "value": t.value, "params": t.params}
-                for t in study.trials if t.value is not None
+                for t in study.trials
+                if t.value is not None
             ],
         }
 
 
 def run_optimization(**kwargs) -> dict[str, Any]:
     optimizer = BayesianOptimizer(**kwargs)
-    return optimizer.run(progress_callback=lambda p: print(
-        f"  [{p.get('current_trial',0)}/{p.get('total_trials',50)}] "
-        f"best={p.get('best_value','?'):.4f}  elapsed={p.get('elapsed_s',0):.0f}s"
-    ))
+    return optimizer.run(
+        progress_callback=lambda p: print(
+            f"  [{p.get('current_trial', 0)}/{p.get('total_trials', 50)}] "
+            f"best={p.get('best_value', '?'):.4f}  elapsed={p.get('elapsed_s', 0):.0f}s"
+        )
+    )
 
 
 if __name__ == "__main__":
     result = run_optimization(
-        strategy_id="intraday_mr", symbol="EURUSD",
-        train_start="2022-01-01", train_end="2023-12-31",
-        test_start="2024-01-01", test_end="2024-12-31",
+        strategy_id="intraday_mr",
+        symbol="EURUSD",
+        train_start="2022-01-01",
+        train_end="2023-12-31",
+        test_start="2024-01-01",
+        test_end="2024-12-31",
         n_trials=20,
     )
     print(json.dumps(result, indent=2, default=str))

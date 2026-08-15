@@ -28,7 +28,14 @@ class TestV1Config:
             None,
         )
 
-        required = {"version", "strategy_id", "parameters", "metrics", "optimized_at", "optimized_by"}
+        required = {
+            "version",
+            "strategy_id",
+            "parameters",
+            "metrics",
+            "optimized_at",
+            "optimized_by",
+        }
         assert required.issubset(set(config.keys()))
 
     def test_version_is_one(self):
@@ -50,7 +57,9 @@ class TestV1Config:
 
 class TestV2Config:
     def test_has_gkr_mapping_key(self):
-        config = _build_v2_config("intraday_mr", {"rsi_period": 20, "entry_threshold": 30}, None, None)
+        config = _build_v2_config(
+            "intraday_mr", {"rsi_period": 20, "entry_threshold": 30}, None, None
+        )
         assert config["version"] == 2
         assert "gkr_mapping" in config
         assert "param_schema_version" in config
@@ -58,7 +67,9 @@ class TestV2Config:
 
 class TestGKRMapping:
     def test_intraday_mr_mapping(self):
-        result = _generate_gkr_mapping("intraday_mr", {"rsi_period": 20, "entry_threshold": 30, "exit_threshold": 50})
+        result = _generate_gkr_mapping(
+            "intraday_mr", {"rsi_period": 20, "entry_threshold": 30, "exit_threshold": 50}
+        )
         assert result["rsi_period"]["node"] == "zscore_calc"
         assert result["entry_threshold"]["node"] == "signal_gen"
 
@@ -71,9 +82,16 @@ class TestParamsToGkr:
     def test_writes_file_with_content_hash(self):
         with tempfile.TemporaryDirectory() as td:
             path = params_to_gkr(
-                "test_strat", "EURUSD",
+                "test_strat",
+                "EURUSD",
                 {"rsi_period": 20},
-                {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42},
+                {
+                    "sharpe_ratio": 1.5,
+                    "max_drawdown": -10.0,
+                    "total_return": 25.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td,
             )
             assert path.exists()
@@ -89,13 +107,26 @@ class TestParamsToGkr:
             p1 = export_orig(
                 "test_strat",
                 {"rsi_period": 20},
-                {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
+                {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown": -5.0,
+                    "total_return": 10.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td1,
             )
             p2 = params_to_gkr(
-                "test_strat", "EURUSD",
+                "test_strat",
+                "EURUSD",
                 {"rsi_period": 20},
-                {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
+                {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown": -5.0,
+                    "total_return": 10.0,
+                    "win_rate": 60.0,
+                    "num_trades": 42,
+                },
                 output_dir=td2,
             )
             c1 = yaml.safe_load(open(p1))
@@ -108,15 +139,30 @@ class TestParamsToGkr:
         with tempfile.TemporaryDirectory() as td:
             with pytest.raises(ValueError, match="Unsupported schema_version"):
                 params_to_gkr(
-                    "test", "X", {"a": 1},
-                    metrics={"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42},
-                    output_dir=td, schema_version=99,
+                    "test",
+                    "X",
+                    {"a": 1},
+                    metrics={
+                        "sharpe_ratio": 1.0,
+                        "max_drawdown": -5.0,
+                        "total_return": 10.0,
+                        "win_rate": 60.0,
+                        "num_trades": 42,
+                    },
+                    output_dir=td,
+                    schema_version=99,
                 )
 
     def test_content_hash_reproducible(self):
         with tempfile.TemporaryDirectory() as td:
             params = {"rsi_period": 20, "entry_threshold": 30}
-            metrics = {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42}
+            metrics = {
+                "sharpe_ratio": 1.5,
+                "max_drawdown": -10.0,
+                "total_return": 25.0,
+                "win_rate": 60.0,
+                "num_trades": 42,
+            }
             p1 = params_to_gkr("test", "X", params, metrics, output_dir=td)
             p2 = params_to_gkr("test", "X", params, metrics, output_dir=td)
             h1 = yaml.safe_load(open(p1))["content_hash"]
@@ -126,9 +172,19 @@ class TestParamsToGkr:
     def test_v1_v2_cross_schema_hash_equivalence(self):
         with tempfile.TemporaryDirectory() as td1, tempfile.TemporaryDirectory() as td2:
             params = {"rsi_period": 20, "entry_threshold": 30}
-            metrics = {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42}
-            p1 = params_to_gkr("cross_hash", "EURUSD", params, metrics, output_dir=td1, schema_version=1)
-            p2 = params_to_gkr("cross_hash", "EURUSD", params, metrics, output_dir=td2, schema_version=2)
+            metrics = {
+                "sharpe_ratio": 1.5,
+                "max_drawdown": -10.0,
+                "total_return": 25.0,
+                "win_rate": 60.0,
+                "num_trades": 42,
+            }
+            p1 = params_to_gkr(
+                "cross_hash", "EURUSD", params, metrics, output_dir=td1, schema_version=1
+            )
+            p2 = params_to_gkr(
+                "cross_hash", "EURUSD", params, metrics, output_dir=td2, schema_version=2
+            )
             c1 = yaml.safe_load(open(p1))
             c2 = yaml.safe_load(open(p2))
             h1 = c1["content_hash"]
@@ -141,7 +197,13 @@ class TestParamsToGkr:
     def test_params_round_trip_preserves_values(self):
         with tempfile.TemporaryDirectory() as td:
             params = {"rsi_period": 20, "entry_threshold": 30.5, "exit_threshold": 70}
-            metrics = {"sharpe_ratio": 1.5, "max_drawdown": -10.0, "total_return": 25.0, "win_rate": 60.0, "num_trades": 42}
+            metrics = {
+                "sharpe_ratio": 1.5,
+                "max_drawdown": -10.0,
+                "total_return": 25.0,
+                "win_rate": 60.0,
+                "num_trades": 42,
+            }
             path = params_to_gkr("round_trip", "EURUSD", params, metrics, output_dir=td)
             config = yaml.safe_load(open(path))
             assert config["parameters"]["rsi_period"] == 20.0
@@ -152,7 +214,13 @@ class TestParamsToGkr:
 
     def test_different_params_produce_different_hashes(self):
         with tempfile.TemporaryDirectory() as td1, tempfile.TemporaryDirectory() as td2:
-            metrics = {"sharpe_ratio": 1.0, "max_drawdown": -5.0, "total_return": 10.0, "win_rate": 60.0, "num_trades": 42}
+            metrics = {
+                "sharpe_ratio": 1.0,
+                "max_drawdown": -5.0,
+                "total_return": 10.0,
+                "win_rate": 60.0,
+                "num_trades": 42,
+            }
             p1 = params_to_gkr("hash_diff", "X", {"a": 1}, metrics, output_dir=td1)
             p2 = params_to_gkr("hash_diff", "X", {"a": 2}, metrics, output_dir=td2)
             h1 = yaml.safe_load(open(p1))["content_hash"]
@@ -168,12 +236,22 @@ class TestParamsToGkr:
 
         with tempfile.TemporaryDirectory() as td:
             params = {"entry_z": 1.5, "exit_z": 0.3, "max_hold": 60}
-            metrics = {"sharpe_ratio": 1.2, "max_drawdown": -8.0, "total_return": 15.0, "win_rate": 55.0, "num_trades": 30}
-            path = params_to_gkr("intraday_mr", "EURUSD", params, metrics, output_dir=td, schema_version=2)
+            metrics = {
+                "sharpe_ratio": 1.2,
+                "max_drawdown": -8.0,
+                "total_return": 15.0,
+                "win_rate": 55.0,
+                "num_trades": 30,
+            }
+            path = params_to_gkr(
+                "intraday_mr", "EURUSD", params, metrics, output_dir=td, schema_version=2
+            )
             config = yaml.safe_load(open(path))
 
             content_hash = config.get("content_hash", "")
-            assert content_hash.startswith("sha256:"), f"content_hash missing or invalid: {content_hash}"
+            assert content_hash.startswith("sha256:"), (
+                f"content_hash missing or invalid: {content_hash}"
+            )
 
             try:
                 ir = StrategyIRV04.model_validate(config.get("ir", {}))

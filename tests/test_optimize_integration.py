@@ -16,7 +16,9 @@ import pytest
 import requests
 
 API_BASE = f"{os.environ.get('ORCA_API_URL', 'http://localhost:8081')}/api/v1"
-ADMIN_PASSWORD = os.environ.get("ORCA_ADMIN_PASSWORD", "dev-admin-password-do-not-use-in-production")
+ADMIN_PASSWORD = os.environ.get(
+    "ORCA_ADMIN_PASSWORD", "dev-admin-password-do-not-use-in-production"
+)
 AUTH = {"username": "admin", "password": ADMIN_PASSWORD}
 
 
@@ -49,7 +51,7 @@ def _get_token():
 )
 class TestOptimizePath:
     def test_optimized_matrix_populates_best_params(self):
-        """Submit 2×2×1 matrix with optimize=true, verify best_params populated."""
+        """Submit 2x2x1 matrix with optimize=true, verify best_params populated."""
         token = _get_token()
         headers = {"Authorization": f"Bearer {token}"}
         payload = {
@@ -62,9 +64,7 @@ class TestOptimizePath:
             "optimize": True,
             "max_trials": 10,
         }
-        r = requests.post(
-            f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10
-        )
+        r = requests.post(f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10)
         assert r.status_code == 202, f"Expected 202, got {r.status_code}: {r.text}"
         data = r.json()
         batch_id = data["batch_id"]
@@ -107,9 +107,7 @@ class TestOptimizePath:
             "end_date": "2024-03-31",
             "initial_capital": 100000,
         }
-        r = requests.post(
-            f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10
-        )
+        r = requests.post(f"{API_BASE}/backtests/matrix", json=payload, headers=headers, timeout=10)
         if r.status_code != 202:
             pytest.skip(f"Matrix endpoint not available: {r.status_code}")
         data = r.json()
@@ -140,5 +138,5 @@ class TestOptimizePath:
 @pytest.mark.skipif(_server_healthy(), reason="Server IS running — skip offline test")
 def test_offline_matrix_endpoint_not_available():
     """When server is not running, the endpoint should be unreachable."""
-    with pytest.raises(Exception):
+    with pytest.raises(requests.exceptions.ConnectionError):
         requests.get(f"{API_BASE}/backtests/health", timeout=2)

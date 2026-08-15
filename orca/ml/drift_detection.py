@@ -110,7 +110,7 @@ def compute_per_feature_psi(
 
     result: dict[str, float] = {}
     for i in range(n_features):
-        psi = compute_psi(reference[:, i:i + 1], recent[:, i:i + 1], bins, epsilon)
+        psi = compute_psi(reference[:, i : i + 1], recent[:, i : i + 1], bins, epsilon)
         name = feature_names[i] if i < len(feature_names) else f"f{i}"
         result[name] = float(psi)
 
@@ -161,7 +161,9 @@ def classify_drift(
 
     logger.info(
         "drift check: status=%s psi=%.3f triggers=%s",
-        status.name, psi_total, triggers,
+        status.name,
+        psi_total,
+        triggers,
     )
 
     return DriftReport(

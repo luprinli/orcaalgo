@@ -23,7 +23,7 @@ class TypeSpec(BaseModel):
 class InputSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    type: TypeSpec = Field(default_factory=TypeSpec)
+    type: TypeSpec = Field(default_factory=lambda: TypeSpec(kind="Scalar"))
     required: bool = True
     default: Any = None
 
@@ -57,7 +57,7 @@ class TemporalRule(BaseModel):
 class OutputSpec(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    type: TypeSpec = Field(default_factory=TypeSpec)
+    type: TypeSpec = Field(default_factory=lambda: TypeSpec(kind="Scalar"))
     port_temporal: PortTemporalSpec | None = None
     temporal_rule: TemporalRule | None = None
 
@@ -120,6 +120,7 @@ class RiskProfile(BaseModel):
 
     Translated into BacktestConfig.StrategyParams by the GKR compiler.
     """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     risk_per_trade_pct: float = Field(default=0.02, ge=0.001, le=0.10)

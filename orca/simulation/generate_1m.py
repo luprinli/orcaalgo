@@ -131,6 +131,7 @@ def _get_us_trading_days(start: datetime, end: datetime) -> list[datetime]:
     """
     try:
         from orca.data.nyse_calendar import get_trading_days
+
         return [
             datetime(d.year, d.month, d.day, tzinfo=UTC)
             for d in get_trading_days(start.date(), end.date())
@@ -198,7 +199,9 @@ def generate_1m_candles(
         mu, sigma = params["mu"], params["sigma"]
         theta = params.get("theta", 0.05)
     else:
-        params = calibration.get("heston", {"kappa": 2.0, "theta": 0.04, "sigma_v": 0.3, "rho": -0.7})
+        params = calibration.get(
+            "heston", {"kappa": 2.0, "theta": 0.04, "sigma_v": 0.3, "rho": -0.7}
+        )
         kappa = params.get("kappa", 2.0)
         theta = params.get("theta", 0.04)
         sigma_v = params.get("sigma_v", 0.3)
@@ -211,9 +214,9 @@ def generate_1m_candles(
         start_price = float(calibration["last_close"])
     elif "gbm" in calibration:
         try:
-            prices, _, _ = __import__("orca.simulation.calibrate", fromlist=["load_real_candles"]).load_real_candles(
-                symbol, None, None, timeframe
-            )
+            prices, _, _ = __import__(
+                "orca.simulation.calibrate", fromlist=["load_real_candles"]
+            ).load_real_candles(symbol, None, None, timeframe)
             if len(prices) > 0:
                 start_price = float(prices[-1, 3])
         except Exception:
@@ -264,15 +267,17 @@ def generate_1m_candles(
             low = min(np.min(segment_prices) * (1.0 - rng.uniform(0, 0.0005)), open_price)
             close = intraday_prices[minute]
 
-            all_rows.append({
-                "time": t_now,
-                "open": open_price,
-                "high": high,
-                "low": low,
-                "close": close,
-                "volume": int(volumes[minute]),
-                "symbol": symbol,
-            })
+            all_rows.append(
+                {
+                    "time": t_now,
+                    "open": open_price,
+                    "high": high,
+                    "low": low,
+                    "close": close,
+                    "volume": int(volumes[minute]),
+                    "symbol": symbol,
+                }
+            )
             open_price = close
 
         current_price = intraday_prices[-1]

@@ -215,7 +215,12 @@ def compute_full_feature_vector(
         features[idx] = val
 
     indicator_f = compute_indicator_features(
-        closes, volumes, highs, lows, cvd_divergence, spread_pct,
+        closes,
+        volumes,
+        highs,
+        lows,
+        cvd_divergence,
+        spread_pct,
     )
     for idx, val in indicator_f.items():
         features[idx] = val
@@ -242,11 +247,12 @@ def feature_vector_to_dict(fv: np.ndarray) -> dict[str, float]:
 
 # ── Internal indicator helpers ────────────────────────────────────────────────
 
+
 def _compute_rsi(closes: np.ndarray, period: int = 14) -> float:
     """Compute RSI for the most recent bar."""
     if len(closes) < period + 1:
         return 50.0
-    deltas = np.diff(closes[-(period + 1):])
+    deltas = np.diff(closes[-(period + 1) :])
     gains = np.where(deltas > 0, deltas, 0.0)
     losses = np.where(deltas < 0, -deltas, 0.0)
     avg_gain = float(np.mean(gains))

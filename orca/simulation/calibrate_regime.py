@@ -44,15 +44,19 @@ def classify_regime_rule_based(
 
     rolling_vol = np.zeros(n)
     for i in range(window, n):
-        rolling_vol[i] = np.std(returns[max(0, i - window):i])
+        rolling_vol[i] = np.std(returns[max(0, i - window) : i])
 
     for i in range(n):
         vol = rolling_vol[i]
         ret = returns[i]
 
-        if vol >= ret_std_crisis or (vix_values is not None and vix_values[i] >= vix_threshold_crisis):
+        if vol >= ret_std_crisis or (
+            vix_values is not None and vix_values[i] >= vix_threshold_crisis
+        ):
             labels[i] = REGIME_CRISIS
-        elif vol >= ret_std_high or (vix_values is not None and vix_values[i] >= vix_threshold_high):
+        elif vol >= ret_std_high or (
+            vix_values is not None and vix_values[i] >= vix_threshold_high
+        ):
             labels[i] = REGIME_HIGH_VOL
         elif abs(ret) > trend_threshold and vol >= 0.008:
             labels[i] = REGIME_TRENDING
@@ -78,7 +82,7 @@ def calibrate_per_regime(
         Dict mapping regime_id -> parameter dict.
     """
     try:
-        prices, volumes, timestamps = load_real_candles(symbol, start, end, timeframe)
+        prices, _volumes, _timestamps = load_real_candles(symbol, start, end, timeframe)
     except Exception:
         return {k: dict(v) for k, v in DEFAULT_REGIME_PARAMS.items()}
 
@@ -112,9 +116,11 @@ def calibrate_per_regime(
 
         regime_params[regime_id] = {
             **defaults,
-            "mu": mu, "sigma": sigma,
+            "mu": mu,
+            "sigma": sigma,
             "jump_intensity": min(jump_intensity, 0.5),
-            "jump_mean": jump_mean, "jump_std": jump_std,
+            "jump_mean": jump_mean,
+            "jump_std": jump_std,
             "trend_bias": defaults["trend_bias"] if abs(mu) < 0.002 else np.sign(mu) * 0.6,
             "n_observations": int(mask.sum()),
         }
@@ -135,10 +141,7 @@ def save_regime_params(
         "symbol": symbol,
         "calibrated_at": datetime.now(UTC).isoformat(),
         "calibration_method": "rule_based_segmentation",
-        "regimes": {
-            REGIME_NAMES[k]: {"regime_id": k, **v}
-            for k, v in sorted(params.items())
-        },
+        "regimes": {REGIME_NAMES[k]: {"regime_id": k, **v} for k, v in sorted(params.items())},
     }
 
     path = output_dir / f"regime_params_{symbol}.json"
@@ -158,12 +161,9 @@ def load_regime_params(symbol: str, config_dir: str | Path) -> dict[int, dict[st
         data = json.load(f)
 
     params: dict[int, dict[str, Any]] = {}
-    for name, entry in data.get("regimes", {}).items():
+    for _name, entry in data.get("regimes", {}).items():
         regime_id = entry.get("regime_id", 0)
-        params[regime_id] = {
-            k: v for k, v in entry.items()
-            if k in DEFAULT_REGIME_PARAMS[0]
-        }
+        params[regime_id] = {k: v for k, v in entry.items() if k in DEFAULT_REGIME_PARAMS[0]}
         for k, v in DEFAULT_REGIME_PARAMS.get(regime_id, {}).items():
             params[regime_id].setdefault(k, v)
 

@@ -1,4 +1,5 @@
 """Integration tests for the full orca pipeline: CLI → model → hash → validate."""
+
 from __future__ import annotations
 
 import yaml
@@ -14,8 +15,17 @@ class TestFullPipeline:
                 "id": "pipeline-test",
                 "version": "1.0.0",
                 "nodes": [
-                    {"id": "sig", "token_ref": {"token_id": "signal.threshold", "version": ">=1.0"}, "params": {"entry": 2.0}},
-                    {"id": "size", "token_ref": {"token_id": "size.kelly_fractional", "version": ">=1.0"}, "inputs": {"signal": "sig.signal"}, "params": {"multiplier": 0.25}},
+                    {
+                        "id": "sig",
+                        "token_ref": {"token_id": "signal.threshold", "version": ">=1.0"},
+                        "params": {"entry": 2.0},
+                    },
+                    {
+                        "id": "size",
+                        "token_ref": {"token_id": "size.kelly_fractional", "version": ">=1.0"},
+                        "inputs": {"signal": "sig.signal"},
+                        "params": {"multiplier": 0.25},
+                    },
                 ],
                 "outputs": {"final": "size.contracts"},
             },
@@ -24,11 +34,13 @@ class TestFullPipeline:
         gkr_path.write_text(yaml.dump(strategy_data))
 
         from orca.ir.loader import load_ir
+
         ir = load_ir(gkr_path)
         assert ir.strategy.id == "pipeline-test"
         assert len(ir.strategy.nodes) == 2
 
         from orca.hash.graph import graph_hash_v2, instance_hash_v2, param_hash_v2
+
         gh = graph_hash_v2(ir)
         ph = param_hash_v2(ir)
         ih = instance_hash_v2(ir)
@@ -40,16 +52,19 @@ class TestFullPipeline:
         assert ph != ih
 
         from orca.hash.verify import verify_graph_hash, verify_instance_hash
+
         assert verify_graph_hash(ir, gh)
         assert not verify_graph_hash(ir, "sha256:bad")
         assert verify_instance_hash(ir, ih)
 
         from orca.ir.validator import validate_ir
+
         diags = validate_ir(ir, "production_guarded")
         errors = [d for d in diags if d.severity == "error"]
         assert len(errors) == 0
 
         from orca.ir.loader import save_ir
+
         save_ir(ir, tmp_path / "roundtrip_out.gkr.yaml")
         ir2 = load_ir(tmp_path / "roundtrip_out.gkr.yaml")
         assert graph_hash_v2(ir) == graph_hash_v2(ir2)
@@ -90,6 +105,7 @@ class TestFullPipeline:
 
     def test_preflight_integration(self):
         from orca.preflight.checklist import run_preflight_checks
+
         checks = run_preflight_checks()
         assert len(checks) > 0
         passed = sum(1 for c in checks if c.status == "pass")

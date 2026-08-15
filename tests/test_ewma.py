@@ -65,13 +65,15 @@ class TestEWMAVolatility:
         returns_high = np.random.normal(0, 0.03, 100)
         vol_low = ewma_volatility(returns_low)
         vol_high = ewma_volatility(returns_high)
-        assert vol_high > vol_low, f"High-vol returns should give higher EWMA vol: {vol_high} > {vol_low}"
+        assert vol_high > vol_low, (
+            f"High-vol returns should give higher EWMA vol: {vol_high} > {vol_low}"
+        )
 
     def test_large_spike_increases_vol(self):
         np.random.seed(7)
         base = np.random.normal(0, 0.005, 50).tolist()
-        spiked = np.array(base + [0.10] + base)
-        flat = np.array(base + [0.001] + base)
+        spiked = np.array([*base, 0.1, *base])
+        flat = np.array([*base, 0.001, *base])
         vol_spiked = ewma_volatility(spiked)
         vol_flat = ewma_volatility(flat)
         assert vol_spiked > vol_flat, f"Spike should increase vol: {vol_spiked} vs {vol_flat}"

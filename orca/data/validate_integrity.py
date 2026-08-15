@@ -48,6 +48,7 @@ def validate_data_integrity(
 
     try:
         from orca.data.db_integration import get_connection
+
         conn = get_connection()
     except Exception as e:
         return {
@@ -100,20 +101,25 @@ def _check_vix_vs_realized_vol(conn, start, end, checks, warnings, errors):
     """Check VIX vs. realized volatility correlation."""
     try:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT timestamp, vix_value
                 FROM vix_logs
                 WHERE timestamp >= %s AND timestamp <= %s
                 ORDER BY timestamp
-            """, (start, end))
+            """,
+                (start, end),
+            )
             vix_rows = cur.fetchall()
 
         if len(vix_rows) < 10:
-            checks.append({
-                "name": "VIX vs realized vol",
-                "passed": True,
-                "detail": f"Not enough VIX data ({len(vix_rows)} rows) - skipping",
-            })
+            checks.append(
+                {
+                    "name": "VIX vs realized vol",
+                    "passed": True,
+                    "detail": f"Not enough VIX data ({len(vix_rows)} rows) - skipping",
+                }
+            )
             return
 
         # Handle BIGINT scale (10000) vs original DOUBLE PRECISION
@@ -135,11 +141,13 @@ def _check_vix_vs_realized_vol(conn, start, end, checks, warnings, errors):
         if not reasonable:
             detail += " (std > 15 — anomalous)"
 
-        checks.append({
-            "name": "VIX vs realized vol",
-            "passed": passed,
-            "detail": detail,
-        })
+        checks.append(
+            {
+                "name": "VIX vs realized vol",
+                "passed": passed,
+                "detail": detail,
+            }
+        )
     except Exception as e:
         warnings.append(f"VIX check: {e}")
         checks.append(_fail("VIX vs realized vol", str(e), errors))
@@ -149,40 +157,45 @@ def _check_regime_transitions(conn, start, end, checks, warnings, errors):
     """Check regime transition frequency vs. expected."""
     try:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT DISTINCT symbol
                 FROM regime_logs
                 WHERE timestamp >= %s AND timestamp <= %s
-            """, (start, end))
+            """,
+                (start, end),
+            )
             symbols = [r[0] for r in cur.fetchall()]
 
         if not symbols:
-            checks.append({
-                "name": "Regime transitions",
-                "passed": False,
-                "detail": "No regime data found",
-            })
+            checks.append(
+                {
+                    "name": "Regime transitions",
+                    "passed": False,
+                    "detail": "No regime data found",
+                }
+            )
             return
 
         validation_results = {}
         for sym in symbols:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT timestamp, hmm_state
                     FROM regime_logs
                     WHERE timestamp >= %s AND timestamp <= %s
                     AND symbol = %s
                     ORDER BY timestamp
-                """, (start, end, sym))
+                """,
+                    (start, end, sym),
+                )
                 rows = cur.fetchall()
 
             if len(rows) < 5:
                 continue
 
-            transitions = sum(
-                1 for i in range(1, len(rows))
-                if rows[i][1] != rows[i - 1][1]
-            )
+            transitions = sum(1 for i in range(1, len(rows)) if rows[i][1] != rows[i - 1][1])
             days = len(rows)
             transition_rate = transitions / max(days, 1)
 
@@ -197,19 +210,20 @@ def _check_regime_transitions(conn, start, end, checks, warnings, errors):
             }
 
         all_pass = (
-            all(v["passed"] for v in validation_results.values())
-            if validation_results else False
+            all(v["passed"] for v in validation_results.values()) if validation_results else False
         )
         detail = f"{len(validation_results)} symbols checked"
         if validation_results:
             worst = max(validation_results.items(), key=lambda x: abs(x[1]["rate"] - 0.08))
             detail += f"; max transition rate: {worst[0]}={worst[1]['rate']}"
 
-        checks.append({
-            "name": "Regime transitions",
-            "passed": all_pass,
-            "detail": detail,
-        })
+        checks.append(
+            {
+                "name": "Regime transitions",
+                "passed": all_pass,
+                "detail": detail,
+            }
+        )
     except Exception as e:
         warnings.append(f"Regime check: {e}")
         checks.append(_fail("Regime transitions", str(e), errors))
@@ -226,25 +240,35 @@ def _check_candles_per_day(conn, start, end, checks, warnings, errors):
     """
     try:
         expected_bpd = {
-            "5m": 78, "15m": 26, "30m": 13, "1h": 6.5, "4h": 1.625, "1d": 1,
+            "5m": 78,
+            "15m": 26,
+            "30m": 13,
+            "1h": 6.5,
+            "4h": 1.625,
+            "1d": 1,
         }
 
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT s.ticker, c.timeframe, COUNT(*), COUNT(DISTINCT c.time::date)
                 FROM candles c JOIN symbols s ON c.symbol_id = s.id
                 WHERE c.time >= %s AND c.time <= %s
                   AND c.timeframe IS NOT NULL
                 GROUP BY s.ticker, c.timeframe
-            """, (start, end))
+            """,
+                (start, end),
+            )
             rows = cur.fetchall()
 
         if not rows:
-            checks.append({
-                "name": "Candles per day",
-                "passed": False,
-                "detail": "No candle data found",
-            })
+            checks.append(
+                {
+                    "name": "Candles per day",
+                    "passed": False,
+                    "detail": "No candle data found",
+                }
+            )
             return
 
         all_passed = True
@@ -271,15 +295,16 @@ def _check_candles_per_day(conn, start, end, checks, warnings, errors):
                 if days > 0:
                     by_tf.setdefault(tf, []).append(count / days)
             details = [
-                f"{tf}: median {sorted(v)[len(v)//2]:.0f} BPD"
-                for tf, v in sorted(by_tf.items())
+                f"{tf}: median {sorted(v)[len(v) // 2]:.0f} BPD" for tf, v in sorted(by_tf.items())
             ]
 
-        checks.append({
-            "name": "Candles per day",
-            "passed": all_passed,
-            "detail": "; ".join(details) if details else "No data",
-        })
+        checks.append(
+            {
+                "name": "Candles per day",
+                "passed": all_passed,
+                "detail": "; ".join(details) if details else "No data",
+            }
+        )
     except Exception as e:
         warnings.append(f"Candle check: {e}")
         checks.append(_fail("Candles per day", str(e), errors))
@@ -336,11 +361,13 @@ def _check_cross_table_alignment(conn, start, end, checks, warnings, errors):
         detail += f", regime={'OK' if regime_ok else 'MISSING'}"
         detail += f", sentiment={'OK' if sentiment_ok else 'MISSING'}"
 
-        checks.append({
-            "name": "Cross-table alignment",
-            "passed": passed,
-            "detail": detail,
-        })
+        checks.append(
+            {
+                "name": "Cross-table alignment",
+                "passed": passed,
+                "detail": detail,
+            }
+        )
     except Exception as e:
         warnings.append(f"Alignment check: {e}")
         checks.append(_fail("Cross-table alignment", str(e), errors))
@@ -357,22 +384,27 @@ def _check_source_scale_consistency(conn, start, end, checks, warnings, errors):
     max_jump = 0.30
     try:
         with conn.cursor() as cur:
-            cur.execute("""
+            cur.execute(
+                """
                 SELECT s.ticker, c.timeframe, c.time, c.close_raw, c.source
                 FROM candles c
                 JOIN symbols s ON c.symbol_id = s.id
                 WHERE c.time >= %s AND c.time <= %s
                   AND c.timeframe IS NOT NULL
                 ORDER BY s.ticker, c.timeframe, c.time ASC
-            """, (start, end))
+            """,
+                (start, end),
+            )
             rows = cur.fetchall()
 
         if not rows:
-            checks.append({
-                "name": "Source scale consistency",
-                "passed": True,
-                "detail": "No candle data in window - skipping",
-            })
+            checks.append(
+                {
+                    "name": "Source scale consistency",
+                    "passed": True,
+                    "detail": "No candle data in window - skipping",
+                }
+            )
             return
 
         discontinuities: list[str] = []
@@ -402,11 +434,13 @@ def _check_source_scale_consistency(conn, start, end, checks, warnings, errors):
         passed = len(discontinuities) == 0
         detail = "no cross-source discontinuities" if passed else "; ".join(discontinuities)
 
-        checks.append({
-            "name": "Source scale consistency",
-            "passed": passed,
-            "detail": detail,
-        })
+        checks.append(
+            {
+                "name": "Source scale consistency",
+                "passed": passed,
+                "detail": detail,
+            }
+        )
     except Exception as e:
         warnings.append(f"Source scale check: {e}")
         checks.append(_fail("Source scale consistency", str(e), errors))

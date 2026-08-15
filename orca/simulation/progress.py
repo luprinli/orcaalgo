@@ -27,9 +27,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-DEFAULT_PROGRESS_DIR = Path(
-    os.environ.get("ORCA_PROGRESS_DIR", "data/progress")
-)
+DEFAULT_PROGRESS_DIR = Path(os.environ.get("ORCA_PROGRESS_DIR", "data/progress"))
 
 
 class ProgressReporter:
@@ -159,7 +157,9 @@ class ProgressReporter:
         raise SystemExit(1)
 
 
-def read_progress(batch_id: str, progress_dir: str | Path = DEFAULT_PROGRESS_DIR) -> dict[str, Any] | None:
+def read_progress(
+    batch_id: str, progress_dir: str | Path = DEFAULT_PROGRESS_DIR
+) -> dict[str, Any] | None:
     """Read the current progress of a batch from its JSON file."""
     path = Path(progress_dir) / f"{batch_id}.json"
     if not path.exists():

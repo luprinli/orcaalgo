@@ -33,19 +33,23 @@ def test_generate_regime_aware_produces_ohlcv_columns() -> None:
 
 def test_generate_regime_aware_regime_labels_valid() -> None:
     """Regime labels must be integers 0-3."""
-    _, df, labels, _ = generate_regime_aware(
+    _, _df, labels, _ = generate_regime_aware(
         symbol="TEST",
         start_date="2023-01-03",
         end_date="2023-01-17",
         seed=99,
     )
-    assert set(int(l) for l in labels).issubset({0, 1, 2, 3})
+    assert set(int(lbl) for lbl in labels).issubset({0, 1, 2, 3})
 
 
 def test_generate_regime_aware_reproducible() -> None:
     """Same seed produces same output."""
-    gid1, df1, l1, _ = generate_regime_aware(symbol="T", start_date="2023-01-03", end_date="2023-01-07", seed=42)
-    gid2, df2, l2, _ = generate_regime_aware(symbol="T", start_date="2023-01-03", end_date="2023-01-07", seed=42)
+    gid1, df1, l1, _ = generate_regime_aware(
+        symbol="T", start_date="2023-01-03", end_date="2023-01-07", seed=42
+    )
+    gid2, df2, l2, _ = generate_regime_aware(
+        symbol="T", start_date="2023-01-03", end_date="2023-01-07", seed=42
+    )
     assert gid1 == gid2
     assert len(df1) == len(df2)
     assert np.array_equal(l1, l2)
@@ -53,8 +57,12 @@ def test_generate_regime_aware_reproducible() -> None:
 
 def test_generate_regime_aware_different_seeds_different() -> None:
     """Different seeds produce different output."""
-    _, _, l1, _ = generate_regime_aware(symbol="U", start_date="2023-01-03", end_date="2023-01-07", seed=1)
-    _, _, l2, _ = generate_regime_aware(symbol="U", start_date="2023-01-03", end_date="2023-01-07", seed=9999)
+    _, _, l1, _ = generate_regime_aware(
+        symbol="U", start_date="2023-01-03", end_date="2023-01-07", seed=1
+    )
+    _, _, l2, _ = generate_regime_aware(
+        symbol="U", start_date="2023-01-03", end_date="2023-01-07", seed=9999
+    )
     # Regime labels should almost certainly differ for extreme seeds
     assert not np.array_equal(l1, l2)
 

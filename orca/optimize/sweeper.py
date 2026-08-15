@@ -32,7 +32,16 @@ def sweep_strategy(
     df = pd.read_csv(csv_path, parse_dates=["Date"])
     df = df.set_index("Date").sort_index()
     if "Close" not in df.columns and "close" in df.columns:
-        df.rename(columns={"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}, inplace=True)
+        df.rename(
+            columns={
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Close",
+                "volume": "Volume",
+            },
+            inplace=True,
+        )
 
     config = get_config(strategy_id)
     if param_grid is None:
@@ -67,7 +76,7 @@ def _grid_search(df: pd.DataFrame, param_grid: dict[str, list]) -> tuple[list, d
     values = list(param_grid.values())
 
     for combo in product(*values):
-        params = dict(zip(keys, combo))
+        params = dict(zip(keys, combo, strict=False))
         metrics = _evaluate_params(df, params)
         entry = {"params": params, **metrics}
         results.append(entry)
@@ -107,11 +116,23 @@ def _evaluate_params(df: pd.DataFrame, params: dict[str, float]) -> dict[str, fl
 
     close = df["Close"].values
     if len(close) < 60:
-        return {"sharpe_ratio": 0, "max_drawdown": 0, "total_return": 0, "win_rate": 0, "num_trades": 0}
+        return {
+            "sharpe_ratio": 0,
+            "max_drawdown": 0,
+            "total_return": 0,
+            "win_rate": 0,
+            "num_trades": 0,
+        }
 
     signals = _generate_signals(df, params)
     if len(signals) < 5:
-        return {"sharpe_ratio": 0, "max_drawdown": 0, "total_return": 0, "win_rate": 0, "num_trades": len(signals)}
+        return {
+            "sharpe_ratio": 0,
+            "max_drawdown": 0,
+            "total_return": 0,
+            "win_rate": 0,
+            "num_trades": len(signals),
+        }
 
     returns = []
     in_trade = False
@@ -127,7 +148,13 @@ def _evaluate_params(df: pd.DataFrame, params: dict[str, float]) -> dict[str, fl
             in_trade = False
 
     if len(returns) < 3:
-        return {"sharpe_ratio": 0, "max_drawdown": 0, "total_return": 0, "win_rate": 0, "num_trades": len(returns)}
+        return {
+            "sharpe_ratio": 0,
+            "max_drawdown": 0,
+            "total_return": 0,
+            "win_rate": 0,
+            "num_trades": len(returns),
+        }
 
     returns = np.array(returns)
     total_return = float(np.prod(1 + returns) - 1) * 100
@@ -169,9 +196,9 @@ def _generate_signals(df: pd.DataFrame, params: dict[str, float]) -> np.ndarray:
 
     for i in range(1, n):
         if not np.isnan(rsi[i]):
-            if rsi[i] < entry_threshold and signals[i-1] >= 0:
+            if rsi[i] < entry_threshold and signals[i - 1] >= 0:
                 signals[i] = 1
-            elif rsi[i] > exit_threshold and signals[i-1] <= 0:
+            elif rsi[i] > exit_threshold and signals[i - 1] <= 0:
                 signals[i] = -1
     return signals
 
@@ -190,8 +217,8 @@ def _compute_rsi(prices: np.ndarray, period: int = 14) -> np.ndarray:
     avg_loss[period] = np.mean(losses[:period])
 
     for i in range(period + 1, len(prices)):
-        avg_gain[i] = (avg_gain[i-1] * (period - 1) + gains[i-1]) / period
-        avg_loss[i] = (avg_loss[i-1] * (period - 1) + losses[i-1]) / period
+        avg_gain[i] = (avg_gain[i - 1] * (period - 1) + gains[i - 1]) / period
+        avg_loss[i] = (avg_loss[i - 1] * (period - 1) + losses[i - 1]) / period
 
     rs = np.divide(avg_gain, avg_loss, out=np.full_like(avg_gain, np.nan), where=avg_loss != 0)
     rsi = 100 - (100 / (1 + rs))
@@ -203,7 +230,13 @@ def _evaluate_fallback(df: pd.DataFrame, params: dict) -> dict:
     close = df["Close"].values
     n = len(close)
     if n < 20:
-        return {"sharpe_ratio": 0, "max_drawdown": 0, "total_return": 0, "win_rate": 0, "num_trades": 0}
+        return {
+            "sharpe_ratio": 0,
+            "max_drawdown": 0,
+            "total_return": 0,
+            "win_rate": 0,
+            "num_trades": 0,
+        }
 
     rsi = _compute_rsi(close, int(params.get("rsi_period", 20)))
     signals = []
@@ -217,11 +250,21 @@ def _evaluate_fallback(df: pd.DataFrame, params: dict) -> dict:
 
     returns = _trade_signals(close, signals)
     if len(returns) < 3:
-        return {"sharpe_ratio": 0, "max_drawdown": 0, "total_return": 0, "win_rate": 0, "num_trades": len(returns)}
+        return {
+            "sharpe_ratio": 0,
+            "max_drawdown": 0,
+            "total_return": 0,
+            "win_rate": 0,
+            "num_trades": len(returns),
+        }
 
     mean_ret = sum(returns) / len(returns)
-    std_ret = (sum((r - mean_ret) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5 if len(returns) > 1 else 1e-10
-    sharpe = mean_ret / std_ret * (252 ** 0.5)
+    std_ret = (
+        (sum((r - mean_ret) ** 2 for r in returns) / (len(returns) - 1)) ** 0.5
+        if len(returns) > 1
+        else 1e-10
+    )
+    sharpe = mean_ret / std_ret * (252**0.5)
 
     equity = 1.0
     peak = 1.0

@@ -39,34 +39,61 @@ class TestPathDependentLabel:
 class TestBuildExitFeatures:
     def test_returns_12_features(self):
         fv = build_exit_features(
-            entry_price=100.0, current_price=102.0,
-            current_stop=98.0, high_since_entry=103.0,
-            low_since_entry=97.0, bars_since_entry=5,
-            atr=1.0, vol_at_entry=0.01, vol_current=0.012,
-            hmm_state=1, cvd_trend=0.0, volume_trend=0.0,
-            adx=25.0, hour=12.0, signal_confidence=0.5,
+            entry_price=100.0,
+            current_price=102.0,
+            current_stop=98.0,
+            high_since_entry=103.0,
+            low_since_entry=97.0,
+            bars_since_entry=5,
+            atr=1.0,
+            vol_at_entry=0.01,
+            vol_current=0.012,
+            hmm_state=1,
+            cvd_trend=0.0,
+            volume_trend=0.0,
+            adx=25.0,
+            hour=12.0,
+            signal_confidence=0.5,
         )
         assert len(fv) == 12
 
     def test_pnl_computed_correctly(self):
         fv = build_exit_features(
-            entry_price=100.0, current_price=105.0,
-            current_stop=97.0, high_since_entry=105.0,
-            low_since_entry=97.0, bars_since_entry=10,
-            atr=1.0, vol_at_entry=0.01, vol_current=0.01,
-            hmm_state=1, cvd_trend=0.0, volume_trend=0.0,
-            adx=25.0, hour=12.0, signal_confidence=0.5,
+            entry_price=100.0,
+            current_price=105.0,
+            current_stop=97.0,
+            high_since_entry=105.0,
+            low_since_entry=97.0,
+            bars_since_entry=10,
+            atr=1.0,
+            vol_at_entry=0.01,
+            vol_current=0.01,
+            hmm_state=1,
+            cvd_trend=0.0,
+            volume_trend=0.0,
+            adx=25.0,
+            hour=12.0,
+            signal_confidence=0.5,
         )
         assert fv[0] > 0  # positive PnL
 
     def test_adx_normalized(self):
         fv = build_exit_features(
-            entry_price=100.0, current_price=100.0,
-            current_stop=98.0, high_since_entry=100.0,
-            low_since_entry=98.0, bars_since_entry=1,
-            atr=1.0, vol_at_entry=0.01, vol_current=0.01,
-            hmm_state=0, cvd_trend=0.0, volume_trend=0.0,
-            adx=50.0, hour=6.0, signal_confidence=0.5,
+            entry_price=100.0,
+            current_price=100.0,
+            current_stop=98.0,
+            high_since_entry=100.0,
+            low_since_entry=98.0,
+            bars_since_entry=1,
+            atr=1.0,
+            vol_at_entry=0.01,
+            vol_current=0.01,
+            hmm_state=0,
+            cvd_trend=0.0,
+            volume_trend=0.0,
+            adx=50.0,
+            hour=6.0,
+            signal_confidence=0.5,
         )
         assert fv[7] == pytest.approx(1.0)
 

@@ -63,7 +63,7 @@ class TestMurphyDecomposition:
 
     def test_brier_equals_decomposition_sum(self):
         predictions = [0.05] * 3 + [0.25] * 3 + [0.45] * 3 + [0.65] * 3 + [0.85] * 3
-        outcomes = [0, 0, 0] + [0, 1, 1] + [1, 1, 0] + [1, 1, 1] + [1, 1, 1]
+        outcomes = [0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1]
         result = murphy_decomposition(predictions, outcomes, n_bins=5)
         computed = result.reliability - result.resolution + result.uncertainty
         assert computed == pytest.approx(result.brier, abs=1e-10)

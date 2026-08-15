@@ -123,14 +123,14 @@ class TestClassifyDrift:
     def test_report_is_immutable(self):
         data = np.random.default_rng(42).normal(0, 1, (100, 2))
         report = classify_drift(data, data)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             report.psi_total = 999.0
 
 
 class TestShouldRetrain:
     def test_no_retrain_when_all_ok(self):
         data = np.random.default_rng(42).normal(0, 1, (200, 3))
-        should, triggers, drift = should_retrain(
+        should, triggers, _drift = should_retrain(
             recent_features=data,
             training_features=data,
             current_win_rate=0.55,
@@ -142,7 +142,7 @@ class TestShouldRetrain:
     def test_retrain_on_significant_drift(self):
         ref = np.random.default_rng(42).normal(0, 1, (200, 3))
         rec = np.random.default_rng(99).normal(3.0, 3, (200, 3))
-        should, triggers, _ = should_retrain(
+        should, _triggers, _ = should_retrain(
             recent_features=rec,
             training_features=ref,
             current_win_rate=0.55,
@@ -178,7 +178,7 @@ class TestShouldRetrain:
 
     def test_no_retrain_when_brier_near_parity(self):
         data = np.random.default_rng(42).normal(0, 1, (200, 3))
-        should, triggers, _ = should_retrain(
+        should, _triggers, _ = should_retrain(
             recent_features=data,
             training_features=data,
             current_win_rate=0.55,

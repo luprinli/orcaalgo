@@ -25,9 +25,14 @@ logger = logging.getLogger("orca.ml.train.hmm_enhanced")
 class EnhancedHMMParams:
     n_states: int = 4
     n_dimensions: int = 5
-    state_labels: list[str] = field(default_factory=lambda: [
-        "CALM", "TRENDING", "HIGH_VOL", "CRISIS",
-    ])
+    state_labels: list[str] = field(
+        default_factory=lambda: [
+            "CALM",
+            "TRENDING",
+            "HIGH_VOL",
+            "CRISIS",
+        ]
+    )
     transition: list[list[float]] = field(default_factory=list)
     initial_probs: list[float] = field(default_factory=list)
     emission_means: list[list[float]] = field(default_factory=list)
@@ -109,7 +114,9 @@ def train_enhanced_hmm(
 
     logger.info(
         "trained %d-state %d-dim HMM: %d samples",
-        n_states, n_dims, len(data),
+        n_states,
+        n_dims,
+        len(data),
     )
     return params
 
@@ -139,11 +146,13 @@ def build_multi_dim_observations(
         Observations matrix, shape (n, 5).
     """
     min_len = min(len(returns), len(vols), len(vol_ratios), len(spread_pcts), len(cvd_divergences))
-    data = np.column_stack([
-        returns[:min_len],
-        vols[:min_len],
-        vol_ratios[:min_len],
-        spread_pcts[:min_len],
-        cvd_divergences[:min_len],
-    ])
+    data = np.column_stack(
+        [
+            returns[:min_len],
+            vols[:min_len],
+            vol_ratios[:min_len],
+            spread_pcts[:min_len],
+            cvd_divergences[:min_len],
+        ]
+    )
     return data

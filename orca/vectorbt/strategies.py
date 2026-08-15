@@ -32,6 +32,7 @@ except ImportError:
 # Strategy 1: Intraday Mean Reversion (RSI-based)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def intraday_mr(
     close: pd.Series,
     rsi_period: int = 20,
@@ -56,6 +57,7 @@ def intraday_mr(
 # ═══════════════════════════════════════════════════════════════════════
 # Strategy 2: Trend Following (EMA crossover + ADX filter)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def trend_following(
     close: pd.Series,
@@ -86,6 +88,7 @@ def trend_following(
 # ═══════════════════════════════════════════════════════════════════════
 # Strategy 3: Opening Range Breakout
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def opening_range_breakout(
     open_price: pd.Series,
@@ -133,6 +136,7 @@ def opening_range_breakout(
 # Strategy 4: Grid Trading
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def grid_trading(
     close: pd.Series,
     grid_levels: int = 5,
@@ -168,6 +172,7 @@ def grid_trading(
 # Strategy 5: Session Scalp (stub)
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def session_scalp(
     close: pd.Series,
     high: pd.Series,
@@ -195,6 +200,7 @@ def session_scalp(
 # ═══════════════════════════════════════════════════════════════════════
 # Pure numpy fallback implementations (no vectorbt dependency)
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def _compute_rsi_numpy(prices: np.ndarray, period: int = 14) -> np.ndarray:
     """Wilder's smoothed RSI — identical to sweeper._compute_rsi()."""
@@ -298,7 +304,7 @@ def _smooth(series: np.ndarray, period: int) -> np.ndarray:
     """Wilder's smoothing: EMA with alpha = 1/period."""
     n = len(series)
     result = np.full(n, np.nan)
-    result[period] = np.mean(series[1:period + 1])
+    result[period] = np.mean(series[1 : period + 1])
     for i in range(period + 1, n):
         result[i] = (result[i - 1] * (period - 1) + series[i]) / period
     return result

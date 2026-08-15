@@ -33,8 +33,12 @@ class TestCorruptedFeatures:
     def test_nan_features_rejected(self):
         closes, highs, lows, volumes = make_test_data(60)
         from datetime import UTC, datetime
+
         fv = compute_full_feature_vector(
-            closes, highs, lows, volumes,
+            closes,
+            highs,
+            lows,
+            volumes,
             datetime(2026, 7, 6, 14, 0, tzinfo=UTC),
         )
         fv[0] = np.nan
@@ -43,8 +47,12 @@ class TestCorruptedFeatures:
     def test_inf_features_rejected(self):
         closes, highs, lows, volumes = make_test_data(60)
         from datetime import UTC, datetime
+
         fv = compute_full_feature_vector(
-            closes, highs, lows, volumes,
+            closes,
+            highs,
+            lows,
+            volumes,
             datetime(2026, 7, 6, 14, 0, tzinfo=UTC),
         )
         fv[3] = np.inf
@@ -61,8 +69,12 @@ class TestCorruptedFeatures:
         lows = closes * 0.99
         volumes = np.full(80, 1000.0)
         from datetime import UTC, datetime
+
         fv = compute_full_feature_vector(
-            closes, highs, lows, volumes,
+            closes,
+            highs,
+            lows,
+            volumes,
             datetime(2026, 7, 6, 14, 0, tzinfo=UTC),
         )
         assert validate_feature_vector(fv)
@@ -70,8 +82,12 @@ class TestCorruptedFeatures:
     def test_negative_prices_handled(self):
         closes = np.array([-50.0] * 40 + [100.0] * 40)
         from datetime import UTC, datetime
+
         fv = compute_full_feature_vector(
-            closes, closes, closes, closes,
+            closes,
+            closes,
+            closes,
+            closes,
             datetime(2026, 7, 6, 14, 0, tzinfo=UTC),
         )
         assert validate_feature_vector(fv)
@@ -100,10 +116,14 @@ class TestSignalBurst:
     def test_many_signals_dont_crash(self):
         closes, highs, lows, volumes = make_test_data(200)
         from datetime import UTC, datetime
+
         for i in range(100):
             fv = compute_full_feature_vector(
-                closes[i:i + 60], highs[i:i + 60], lows[i:i + 60],
-                volumes[i:i + 60], datetime(2026, 7, 6, 10, 0, tzinfo=UTC),
+                closes[i : i + 60],
+                highs[i : i + 60],
+                lows[i : i + 60],
+                volumes[i : i + 60],
+                datetime(2026, 7, 6, 10, 0, tzinfo=UTC),
             )
             assert validate_feature_vector(fv)
 

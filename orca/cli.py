@@ -17,7 +17,9 @@ app = typer.Typer(
 @app.command()
 def validate(
     path: str = typer.Argument(..., help="Path to .gkr.yaml strategy file"),
-    profile: str = typer.Option("research", help="Validation profile: research|paper|pretrade|production_guarded"),
+    profile: str = typer.Option(
+        "research", help="Validation profile: research|paper|pretrade|production_guarded"
+    ),
 ) -> None:
     """Validate a GKR strategy file."""
     from orca.ir.loader import load_ir
@@ -94,7 +96,9 @@ def hash_cmd(
     path: str = typer.Argument(..., help="Path to .gkr.yaml strategy file"),
     graph: bool = typer.Option(False, "--graph", help="Output graph hash only"),
     param: bool = typer.Option(False, "--param", help="Output param hash only"),
-    instance: bool = typer.Option(True, "--instance/--no-instance", help="Output instance hash (default)"),
+    instance: bool = typer.Option(
+        True, "--instance/--no-instance", help="Output instance hash (default)"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output all hashes as JSON"),
 ) -> None:
     """Compute content-addressable hashes for a GKR strategy file.
@@ -113,11 +117,15 @@ def hash_cmd(
     ih = instance_hash_v2(ir)
 
     if json_output:
-        typer.echo(_json.dumps({
-            "graph_hash": gh,
-            "param_hash": ph,
-            "instance_hash": ih,
-        }))
+        typer.echo(
+            _json.dumps(
+                {
+                    "graph_hash": gh,
+                    "param_hash": ph,
+                    "instance_hash": ih,
+                }
+            )
+        )
         return
 
     if graph:
@@ -235,7 +243,9 @@ def attribute(
 @app.command()
 def data_validate(
     universe: bool = typer.Option(False, "--universe", help="Validate all symbols"),
-    symbols: str | None = typer.Option(None, "--symbols", help="Comma-separated symbols to validate"),
+    symbols: str | None = typer.Option(
+        None, "--symbols", help="Comma-separated symbols to validate"
+    ),
     timeframe: str = typer.Option("1d", "--timeframe", help="Timeframe to validate"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
@@ -260,7 +270,13 @@ def data_validate(
                         "warned_count": report.warned,
                         "failed_count": report.failed,
                         "checks": [
-                            {"name": c.check_name, "status": c.status, "message": c.message, "symbol": c.symbol, "timeframe": c.timeframe}
+                            {
+                                "name": c.check_name,
+                                "status": c.status,
+                                "message": c.message,
+                                "symbol": c.symbol,
+                                "timeframe": c.timeframe,
+                            }
                             for c in report.checks
                         ],
                     },
@@ -274,7 +290,9 @@ def data_validate(
         if timeframe:
             typer.echo(f"Timeframe: {timeframe}")
 
-        typer.echo(f"Data Quality Results: {report.passed} pass, {report.warned} warn, {report.failed} fail")
+        typer.echo(
+            f"Data Quality Results: {report.passed} pass, {report.warned} warn, {report.failed} fail"
+        )
         typer.echo("")
 
         for c in report.checks:
@@ -283,7 +301,9 @@ def data_validate(
             typer.echo(f"  {icon} {c.check_name}{loc}: {c.message}")
 
         if report.failed > 0:
-            typer.echo("\nData quality checks FAILED. Fix issues before running backtests.", err=True)
+            typer.echo(
+                "\nData quality checks FAILED. Fix issues before running backtests.", err=True
+            )
             raise typer.Exit(code=1)
         if report.warned > 0:
             typer.echo(f"\n{report.warned} warning(s). Review before production deployment.")
@@ -291,7 +311,21 @@ def data_validate(
             typer.echo("\nAll checks PASSED.")
     except ImportError as e:
         if json_output:
-            typer.echo(_json.dumps({"passed": False, "failed_count": 1, "checks": [{"name": "data_quality", "status": "fail", "message": "Data quality module not available"}]}))
+            typer.echo(
+                _json.dumps(
+                    {
+                        "passed": False,
+                        "failed_count": 1,
+                        "checks": [
+                            {
+                                "name": "data_quality",
+                                "status": "fail",
+                                "message": "Data quality module not available",
+                            }
+                        ],
+                    }
+                )
+            )
         else:
             typer.echo("Data quality module not available.", err=True)
         raise typer.Exit(code=1) from e
@@ -367,11 +401,17 @@ def generate_1m(
     end: str = typer.Option(..., "--end", help="End date (YYYY-MM-DD)"),
     model: str = typer.Option("heston", "--model", help="Model: gbm, ou, heston"),
     seed: int | None = typer.Option(None, "--seed", help="Random seed for reproducibility"),
-    volume_profile: str = typer.Option("u_shaped", "--volume-profile", help="Volume profile: u_shaped, sine, flat"),
+    volume_profile: str = typer.Option(
+        "u_shaped", "--volume-profile", help="Volume profile: u_shaped, sine, flat"
+    ),
     timeframe: str = typer.Option("1d", "--timeframe", help="Calibration timeframe"),
     output_dir: str = typer.Option("data/synthetic/1m", "--output-dir", help="Output directory"),
-    calibration_dir: str = typer.Option("configs/simulation", "--calibration-dir", help="Calibration directory"),
-    daily_volume: float | None = typer.Option(None, "--daily-volume", help="Average daily volume override"),
+    calibration_dir: str = typer.Option(
+        "configs/simulation", "--calibration-dir", help="Calibration directory"
+    ),
+    daily_volume: float | None = typer.Option(
+        None, "--daily-volume", help="Average daily volume override"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
     """Generate synthetic 1-minute OHLCV candles."""
@@ -417,14 +457,22 @@ def generate_1m(
 
 @simulate_app.command()
 def ticks(
-    generation_id: str = typer.Option(..., "--generation-id", help="Generation ID from generate-1m"),
+    generation_id: str = typer.Option(
+        ..., "--generation-id", help="Generation ID from generate-1m"
+    ),
     symbol: str = typer.Option(..., "--symbol", help="Symbol"),
-    ticks_per_minute: int = typer.Option(60, "--ticks-per-minute", help="Ticks to generate per minute"),
+    ticks_per_minute: int = typer.Option(
+        60, "--ticks-per-minute", help="Ticks to generate per minute"
+    ),
     spread_bps: float = typer.Option(0.5, "--spread-bps", help="Bid-ask spread in basis points"),
-    volume_profile: str = typer.Option("sine", "--volume-profile", help="Volume distribution shape"),
+    volume_profile: str = typer.Option(
+        "sine", "--volume-profile", help="Volume distribution shape"
+    ),
     seed: int | None = typer.Option(None, "--seed", help="Random seed"),
     output_dir: str = typer.Option("data/synthetic/ticks", "--output-dir", help="Output directory"),
-    candle_dir: str = typer.Option("data/synthetic/1m", "--candle-dir", help="Candle Parquet directory"),
+    candle_dir: str = typer.Option(
+        "data/synthetic/1m", "--candle-dir", help="Candle Parquet directory"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
     """Disaggregate 1-minute candles into tick-level data."""
@@ -504,10 +552,14 @@ def generate_regime(
     model: str = typer.Option("heston", "--model", help="Model: gbm, heston"),
     seed: int | None = typer.Option(None, "--seed", help="Random seed"),
     config_dir: str = typer.Option("configs/simulation", "--config-dir", help="Config directory"),
-    output_dir: str = typer.Option("data/synthetic/regime", "--output-dir", help="Output directory"),
+    output_dir: str = typer.Option(
+        "data/synthetic/regime", "--output-dir", help="Output directory"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
     ticks: bool = typer.Option(False, "--ticks", help="Also generate tick data"),
-    use_factor_model: bool = typer.Option(False, "--use-factor-model", help="Use multi-factor generation instead of pure Heston"),
+    use_factor_model: bool = typer.Option(
+        False, "--use-factor-model", help="Use multi-factor generation instead of pure Heston"
+    ),
 ) -> None:
     """Generate regime-aware synthetic 1-minute data with embedded regime labels."""
     import json as _json
@@ -540,7 +592,9 @@ def generate_regime(
             "n_trading_days": state.total_days,
             "model": "factor" if use_factor_model else model,
             "regime_distribution": {
-                ["Calm", "Trending", "HighVol", "Crisis"][k]: int((labels == k).sum()) if k < 4 and len(labels) > 0 else 0
+                ["Calm", "Trending", "HighVol", "Crisis"][k]: int((labels == k).sum())
+                if k < 4 and len(labels) > 0
+                else 0
                 for k in range(4)
             },
         }
@@ -569,8 +623,12 @@ def generate_regime(
 
 @simulate_app.command()
 def inject_signal(
-    generation_id: str = typer.Option(..., "--generation-id", help="Existing generation ID to inject into"),
-    strategy: str = typer.Option(..., "--strategy", help="Signal type: trend, mean_reversion, breakout"),
+    generation_id: str = typer.Option(
+        ..., "--generation-id", help="Existing generation ID to inject into"
+    ),
+    strategy: str = typer.Option(
+        ..., "--strategy", help="Signal type: trend, mean_reversion, breakout"
+    ),
     strength: float = typer.Option(0.3, "--strength", help="Signal strength (0-1)"),
     output: str = typer.Option("data/synthetic/signals", "--output", help="Output directory"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
@@ -590,7 +648,10 @@ def inject_signal(
         if not _os.path.exists(input_path):
             input_path = f"data/synthetic/1m/{generation_id}/"
         if not _os.path.exists(input_path):
-            typer.echo(f"Error: generation {generation_id} not found in data/synthetic/regime/ or data/synthetic/1m/", err=True)
+            typer.echo(
+                f"Error: generation {generation_id} not found in data/synthetic/regime/ or data/synthetic/1m/",
+                err=True,
+            )
             raise typer.Exit(code=1)
 
         results: list[dict[str, Any]] = []
@@ -629,7 +690,12 @@ def inject_signal(
             typer.echo(f"Injected {strategy} signal into {symbol_name} -> {out_path}")
 
         if json_output:
-            typer.echo(_json.dumps({"generation_id": generation_id, "strategy": strategy, "files": results}, indent=2))
+            typer.echo(
+                _json.dumps(
+                    {"generation_id": generation_id, "strategy": strategy, "files": results},
+                    indent=2,
+                )
+            )
     except ImportError as e:
         typer.echo(f"Signal injector module not available: {e}", err=True)
         raise typer.Exit(code=1) from e
@@ -690,7 +756,10 @@ def calibrate_regime(
         results: dict[str, str] = {}
         for symbol in parsed_symbols:
             params = calibrate_per_regime(
-                symbol=symbol, start=start_dt, end=end_dt, timeframe=timeframe,
+                symbol=symbol,
+                start=start_dt,
+                end=end_dt,
+                timeframe=timeframe,
             )
             path = save_regime_params(params, symbol, output_dir)
             results[symbol] = str(path)
@@ -710,9 +779,17 @@ def validate_regime(
     generation_id: str = typer.Option(..., "--generation-id", help="Generation ID to validate"),
     symbol: str = typer.Option(..., "--symbol", help="Symbol"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
-    coverage: bool = typer.Option(False, "--coverage", help="Also run strategy coverage validation"),
-    min_sharpe: float = typer.Option(0.3, "--min-sharpe", help="Minimum Sharpe ratio for strategy coverage"),
-    generate_first: bool = typer.Option(False, "--generate-first", help="Generate data before running backtests to avoid circular dependency"),
+    coverage: bool = typer.Option(
+        False, "--coverage", help="Also run strategy coverage validation"
+    ),
+    min_sharpe: float = typer.Option(
+        0.3, "--min-sharpe", help="Minimum Sharpe ratio for strategy coverage"
+    ),
+    generate_first: bool = typer.Option(
+        False,
+        "--generate-first",
+        help="Generate data before running backtests to avoid circular dependency",
+    ),
 ) -> None:
     """Validate regime-aware synthetic data: regime persistence, strategy coverage."""
     import json as _json
@@ -726,13 +803,17 @@ def validate_regime(
             raise typer.Exit(code=1)
 
         import numpy as np
+
         labels = np.load(label_path)
 
         gen = RegimeSequenceGenerator()
         avg_durations = gen.get_avg_durations(labels)
 
         expected_durations = {
-            "Calm": 60, "Trending": 40, "HighVol": 20, "Crisis": 8,
+            "Calm": 60,
+            "Trending": 40,
+            "HighVol": 20,
+            "Crisis": 8,
         }
 
         checks = []
@@ -740,13 +821,15 @@ def validate_regime(
         for regime_id, expected in expected_durations.items():
             actual = avg_durations.get(regime_id, 0.0)
             within_tolerance = abs(actual - expected) <= expected * 0.30
-            checks.append({
-                "name": f"Regime {regime_id} duration",
-                "expected": expected,
-                "actual": round(actual, 1),
-                "passed": within_tolerance,
-                "detail": f"{actual:.1f} days (target: {expected}, tolerance: ±30%)",
-            })
+            checks.append(
+                {
+                    "name": f"Regime {regime_id} duration",
+                    "expected": expected,
+                    "actual": round(actual, 1),
+                    "passed": within_tolerance,
+                    "detail": f"{actual:.1f} days (target: {expected}, tolerance: ±30%)",
+                }
+            )
             if not within_tolerance:
                 all_passed = False
 
@@ -760,6 +843,7 @@ def validate_regime(
 
         if coverage:
             from orca.simulation.validate import validate_strategy_coverage
+
             cov_report = validate_strategy_coverage(
                 generation_id=generation_id,
                 min_sharpe=min_sharpe,
@@ -779,13 +863,17 @@ def validate_regime(
                 icon = "[PASS]" if check["passed"] else "[FAIL]"
                 typer.echo(f"  {icon} {check['name']}: {check['detail']}")
             if coverage and "coverage" in report:
-                typer.echo(f"  Strategy Coverage: {'PASSED' if report['coverage'].get('passed', False) else 'FAILED'}")
+                typer.echo(
+                    f"  Strategy Coverage: {'PASSED' if report['coverage'].get('passed', False) else 'FAILED'}"
+                )
                 for strat, sres in report["coverage"].get("strategies", {}).items():
                     if "error" in sres:
                         typer.echo(f"    {strat}: ERROR - {sres['error']}")
                     else:
                         icon = "[PASS]" if sres.get("passed") else "[FAIL]"
-                        typer.echo(f"    {icon} {strat}: Sharpe={sres.get('sharpe_ratio', 'N/A')} Trades={sres.get('num_trades', 0)}")
+                        typer.echo(
+                            f"    {icon} {strat}: Sharpe={sres.get('sharpe_ratio', 'N/A')} Trades={sres.get('num_trades', 0)}"
+                        )
 
         if not all_passed:
             raise typer.Exit(code=1)
@@ -847,7 +935,9 @@ def halt(
             typer.echo(_json.dumps({"batch_id": batch_id, "halted": ok}))
         else:
             if ok:
-                typer.echo(f"Halt requested for batch {batch_id}. The process will stop at the next checkpoint.")
+                typer.echo(
+                    f"Halt requested for batch {batch_id}. The process will stop at the next checkpoint."
+                )
             else:
                 typer.echo(f"Failed to halt batch {batch_id}.")
                 raise typer.Exit(code=1)
@@ -896,8 +986,12 @@ def _print_progress(progress: dict, compact: bool = False) -> None:
 
 @app.command("build-regime-logs")
 def build_regime_logs(
-    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to infer regimes for (default: all with candle data)"),
-    lookback: int = typer.Option(20, "--lookback", help="Rolling window for volatility/trend computation"),
+    symbols: list[str] = typer.Option(
+        None, "--symbols", help="Symbols to infer regimes for (default: all with candle data)"
+    ),
+    lookback: int = typer.Option(
+        20, "--lookback", help="Rolling window for volatility/trend computation"
+    ),
 ) -> None:
     """Infer market regimes from candle data and insert into regime_logs table.
 
@@ -905,7 +999,6 @@ def build_regime_logs(
     using return-based features: volatility, trend strength, and drawdown.
     Results are inserted into the regime_logs table for use by the RiskPipeline.
     """
-    from orca.data.regime_inference import build_regime_logs
     from orca.data.db_integration import get_connection, insert_regime_logs
 
     conn = get_connection()
@@ -939,12 +1032,15 @@ def build_regime_logs(
                 # reseed. Resolving symbol_id first avoids a Nested Loop + Seq
                 # Scan over every hypertable chunk (the JOIN-on-ticker form is
                 # ~3x slower on the TimescaleDB hypertable).
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT time, close_raw FROM candles
                     WHERE symbol_id = (SELECT id FROM symbols WHERE ticker = %s)
                       AND timeframe = '1d' AND source = 'stooq'
                     ORDER BY time ASC
-                """, (symbol,))
+                """,
+                    (symbol,),
+                )
                 rows = cur.fetchall()
 
             if len(rows) < lookback + 1:
@@ -952,19 +1048,23 @@ def build_regime_logs(
                 continue
 
             import numpy as np
+
             times = np.array([r[0] for r in rows])
             closes = np.array([r[1] for r in rows], dtype=np.float64) / 100000.0
 
             from orca.data.regime_inference import infer_regimes
+
             labels, confs = infer_regimes(closes, times.astype("datetime64[us]"), lookback)
-            for i, (t, state, conf) in enumerate(zip(times, labels, confs)):
+            for _i, (t, state, conf) in enumerate(zip(times, labels, confs, strict=False)):
                 if conf > 0:
-                    all_logs.append({
-                        "timestamp": t,
-                        "symbol": symbol,
-                        "hmm_state": int(state),
-                        "confidence": float(conf),
-                    })
+                    all_logs.append(
+                        {
+                            "timestamp": t,
+                            "symbol": symbol,
+                            "hmm_state": int(state),
+                            "confidence": float(conf),
+                        }
+                    )
 
         conn.commit()
     finally:
@@ -979,10 +1079,18 @@ def build_regime_logs(
 
 @app.command("build-candles")
 def build_candles(
-    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to resample (default: all with 5m data)"),
-    source_timeframe: str = typer.Option("5m", "--source-timeframe", help="Source timeframe resolution"),
-    targets: list[str] = typer.Option(["15m", "30m", "1h", "4h", "1d"], "--targets", help="Target timeframes to generate"),
-    validate: bool = typer.Option(True, "--validate/--no-validate", help="Run OHLCV invariant validation after resampling"),
+    symbols: list[str] = typer.Option(
+        None, "--symbols", help="Symbols to resample (default: all with 5m data)"
+    ),
+    source_timeframe: str = typer.Option(
+        "5m", "--source-timeframe", help="Source timeframe resolution"
+    ),
+    targets: list[str] = typer.Option(
+        ["15m", "30m", "1h", "4h", "1d"], "--targets", help="Target timeframes to generate"
+    ),
+    validate: bool = typer.Option(
+        True, "--validate/--no-validate", help="Run OHLCV invariant validation after resampling"
+    ),
 ) -> None:
     """Build higher-timeframe candles from a fine-resolution source.
 
@@ -990,9 +1098,9 @@ def build_candles(
     using standard OHLC aggregation (Open=first, High=max, Low=min, Close=last, Volume=sum),
     validates invariants, and upserts results into the candles hypertable.
     """
-    from orca.data.resample import resample_ohlc, TIMEFRAME_HIERARCHY
-    from orca.data.validate_resample import validate_resampling, compute_effective_bpd
     from orca.data.db_integration import get_connection, upsert_candles
+    from orca.data.resample import TIMEFRAME_HIERARCHY, resample_ohlc
+    from orca.data.validate_resample import compute_effective_bpd, validate_resampling
 
     conn = get_connection()
     try:
@@ -1014,17 +1122,22 @@ def build_candles(
             typer.echo(f"No symbols found with {source_timeframe} data. Run seed or ingest first.")
             raise typer.Exit(1)
 
-        typer.echo(f"Resampling {len(available)} symbols from {source_timeframe} → {', '.join(targets)}...")
+        typer.echo(
+            f"Resampling {len(available)} symbols from {source_timeframe} → {', '.join(targets)}..."
+        )
 
         total_inserted = 0
         for symbol in available:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT c.time, c.open_raw, c.high_raw, c.low_raw, c.close_raw, c.volume
                     FROM candles c JOIN symbols s ON c.symbol_id = s.id
                     WHERE s.ticker = %s AND c.timeframe = %s
                     ORDER BY c.time ASC
-                """, (symbol, source_timeframe))
+                """,
+                    (symbol, source_timeframe),
+                )
                 rows = cur.fetchall()
 
             if not rows:
@@ -1032,6 +1145,7 @@ def build_candles(
                 continue
 
             import pandas as pd
+
             df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume"])
             for col in ["open", "high", "low", "close"]:
                 df[col] = df[col].astype(float) / 100000.0
@@ -1061,15 +1175,23 @@ def build_candles(
     finally:
         conn.close()
 
-    typer.echo(f"\nDone: {total_inserted} total bars upserted across {len(available)} symbols × {len(targets)} timeframes.")
+    typer.echo(
+        f"\nDone: {total_inserted} total bars upserted across {len(available)} symbols x {len(targets)} timeframes."
+    )
 
 
 @app.command("seed-all")
 def seed_all_cmd(
-    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to fetch (default: 30 major instruments)"),
-    start: str = typer.Option("2026-06-12", "--start", help="Start date (YYYY-MM-DD, default: 60 days ago for 5m)"),
+    symbols: list[str] = typer.Option(
+        None, "--symbols", help="Symbols to fetch (default: 30 major instruments)"
+    ),
+    start: str = typer.Option(
+        "2026-06-12", "--start", help="Start date (YYYY-MM-DD, default: 60 days ago for 5m)"
+    ),
     end: str = typer.Option("2026-08-12", "--end", help="End date (YYYY-MM-DD)"),
-    reset: bool = typer.Option(False, "--reset", help="Truncate existing data for the target period before seeding"),
+    reset: bool = typer.Option(
+        False, "--reset", help="Truncate existing data for the target period before seeding"
+    ),
 ) -> None:
     """Reset and regenerate data from the legacy Yahoo pipeline (deprecated).
 
@@ -1082,6 +1204,7 @@ def seed_all_cmd(
     series since stooq carries no ^vix index.
     """
     from datetime import date as _date
+
     from orca.data.seed_all import seed_all
 
     start_date = _date.fromisoformat(start)
@@ -1094,7 +1217,9 @@ def seed_all_cmd(
     else:
         sym_list = None
 
-    typer.echo(f"Seed-All: {start} -> {end}, {len(sym_list) if sym_list else 'default (30)'} symbols")
+    typer.echo(
+        f"Seed-All: {start} -> {end}, {len(sym_list) if sym_list else 'default (30)'} symbols"
+    )
     if reset:
         typer.echo("  --reset: truncating existing data for target period")
 
@@ -1106,7 +1231,7 @@ def seed_all_cmd(
         verbose=True,
     )
 
-    typer.echo(f"\n{'='*60}")
+    typer.echo(f"\n{'=' * 60}")
     typer.echo(f"Seed-All Complete:  generation_id={stats['generation_id']}")
     typer.echo(f"  Candles:    {stats['rows_candles']} bars")
     typer.echo(f"  VIX:        {stats['rows_vix']} rows")
@@ -1126,6 +1251,7 @@ def ingest_vix_cmd(
 ) -> None:
     """Fetch historical VIX data from Yahoo Finance and insert into vix_logs."""
     from datetime import date as _date
+
     from orca.data.vix_ingestion import fetch_vix_historical
 
     start_date = _date.fromisoformat(start)
@@ -1136,20 +1262,38 @@ def ingest_vix_cmd(
         typer.echo("No VIX data fetched.")
         raise typer.Exit(1)
 
+    import hashlib
+    import json
+
     import psycopg2
-    import hashlib, json
-    gen_id = hashlib.sha256(json.dumps({"_": str(start_date)}).encode()).hexdigest()[:16]
+
+    hashlib.sha256(json.dumps({"_": str(start_date)}).encode()).hexdigest()[:16]
 
     conn = psycopg2.connect(
-        __import__("os").environ.get("ORCA_DB_URL", "postgresql://orca:orca@localhost:5432/orca_core")
+        __import__("os").environ.get(
+            "ORCA_DB_URL", "postgresql://orca:orca@localhost:5432/orca_core"
+        )
     )
     try:
         with conn.cursor() as cur:
-            psycopg2.extras.execute_values(cur, """
+            psycopg2.extras.execute_values(
+                cur,
+                """
                 INSERT INTO vix_logs (timestamp, vix_value, vix_change, source)
                 VALUES %s
                 ON CONFLICT DO NOTHING
-            """, [(l["timestamp"], int(l["vix_value"] * 10000), int(l["vix_change"] * 10000), l["source"]) for l in logs], page_size=500)
+            """,
+                [
+                    (
+                        log["timestamp"],
+                        int(log["vix_value"] * 10000),
+                        int(log["vix_change"] * 10000),
+                        log["source"],
+                    )
+                    for log in logs
+                ],
+                page_size=500,
+            )
             inserted = cur.rowcount
         conn.commit()
     finally:
@@ -1193,7 +1337,7 @@ def ingest_risk_free_cmd(
                 VALUES %s
                 ON CONFLICT (name, timestamp) DO NOTHING
                 """,
-                [(name, l["timestamp"], l["value"], l["source"]) for l in logs],
+                [(name, log["timestamp"], log["value"], log["source"]) for log in logs],
                 page_size=500,
             )
             inserted = cur.rowcount
@@ -1201,13 +1345,17 @@ def ingest_risk_free_cmd(
     finally:
         conn.close()
 
-    typer.echo(f"Inserted {inserted} risk-free rows into benchmark_series['{name}'] "
-               f"({start_date} → {end_date})")
+    typer.echo(
+        f"Inserted {inserted} risk-free rows into benchmark_series['{name}'] "
+        f"({start_date} → {end_date})"
+    )
 
 
 @app.command("validate-data-integrity")
 def validate_data_integrity_cmd(
-    start: str = typer.Option(None, "--start", help="Start date (YYYY-MM-DD, default: 60 days ago)"),
+    start: str = typer.Option(
+        None, "--start", help="Start date (YYYY-MM-DD, default: 60 days ago)"
+    ),
     end: str = typer.Option(None, "--end", help="End date (YYYY-MM-DD, default: today)"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
@@ -1219,6 +1367,7 @@ def validate_data_integrity_cmd(
     """
     import json as _json
     from datetime import date as _date
+
     from orca.data.validate_integrity import validate_data_integrity
 
     start_date = _date.fromisoformat(start) if start else None
@@ -1238,9 +1387,13 @@ def validate_data_integrity_cmd(
 
 @app.command("calibrate-costs")
 def calibrate_costs_cmd(
-    symbols: list[str] = typer.Option(None, "--symbols", help="Symbols to calibrate (default: all with candle data)"),
+    symbols: list[str] = typer.Option(
+        None, "--symbols", help="Symbols to calibrate (default: all with candle data)"
+    ),
     timeframe: str = typer.Option("1d", "--timeframe", help="Candle timeframe to calibrate from"),
-    output_dir: str = typer.Option("configs/costs", "--output-dir", help="Output directory for per-symbol JSON"),
+    output_dir: str = typer.Option(
+        "configs/costs", "--output-dir", help="Output directory for per-symbol JSON"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
     """Calibrate per-symbol spread and impact costs from DB candles.
@@ -1304,7 +1457,13 @@ def calibrate_costs_cmd(
             continue
 
         arr = np.array(rows, dtype=np.float64)
-        open_p, high_p, low_p, close_p, volume = arr[:, 0], arr[:, 1], arr[:, 2], arr[:, 3], arr[:, 4]
+        open_p, high_p, low_p, close_p, volume = (
+            arr[:, 0],
+            arr[:, 1],
+            arr[:, 2],
+            arr[:, 3],
+            arr[:, 4],
+        )
         for col in (open_p, high_p, low_p, close_p):
             col /= 100000.0
 
@@ -1399,7 +1558,9 @@ def backtest_stats_cmd(
 
 @app.command("features")
 def features_cmd(
-    category: str | None = typer.Option(None, "--category", help="Filter by category (trend/momentum/volatility/volume/return)"),
+    category: str | None = typer.Option(
+        None, "--category", help="Filter by category (trend/momentum/volatility/volume/return)"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output feature registry as JSON"),
 ) -> None:
     """List self-documenting feature/indicator metadata (R9)."""
@@ -1424,7 +1585,9 @@ def promote_gate_cmd(
     matrix_csv: str = typer.Argument(..., help="Path to the matrix results CSV"),
     alpha: float = typer.Option(0.05, "--alpha", help="FDR/FWER significance level"),
     min_trades: int = typer.Option(20, "--min-trades", help="Minimum trades for reliability"),
-    require_dsr: bool = typer.Option(False, "--require-dsr", help="Require Deflated Sharpe Ratio >= threshold"),
+    require_dsr: bool = typer.Option(
+        False, "--require-dsr", help="Require Deflated Sharpe Ratio >= threshold"
+    ),
     dsr_threshold: float = typer.Option(0.95, "--dsr-threshold", help="DSR significance threshold"),
     json_output: bool = typer.Option(False, "--json", help="Output result as JSON"),
 ) -> None:
@@ -1436,6 +1599,7 @@ def promote_gate_cmd(
     when at least one survivor exists; otherwise exits 1 (no promotion).
     """
     import json as _json
+
     from orca.sizing.promotion_gate import apply_promotion_gate
 
     result = apply_promotion_gate(
@@ -1453,7 +1617,9 @@ def promote_gate_cmd(
         typer.echo(f"BH-significant (FDR {alpha:.0%}): {result.bh_significant}")
         typer.echo(f"Bonferroni-significant (FWER {alpha:.0%}): {result.bonferroni_significant}")
         typer.echo(f"DSR-significant (DSR>={dsr_threshold:.0%}): {result.n_dsr_significant}")
-        typer.echo(f"Survivors (BH + walk-forward{' + DSR' if require_dsr else ''}): {len(result.survivors)}")
+        typer.echo(
+            f"Survivors (BH + walk-forward{' + DSR' if require_dsr else ''}): {len(result.survivors)}"
+        )
         for s in result.survivors:
             typer.echo(
                 f"  {s['strategy']:<22} {s['symbol']:<8} {s['timeframe']:<4} "
@@ -1476,6 +1642,7 @@ def backfill_sentiment_cmd(
     sentiment_logs table. Scores are validated to range [0, 100].
     """
     import json as _json
+
     from orca.data.sentiment_backfill import backfill_sentiment
 
     stats = backfill_sentiment(limit=limit, verbose=not json_output)
@@ -1489,7 +1656,9 @@ def backfill_sentiment_cmd(
 
 @app.command("score-params")
 def score_params_cmd(
-    rows_json: str = typer.Argument(..., help="Path to JSON array of cached backtest parameter rows"),
+    rows_json: str = typer.Argument(
+        ..., help="Path to JSON array of cached backtest parameter rows"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output scored rows as JSON"),
 ) -> None:
     """Score cached parameter rows with the layered anti-overfit composite.
@@ -1520,8 +1689,12 @@ def score_params_cmd(
 
 @app.command("score-templates")
 def score_templates_cmd(
-    periods_json: str = typer.Argument(..., help="Path to JSON array of per-period template results"),
-    verify_json: str = typer.Option("", "--verify", help="Optional per-template verification metrics JSON"),
+    periods_json: str = typer.Argument(
+        ..., help="Path to JSON array of per-period template results"
+    ),
+    verify_json: str = typer.Option(
+        "", "--verify", help="Optional per-template verification metrics JSON"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output template scores as JSON"),
 ) -> None:
     """Rank strategy templates across periods with a verification multiplier.

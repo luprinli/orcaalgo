@@ -14,7 +14,7 @@ class TestCheckResult:
 
     def test_frozen(self):
         cr = CheckResult(check_name="test", status="pass", message="ok")
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             cr.status = "fail"
 
 

@@ -1,6 +1,5 @@
 """Tests for orca.vectorbt.data — dual-backend data connector."""
 
-
 import pandas as pd
 
 from orca.vectorbt.data import (
@@ -19,14 +18,16 @@ class TestLoadCandlesFile:
 
     def test_load_from_csv_file(self, monkeypatch, tmp_path):
         csv_path = tmp_path / "spy_1d.csv"
-        df = pd.DataFrame({
-            "Date": ["2023-01-02", "2023-01-03", "2023-01-04"],
-            "Open": [380.0, 382.0, 379.0],
-            "High": [385.0, 384.0, 383.0],
-            "Low": [378.0, 380.0, 377.0],
-            "Close": [383.0, 381.0, 382.0],
-            "Volume": [1000, 1500, 1200],
-        })
+        df = pd.DataFrame(
+            {
+                "Date": ["2023-01-02", "2023-01-03", "2023-01-04"],
+                "Open": [380.0, 382.0, 379.0],
+                "High": [385.0, 384.0, 383.0],
+                "Low": [378.0, 380.0, 377.0],
+                "Close": [383.0, 381.0, 382.0],
+                "Volume": [1000, 1500, 1200],
+            }
+        )
         df.to_csv(csv_path, index=False)
         monkeypatch.setenv("ORCA_DATA_DIR", str(tmp_path))
 
@@ -37,14 +38,16 @@ class TestLoadCandlesFile:
 
     def test_load_csv_bare_path(self, monkeypatch, tmp_path):
         csv_path = tmp_path / "eurusd_1d.csv"
-        df = pd.DataFrame({
-            "Date": pd.date_range("2023-01-02", periods=5),
-            "open": [1.1, 1.2, 1.15, 1.18, 1.17],
-            "high": [1.12, 1.22, 1.17, 1.20, 1.19],
-            "low": [1.08, 1.18, 1.14, 1.16, 1.15],
-            "close": [1.11, 1.19, 1.16, 1.17, 1.18],
-            "volume": [0, 0, 0, 0, 0],
-        })
+        df = pd.DataFrame(
+            {
+                "Date": pd.date_range("2023-01-02", periods=5),
+                "open": [1.1, 1.2, 1.15, 1.18, 1.17],
+                "high": [1.12, 1.22, 1.17, 1.20, 1.19],
+                "low": [1.08, 1.18, 1.14, 1.16, 1.15],
+                "close": [1.11, 1.19, 1.16, 1.17, 1.18],
+                "volume": [0, 0, 0, 0, 0],
+            }
+        )
         df.to_csv(csv_path, index=False)
         monkeypatch.setenv("ORCA_DATA_DIR", str(tmp_path))
 
@@ -54,10 +57,16 @@ class TestLoadCandlesFile:
     def test_start_end_filtering(self, monkeypatch, tmp_path):
         csv_path = tmp_path / "test_1h.csv"
         dates = pd.date_range("2023-01-02", periods=100, freq="h")
-        df = pd.DataFrame({
-            "Date": dates,
-            "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 100,
-        })
+        df = pd.DataFrame(
+            {
+                "Date": dates,
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.0,
+                "close": 100.5,
+                "volume": 100,
+            }
+        )
         df.to_csv(csv_path, index=False)
         monkeypatch.setenv("ORCA_DATA_DIR", str(tmp_path))
 

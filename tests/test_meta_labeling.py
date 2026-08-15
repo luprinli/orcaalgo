@@ -8,6 +8,7 @@ from orca.ml.train.meta_labeling import MetaLabelingTrainer
 
 try:
     import xgboost  # noqa: F401
+
     HAS_XGBOOST = True
 except ImportError:
     HAS_XGBOOST = False
@@ -45,7 +46,9 @@ def make_synthetic_dataset(n_samples: int = 500) -> FeatureDataset:
 class TestMetaLabelingTrainer:
     def test_train_returns_result(self):
         dataset = make_synthetic_dataset(300)
-        trainer = MetaLabelingTrainer(n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5
+        )
         result = trainer.train(dataset)
 
         assert result.model is not None
@@ -57,7 +60,9 @@ class TestMetaLabelingTrainer:
 
     def test_feature_importance_has_all_features(self):
         dataset = make_synthetic_dataset(200)
-        trainer = MetaLabelingTrainer(n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5
+        )
         result = trainer.train(dataset)
 
         assert len(result.feature_importance) == len(dataset.feature_names)
@@ -65,20 +70,25 @@ class TestMetaLabelingTrainer:
 
     def test_predictive_feature_has_highest_importance(self):
         dataset = make_synthetic_dataset(300)
-        trainer = MetaLabelingTrainer(n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5
+        )
         result = trainer.train(dataset)
 
         # Feature 0 (ret1) is the synthetic predictive feature
         sorted_features = sorted(
             result.feature_importance.items(),
-            key=lambda x: x[1], reverse=True,
+            key=lambda x: x[1],
+            reverse=True,
         )
         top_feature = sorted_features[0][0]
         assert result.feature_importance[top_feature] > 0
 
     def test_model_can_predict(self):
         dataset = make_synthetic_dataset(300)
-        trainer = MetaLabelingTrainer(n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=20, max_depth=3, early_stopping_rounds=5, min_samples=5
+        )
         result = trainer.train(dataset)
 
         X, _ = dataset.to_numpy()
@@ -95,7 +105,9 @@ class TestMetaLabelingTrainer:
 
     def test_save_and_load_model(self, tmp_path):
         dataset = make_synthetic_dataset(200)
-        trainer = MetaLabelingTrainer(n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5
+        )
         result = trainer.train(dataset)
 
         model_path = tmp_path / "test_model.json"
@@ -103,6 +115,7 @@ class TestMetaLabelingTrainer:
         assert model_path.exists()
 
         from orca.ml.train.meta_labeling import load_model, predict
+
         loaded = load_model(model_path)
         X, _ = dataset.to_numpy()
         proba = predict(loaded, X)
@@ -110,12 +123,16 @@ class TestMetaLabelingTrainer:
 
     def test_platt_calibration_metadata(self):
         dataset = make_synthetic_dataset(300)
-        trainer = MetaLabelingTrainer(n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5)
+        trainer = MetaLabelingTrainer(
+            n_estimators=10, max_depth=2, early_stopping_rounds=3, min_samples=5
+        )
         result = trainer.train(dataset)
 
         assert "platt_a" in result.metadata, "Platt a should be in metadata"
         assert "platt_b" in result.metadata, "Platt b should be in metadata"
-        assert "platt_recommended" in result.metadata, "Platt recommended flag should be in metadata"
+        assert "platt_recommended" in result.metadata, (
+            "Platt recommended flag should be in metadata"
+        )
         assert "platt_val_brier" in result.metadata, "Platt val Brier should be in metadata"
 
         a = result.metadata["platt_a"]

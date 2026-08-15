@@ -159,25 +159,29 @@ def compute_template_scores(
             w = _weight(p, settings)
             weighted_sum += score * w
             weight_total += w
-            components.append({
-                "period_months": p.get("period_months"),
-                "age_days": p.get("age_days", 0),
-                "score": score,
-                "weight": w,
-            })
+            components.append(
+                {
+                    "period_months": p.get("period_months"),
+                    "age_days": p.get("age_days", 0),
+                    "score": score,
+                    "weight": w,
+                }
+            )
 
         base_score = _clamp01(weighted_sum / weight_total) if weight_total > 0 else 0.0
         multiplier = _verification_multiplier(verify_map.get(template), settings)
         final = base_score * multiplier
-        results.append({
-            "template": template,
-            "base_score": base_score,
-            "verification_multiplier": multiplier,
-            "final_score": final,
-            "final_score_100": round(_clamp01(final) * 100),
-            "n_periods": len(components),
-            "components": components,
-        })
+        results.append(
+            {
+                "template": template,
+                "base_score": base_score,
+                "verification_multiplier": multiplier,
+                "final_score": final,
+                "final_score_100": round(_clamp01(final) * 100),
+                "n_periods": len(components),
+                "components": components,
+            }
+        )
 
     results.sort(key=lambda r: r["final_score"], reverse=True)
     return results

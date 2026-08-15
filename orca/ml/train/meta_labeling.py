@@ -17,6 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
+from orca.math.platt import platt_scale
 from orca.ml.config import (
     BRIER_MAX,
     MIN_SAMPLES_GLOBAL,
@@ -31,7 +32,6 @@ from orca.ml.config import (
 )
 from orca.ml.dataset import FeatureDataset, split_temporal
 from orca.ml.purge_cv import PurgedKFold
-from orca.math.platt import platt_scale
 
 logger = logging.getLogger("orca.ml.train.meta_labeling")
 
@@ -40,8 +40,7 @@ try:
 except ImportError:
     xgb = None
     logger.warning(
-        "xgboost not installed, meta-labeling training disabled. "
-        "Install with: pip install xgboost"
+        "xgboost not installed, meta-labeling training disabled. Install with: pip install xgboost"
     )
 
 
@@ -91,9 +90,7 @@ class MetaLabelingTrainer:
             X = X[:, feature_indices]
 
         if dataset.n_samples < self.min_samples:
-            raise ValueError(
-                f"insufficient samples: {dataset.n_samples} < {self.min_samples}"
-            )
+            raise ValueError(f"insufficient samples: {dataset.n_samples} < {self.min_samples}")
 
         valid, issues = dataset.validate()
         for issue in issues:
@@ -123,8 +120,11 @@ class MetaLabelingTrainer:
         scale_weight = max(neg_count, 1) / max(pos_count, 1)
         logger.info(
             "training: train=%d val=%d test=%d pos_ratio=%.2f scale_weight=%.2f",
-            len(X_train), len(X_val), len(X_test),
-            pos_count / max(len(y_train), 1), scale_weight,
+            len(X_train),
+            len(X_val),
+            len(X_test),
+            pos_count / max(len(y_train), 1),
+            scale_weight,
         )
 
         model = xgb.XGBClassifier(
@@ -141,7 +141,8 @@ class MetaLabelingTrainer:
         )
 
         model.fit(
-            X_train, y_train,
+            X_train,
+            y_train,
             eval_set=[(X_val, y_val)],
             verbose=False,
         )
@@ -163,15 +164,22 @@ class MetaLabelingTrainer:
         platt_b = platt_result.b
         platt_recommended = platt_result.recommended
         if platt_recommended:
-            logger.info("platt scaling recommended: a=%.4f b=%.4f train_brier=%.4f val_brier=%.4f",
-                         platt_a, platt_b, platt_result.train_brier, platt_result.val_brier)
+            logger.info(
+                "platt scaling recommended: a=%.4f b=%.4f train_brier=%.4f val_brier=%.4f",
+                platt_a,
+                platt_b,
+                platt_result.train_brier,
+                platt_result.val_brier,
+            )
         else:
             platt_a = 1.0
             platt_b = 0.0
 
-        importance = {dataset.feature_names[i]: float(imp)
-                      for i, imp in enumerate(model.feature_importances_)
-                      if i < len(dataset.feature_names)}
+        importance = {
+            dataset.feature_names[i]: float(imp)
+            for i, imp in enumerate(model.feature_importances_)
+            if i < len(dataset.feature_names)
+        }
 
         cv = PurgedKFold(n_splits=self.cv_splits)
         folds = cv.split(X, y, timestamps=timestamps)
@@ -210,7 +218,9 @@ class MetaLabelingTrainer:
             "n_val": len(X_val),
             "n_test": len(X_test),
             "n_features": len(dataset.feature_names),
-            "feature_names": dataset.feature_names[:10] if len(dataset.feature_names) > 10 else dataset.feature_names,
+            "feature_names": dataset.feature_names[:10]
+            if len(dataset.feature_names) > 10
+            else dataset.feature_names,
         }
         hash_raw = json.dumps(hash_input, sort_keys=True)
         model_hash = hashlib.sha256(hash_raw.encode()).hexdigest()[:16]
@@ -218,13 +228,19 @@ class MetaLabelingTrainer:
         if passed:
             logger.info(
                 "model PASSED: brier=%.4f roc_auc=%.4f accuracy=%.2f cv=%.4f+/-%.4f",
-                brier_test, roc_auc, accuracy,
-                float(np.mean(cv_scores)), float(np.std(cv_scores)),
+                brier_test,
+                roc_auc,
+                accuracy,
+                float(np.mean(cv_scores)),
+                float(np.std(cv_scores)),
             )
         else:
             logger.warning(
                 "model FAILED gates: brier=%.4f (max=%.2f) roc_auc=%.4f (min=%.2f)",
-                brier_test, BRIER_MAX, roc_auc, ROC_AUC_MIN,
+                brier_test,
+                BRIER_MAX,
+                roc_auc,
+                ROC_AUC_MIN,
             )
 
         return TrainingResult(
@@ -289,7 +305,9 @@ class MetaLabelingTrainer:
             json.dump(data, f, indent=2)
         logger.info("results saved to %s", path)
 
-    def save_model_with_metadata(self, result: TrainingResult, model_path: str | Path, meta_path: str | Path | None = None) -> None:
+    def save_model_with_metadata(
+        self, result: TrainingResult, model_path: str | Path, meta_path: str | Path | None = None
+    ) -> None:
         self.save_model(result, model_path)
         meta_path = Path(meta_path) if meta_path else Path(model_path).with_suffix(".meta.json")
         meta = {
@@ -325,6 +343,7 @@ def predict(model: object, X: np.ndarray) -> np.ndarray:
 def _compute_roc_auc(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     try:
         from sklearn.metrics import roc_auc_score
+
         return float(roc_auc_score(y_true, y_prob))
     except ImportError:
         desc = np.argsort(y_prob)[::-1]

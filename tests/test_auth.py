@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import socket
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,6 +9,7 @@ API_BASE = "http://localhost:8080"
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
+
 
 def _mock_urlopen(status: int = 200, response_body: dict | None = None):
     """Return a configured Mock for urllib.request.urlopen."""
@@ -36,6 +36,7 @@ def _extract_headers(call_args: tuple) -> dict:
 
 # ── fixtures ───────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def valid_credentials() -> dict[str, str]:
     return {"username": "trader1", "password": "correct-horse-battery-staple"}
@@ -53,6 +54,7 @@ def registration_payload() -> dict[str, str]:
 
 # ── 1. Login API call structure ────────────────────────────────────────────
 
+
 class TestLoginAPICallStructure:
     """Test that the login request is correctly structured."""
 
@@ -60,8 +62,8 @@ class TestLoginAPICallStructure:
         mock_urlopen = _mock_urlopen(200, login_response)
 
         with patch("urllib.request.urlopen", mock_urlopen):
-            import urllib.request
             import urllib.error
+            import urllib.request
 
             data = json.dumps(valid_credentials).encode("utf-8")
             req = urllib.request.Request(
@@ -121,6 +123,7 @@ class TestLoginAPICallStructure:
 
 # ── 2. Login error handling ────────────────────────────────────────────────
 
+
 class TestLoginErrorHandling:
     """Verify that error responses are handled correctly."""
 
@@ -128,10 +131,15 @@ class TestLoginErrorHandling:
         """401 Unauthorized should raise HTTPError."""
         import urllib.error
 
-        mock_urlopen = Mock(side_effect=urllib.error.HTTPError(
-            f"{API_BASE}/api/v1/auth/login", 401,
-            "Unauthorized", {}, None,
-        ))
+        mock_urlopen = Mock(
+            side_effect=urllib.error.HTTPError(
+                f"{API_BASE}/api/v1/auth/login",
+                401,
+                "Unauthorized",
+                {},
+                None,
+            )
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -151,10 +159,15 @@ class TestLoginErrorHandling:
         """400 Bad Request (missing field) should raise HTTPError."""
         import urllib.error
 
-        mock_urlopen = Mock(side_effect=urllib.error.HTTPError(
-            f"{API_BASE}/api/v1/auth/login", 400,
-            "Bad Request", {}, None,
-        ))
+        mock_urlopen = Mock(
+            side_effect=urllib.error.HTTPError(
+                f"{API_BASE}/api/v1/auth/login",
+                400,
+                "Bad Request",
+                {},
+                None,
+            )
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -174,10 +187,15 @@ class TestLoginErrorHandling:
         """500 Internal Server Error should raise HTTPError."""
         import urllib.error
 
-        mock_urlopen = Mock(side_effect=urllib.error.HTTPError(
-            f"{API_BASE}/api/v1/auth/login", 500,
-            "Internal Server Error", {}, None,
-        ))
+        mock_urlopen = Mock(
+            side_effect=urllib.error.HTTPError(
+                f"{API_BASE}/api/v1/auth/login",
+                500,
+                "Internal Server Error",
+                {},
+                None,
+            )
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -197,7 +215,7 @@ class TestLoginErrorHandling:
         """Socket timeout / URLError should be caught."""
         import urllib.error
 
-        mock_urlopen = Mock(side_effect=urllib.error.URLError(socket.timeout("timed out")))
+        mock_urlopen = Mock(side_effect=urllib.error.URLError(TimeoutError("timed out")))
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -214,6 +232,7 @@ class TestLoginErrorHandling:
 
 
 # ── 3. Registration request ────────────────────────────────────────────────
+
 
 class TestRegistration:
     """Test that registration sends the correct fields."""
@@ -263,6 +282,7 @@ class TestRegistration:
 
 # ── 4. Password reset flow ─────────────────────────────────────────────────
 
+
 class TestPasswordResetFlow:
     """Test forgot-password and reset-password request structures."""
 
@@ -310,6 +330,7 @@ class TestPasswordResetFlow:
 
 
 # ── 5. Token storage ───────────────────────────────────────────────────────
+
 
 class TokenStore:
     """Minimal in-process token store for test purposes.
@@ -373,6 +394,7 @@ class TestTokenStorage:
 
 # ── 6. Token validation ────────────────────────────────────────────────────
 
+
 class TestTokenValidation:
     """Test that expired or missing tokens are handled correctly."""
 
@@ -397,10 +419,15 @@ class TestTokenValidation:
         store = TokenStore()
         store.store("expired-jwt-token")
 
-        mock_urlopen = Mock(side_effect=urllib.error.HTTPError(
-            f"{API_BASE}/api/v1/auth/me", 401,
-            "Unauthorized — token expired", {}, None,
-        ))
+        mock_urlopen = Mock(
+            side_effect=urllib.error.HTTPError(
+                f"{API_BASE}/api/v1/auth/me",
+                401,
+                "Unauthorized — token expired",
+                {},
+                None,
+            )
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -420,14 +447,18 @@ class TestTokenValidation:
 
 # ── 7. 2FA setup ───────────────────────────────────────────────────────────
 
+
 class TestTwoFactorSetup:
     """Test the TOTP enrollment request / response structure."""
 
     def test_2fa_setup_response_contains_totp_secret_and_qr(self):
-        mock_urlopen = _mock_urlopen(200, {
-            "totp_secret": "JBSWY3DPEHPK3PXP",
-            "qr_code_url": "otpauth://totp/OrcaAlgo:trader1?secret=JBSWY3DPEHPK3PXP&issuer=OrcaAlgo",
-        })
+        mock_urlopen = _mock_urlopen(
+            200,
+            {
+                "totp_secret": "JBSWY3DPEHPK3PXP",
+                "qr_code_url": "otpauth://totp/OrcaAlgo:trader1?secret=JBSWY3DPEHPK3PXP&issuer=OrcaAlgo",
+            },
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -474,10 +505,15 @@ class TestTwoFactorSetup:
         """Server should reject 2FA setup without a valid token."""
         import urllib.error
 
-        mock_urlopen = Mock(side_effect=urllib.error.HTTPError(
-            f"{API_BASE}/api/v1/auth/2fa/setup", 401,
-            "Unauthorized", {}, None,
-        ))
+        mock_urlopen = Mock(
+            side_effect=urllib.error.HTTPError(
+                f"{API_BASE}/api/v1/auth/2fa/setup",
+                401,
+                "Unauthorized",
+                {},
+                None,
+            )
+        )
 
         with patch("urllib.request.urlopen", mock_urlopen):
             import urllib.request
@@ -494,6 +530,7 @@ class TestTwoFactorSetup:
 
 
 # ── 8. Token refresh / authenticated requests ──────────────────────────────
+
 
 class TestTokenRefreshAndAuthHeader:
     """Test that the Authorization header is correctly set on requests."""

@@ -42,8 +42,14 @@ def run_calibration_audit(trades: list[dict]) -> CalibrationReport:
     if len(trades) == 0:
         return CalibrationReport(
             overall=SegmentReport(
-                name="overall", n=0, brier=0.0, reliability=0.0,
-                resolution=0.0, uncertainty=0.0, bin_stats=[], needs_calibration=False,
+                name="overall",
+                n=0,
+                brier=0.0,
+                reliability=0.0,
+                resolution=0.0,
+                uncertainty=0.0,
+                bin_stats=[],
+                needs_calibration=False,
             ),
             generated_at=datetime.now(UTC).isoformat(),
         )
