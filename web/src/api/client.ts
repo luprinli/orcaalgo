@@ -10,7 +10,7 @@ import type {
   CandleResponse, LiveMetrics, BacktestHistoryEntry, AppSettings,
   PropFirmProfile, PropFirmState, AuditLogEntry, ErrorLogEntry,
   CalibrationReportResponse, AttributionReportResponse, DataValidateResponse,
-  MatrixResultsResponse, IndicatorSpec, IndicatorComputeRequest, IndicatorComputeResponse,
+  MatrixResultsResponse, ActiveMatrixBatch, IndicatorSpec, IndicatorComputeRequest, IndicatorComputeResponse,
   SimulateGenerateRequest, SimulateGenerateResponse,
   SimulateCalibrateRequest, SimulateCalibrateResponse,
   SimulateValidateResponse,
@@ -255,6 +255,7 @@ export const backtests = {
   matrixResults: (batchId: string) => get<MatrixResultsResponse>(`/api/v1/backtests/matrix/${batchId}/results`),
   matrixResultsSince: (batchId: string, seq: number) =>
     get<MatrixResultsResponse>(`/api/v1/backtests/matrix/${batchId}/results?since=${seq}`),
+  activeMatrices: () => get<{ batches: ActiveMatrixBatch[] }>('/api/v1/backtests/matrix-active'),
   cancelMatrix: (batchId: string) =>
     post<{ status: string; batch_run_id: string }>(`/api/v1/backtests/matrix/${batchId}/cancel`, {}),
 }

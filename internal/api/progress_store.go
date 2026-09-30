@@ -22,33 +22,40 @@ type ComboProgress struct {
 	Error      string `json:"error,omitempty"`
 }
 
+type MatrixCurrent struct {
+	Strategy  string `json:"strategy"`
+	Symbol    string `json:"symbol,omitempty"`
+	Timeframe string `json:"timeframe,omitempty"`
+}
+
 type MatrixProgress struct {
-	BatchID        string                 `json:"batch_id"`
-	Mode           string                 `json:"mode"`
-	Total          int                    `json:"total"`
-	Completed      int                    `json:"completed"`
-	Failed         int                    `json:"failed"`
-	Running        int                    `json:"running"`
-	Passed         int                    `json:"passed"`
-	StartTime      time.Time              `json:"start_time"`
-	UpdatedAt      time.Time              `json:"updated_at"`
-	Combos         []ComboProgress        `json:"combos"`
-	Results        []backtest.ComboResult `json:"results,omitempty"`
-	Status         string                 `json:"status"`
-	NextSeq        int                    `json:"next_seq"`
-	bestSharpe     float64
-	bestStrategy   string
-	bestSymbol     string
-	totalTrades    int
-	skipped        int
-	phase          string
+	BatchID      string                 `json:"batch_id"`
+	Mode         string                 `json:"mode"`
+	Total        int                    `json:"total"`
+	Completed    int                    `json:"completed"`
+	Failed       int                    `json:"failed"`
+	Running      int                    `json:"running"`
+	Passed       int                    `json:"passed"`
+	StartTime    time.Time              `json:"start_time"`
+	UpdatedAt    time.Time              `json:"updated_at"`
+	Combos       []ComboProgress        `json:"combos"`
+	Results      []backtest.ComboResult `json:"results,omitempty"`
+	Status       string                 `json:"status"`
+	NextSeq      int                    `json:"next_seq"`
+	bestSharpe   float64
+	bestStrategy string
+	bestSymbol   string
+	totalTrades  int
+	skipped      int
+	phase        string
+	current      *MatrixCurrent
 }
 
 type ProgressStore struct {
-	mu         sync.RWMutex
-	runs       map[string]*MatrixProgress
-	hub        *monitor.WSHub
-	repo       *db.Repository
+	mu          sync.RWMutex
+	runs        map[string]*MatrixProgress
+	hub         *monitor.WSHub
+	repo        *db.Repository
 	cleanupStop chan struct{}
 }
 
@@ -127,11 +134,25 @@ func (ps *ProgressStore) UpdateCombo(batchID string, index int, status string, e
 	if !ok || index >= len(mp.Combos) {
 		return
 	}
+	if status == "optimized" {
+		mp.phase = "optimizing"
+		if result != nil {
+			mp.current = &MatrixCurrent{Strategy: result.StrategyID}
+		}
+		mp.UpdatedAt = time.Now()
+		if ps.hub != nil {
+			ps.hub.Broadcast("backtest_progress", mp)
+		}
+		ps.persistAsync(batchID)
+		return
+	}
 	prevStatus := mp.Combos[index].Status
 	mp.Combos[index].Status = status
 	if err != "" {
 		mp.Combos[index].Error = err
-		mp.Failed++
+		if status != "skipped" {
+			mp.Failed++
+		}
 	}
 	if status == "completed" || status == "failed" {
 		if prevStatus == "completed" || prevStatus == "failed" {
@@ -178,10 +199,22 @@ func (ps *ProgressStore) UpdateCombo(batchID string, index int, status string, e
 	} else if status == "running" && prevStatus == "pending" {
 		mp.Running++
 	}
+	if status == "running" {
+		mp.phase = "backtesting"
+		mp.current = &MatrixCurrent{Strategy: mp.Combos[index].StrategyID, Symbol: mp.Combos[index].Symbol, Timeframe: mp.Combos[index].Timeframe}
+	} else if status == "skipped" && prevStatus != "skipped" {
+		if prevStatus == "running" {
+			mp.Running--
+		}
+		mp.skipped++
+		mp.Completed++
+	}
 	mp.UpdatedAt = time.Now()
 	if mp.Completed+mp.Failed >= mp.Total {
 		mp.Status = "completed"
 		mp.Running = 0
+		mp.phase = ""
+		mp.current = nil
 	}
 
 	if ps.hub != nil {
@@ -232,23 +265,51 @@ func (ps *ProgressStore) GetSummary(batchID string) gin.H {
 		percent = float64(mp.Completed) / float64(mp.Total) * 100
 	}
 	return gin.H{
-		"total_combos":      mp.Total,
-		"passed":            mp.Passed,
-		"failed":            mp.Failed,
-		"total_trades":      mp.totalTrades,
-		"best_sharpe":       mp.bestSharpe,
-		"best_strategy":     mp.bestStrategy,
-		"best_symbol":       mp.bestSymbol,
-		"status":            mp.Status,
-		"completed":         mp.Completed,
-		"running":           mp.Running,
-		"skipped":           mp.skipped,
-		"phase":             mp.phase,
-		"percent":           percent,
+		"batch_run_id":       mp.BatchID,
+		"total_combos":       mp.Total,
+		"passed":             mp.Passed,
+		"failed":             mp.Failed,
+		"total_trades":       mp.totalTrades,
+		"best_sharpe":        mp.bestSharpe,
+		"best_strategy":      mp.bestStrategy,
+		"best_symbol":        mp.bestSymbol,
+		"status":             mp.Status,
+		"completed":          mp.Completed,
+		"running":            mp.Running,
+		"skipped":            mp.skipped,
+		"phase":              mp.phase,
+		"current":            mp.current,
+		"percent":            percent,
 		"throughput_per_min": throughputPerMin,
-		"eta_seconds":       etaSeconds,
-		"seq":               mp.NextSeq,
+		"eta_seconds":        etaSeconds,
+		"seq":                mp.NextSeq,
+		"start_time":         mp.StartTime,
+		"updated_at":         mp.UpdatedAt,
 	}
+}
+
+// ListActiveSummaries returns snapshots of non-terminal matrix runs so clients
+// can reattach after a reload without interrupting the server-side batch.
+func (ps *ProgressStore) ListActiveSummaries() []gin.H {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	out := make([]gin.H, 0, len(ps.runs))
+	for _, mp := range ps.runs {
+		if mp.Status == "completed" || mp.Status == "failed" || mp.Status == "cancelled" {
+			continue
+		}
+		out = append(out, gin.H{
+			"batch_run_id": mp.BatchID,
+			"total_combos": mp.Total,
+			"completed":    mp.Completed,
+			"failed":       mp.Failed,
+			"running":      mp.Running,
+			"status":       mp.Status,
+			"start_time":   mp.StartTime,
+			"updated_at":   mp.UpdatedAt,
+		})
+	}
+	return out
 }
 
 func (ps *ProgressStore) Cancel(batchID string) {
@@ -294,7 +355,7 @@ func (ps *ProgressStore) RecoverFromDB(ctx context.Context) {
 			Passed: rec.Passed, Status: rec.Status,
 			StartTime: rec.StartTime, UpdatedAt: rec.UpdatedAt,
 			Combos: combos, Results: results,
-			NextSeq: len(results),
+			NextSeq:    len(results),
 			bestSharpe: rec.BestSharpe, bestStrategy: rec.BestStrategy,
 			bestSymbol: rec.BestSymbol, totalTrades: rec.TotalTrades,
 		}

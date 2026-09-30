@@ -208,4 +208,13 @@ describe('matrixStore', () => {
     getState().applyDelta(resp)
     expect(getState().status).toBe('cancelled')
   })
+
+  it('persists an active batch and clears it at terminal status', () => {
+    const { getState } = useMatrixStore
+    getState().begin('batch-12', 2)
+    expect(localStorage.getItem('orca_matrix_active_batch')).toContain('batch-12')
+
+    getState().applyDelta(makeResponse([], { status: 'completed', completed: 2, percent: 100 }))
+    expect(localStorage.getItem('orca_matrix_active_batch')).toBeNull()
+  })
 })

@@ -30,6 +30,22 @@ const emptyTelemetry = (): MatrixTelemetry => ({
   current: null, chunkIndex: 0, chunkTotal: 0, skipped: 0, phase: '',
 })
 
+const ACTIVE_BATCH_KEY = 'orca_matrix_active_batch'
+const TERMINAL_STATUSES = new Set<MatrixStatus>(['completed', 'failed', 'cancelled'])
+
+function persistActiveBatch(batchId: string, total: number) {
+  try { localStorage.setItem(ACTIVE_BATCH_KEY, JSON.stringify({ batchId, total })) } catch { /* ignore */ }
+}
+function clearPersistedBatch() {
+  try { localStorage.removeItem(ACTIVE_BATCH_KEY) } catch { /* ignore */ }
+}
+function loadPersistedBatch(): { batchId: string; total: number } | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(ACTIVE_BATCH_KEY) || 'null')
+    return typeof parsed?.batchId === 'string' && typeof parsed?.total === 'number' ? parsed : null
+  } catch { return null }
+}
+
 interface MatrixState {
   batchId: string | null
   status: MatrixStatus
@@ -50,15 +66,18 @@ interface MatrixState {
  * upserted (never full-array-replaced) and each UI slice subscribes only to what
  * it needs (execution-framework plan §11.2/§11.4).
  */
+const persistedBatch = loadPersistedBatch()
+
 export const useMatrixStore = create<MatrixState>((set, get) => ({
-  batchId: null,
-  status: 'idle',
+  batchId: persistedBatch?.batchId ?? null,
+  status: persistedBatch ? 'running' : 'idle',
   seq: 0,
   byKey: {},
   order: [],
-  telemetry: emptyTelemetry(),
+  telemetry: persistedBatch ? { ...emptyTelemetry(), total: persistedBatch.total } : emptyTelemetry(),
 
-  begin: (batchId, total) =>
+  begin: (batchId, total) => {
+    persistActiveBatch(batchId, total)
     set({
       batchId,
       status: 'running',
@@ -66,7 +85,8 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
       byKey: {},
       order: [],
       telemetry: { ...emptyTelemetry(), total },
-    }),
+    })
+  },
 
   applyDelta: (resp) =>
     set((state) => {
@@ -81,6 +101,7 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
       const nextSeq = resp.seq ?? s.seq ?? state.seq
       const rawStatus = (s.status ?? state.status) as MatrixStatus
       const status: MatrixStatus = s.cancelled ? 'cancelled' : rawStatus
+      if (TERMINAL_STATUSES.has(status)) clearPersistedBatch()
       return {
         byKey,
         order,
@@ -106,8 +127,14 @@ export const useMatrixStore = create<MatrixState>((set, get) => ({
       }
     }),
 
-  setStatus: (status) => set({ status }),
-  reset: () => set({ batchId: null, status: 'idle', seq: 0, byKey: {}, order: [], telemetry: emptyTelemetry() }),
+  setStatus: (status) => {
+    if (TERMINAL_STATUSES.has(status)) clearPersistedBatch()
+    set({ status })
+  },
+  reset: () => {
+    clearPersistedBatch()
+    set({ batchId: null, status: 'idle', seq: 0, byKey: {}, order: [], telemetry: emptyTelemetry() })
+  },
   results: () => {
     const { byKey, order } = get()
     return order.map((k) => byKey[k])

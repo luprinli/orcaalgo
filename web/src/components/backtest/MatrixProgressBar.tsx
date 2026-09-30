@@ -40,7 +40,7 @@ export default function MatrixProgressBar() {
     <div className="rounded-lg bg-card ring-1 ring-foreground/10 p-4 mb-3" style={{ padding: '10px 14px' }}>
       <div className="flex-between mb-1" style={{ fontSize: 12 }}>
         <span style={{ fontWeight: 600, textTransform: 'capitalize', color }}>
-          {status}{t.phase === 'screening' ? ' · screening' : ''}
+          {status}{t.phase ? ` · ${t.phase}` : ''}
         </span>
         <span className="text-muted">
           {t.completed}/{t.total} combos{t.failed > 0 ? ` · ${t.failed} failed` : ''}{t.skipped > 0 ? ` · ${t.skipped} screened out` : ''}

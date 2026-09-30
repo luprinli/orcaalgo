@@ -198,6 +198,18 @@ function RunnerView({ setView, t: tFn, searchParams }: { setView: (v: HubView, i
   const matrixReset = useMatrixStore((s) => s.reset)
   useMatrixStream(matrixBatchId)
 
+  useEffect(() => {
+    if (matrixBatchId) return
+    let cancelled = false
+    backtests.activeMatrices()
+      .then(({ batches }) => {
+        const latest = [...(batches ?? [])].sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))[0]
+        if (!cancelled && latest) matrixBegin(latest.batch_run_id, latest.total_combos)
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [matrixBatchId, matrixBegin])
+
   const [filterStrategy, setFilterStrategy] = useState('')
   const [filterSymbol, setFilterSymbol] = useState('')
   const [filterTf, setFilterTf] = useState('')

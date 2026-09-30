@@ -183,6 +183,7 @@ func (s *Server) registerRoutes() {
 		protected.POST("/backtests", s.submitBacktest)
 		protected.POST("/backtests/pipeline", s.submitPipelineRun)
 		protected.POST("/backtests/matrix", s.submitMatrix)
+		protected.GET("/backtests/matrix-active", s.listActiveMatrices)
 		protected.GET("/backtests/matrix/:id", s.getMatrixStatus)
 		protected.GET("/backtests/matrix/:id/results", s.getMatrixResults)
 		protected.POST("/backtests/matrix/:id/cancel", s.cancelMatrix)
@@ -2769,6 +2770,10 @@ func (s *Server) submitMatrix(c *gin.Context) {
 		"total_combos": combos,
 		"status":       "running",
 	})
+}
+
+func (s *Server) listActiveMatrices(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"batches": s.progressStore.ListActiveSummaries()})
 }
 
 func (s *Server) getMatrixStatus(c *gin.Context) {

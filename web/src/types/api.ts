@@ -213,6 +213,17 @@ export interface MatrixResultsResponse {
   seq?: number
 }
 
+export interface ActiveMatrixBatch {
+  batch_run_id: string
+  total_combos: number
+  completed: number
+  failed: number
+  running: number
+  status: string
+  start_time: string
+  updated_at: string
+}
+
 export interface SystemHealth {
   heap_inuse_mb: number
   heap_budget_mb: number
